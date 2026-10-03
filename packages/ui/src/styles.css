@@ -1,0 +1,98 @@
+/*
+ * Design system ECSI CLOUD — jetons de design.
+ * Importé par le dashboard après `@import "tailwindcss";`.
+ * Toutes les couleurs passent par des variables CSS : le thème sombre redéfinit
+ * uniquement les variables, jamais les composants.
+ */
+
+@theme inline {
+  --color-background: var(--ecsi-background);
+  --color-surface: var(--ecsi-surface);
+  --color-surface-muted: var(--ecsi-surface-muted);
+  --color-foreground: var(--ecsi-foreground);
+  --color-muted: var(--ecsi-muted);
+  --color-border: var(--ecsi-border);
+  --color-ring: var(--ecsi-ring);
+
+  --color-primary: var(--ecsi-primary);
+  --color-primary-hover: var(--ecsi-primary-hover);
+  --color-primary-foreground: var(--ecsi-primary-foreground);
+  --color-primary-soft: var(--ecsi-primary-soft);
+
+  --color-success: var(--ecsi-success);
+  --color-success-soft: var(--ecsi-success-soft);
+  --color-warning: var(--ecsi-warning);
+  --color-warning-soft: var(--ecsi-warning-soft);
+  --color-danger: var(--ecsi-danger);
+  --color-danger-soft: var(--ecsi-danger-soft);
+
+  --color-sidebar: var(--ecsi-sidebar);
+  --color-sidebar-foreground: var(--ecsi-sidebar-foreground);
+  --color-sidebar-muted: var(--ecsi-sidebar-muted);
+  --color-sidebar-active: var(--ecsi-sidebar-active);
+
+  --font-sans:
+    'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
+    sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  --radius-sm: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+}
+
+:root {
+  --ecsi-background: #f6f8fb;
+  --ecsi-surface: #ffffff;
+  --ecsi-surface-muted: #f1f4f9;
+  --ecsi-foreground: #0f172a;
+  --ecsi-muted: #5b6577;
+  --ecsi-border: #e2e8f0;
+  --ecsi-ring: #2563eb;
+
+  /* Bleu ECSI : couleur de marque principale. */
+  --ecsi-primary: #1d4ed8;
+  --ecsi-primary-hover: #1e40af;
+  --ecsi-primary-foreground: #ffffff;
+  --ecsi-primary-soft: #e0e9ff;
+
+  --ecsi-success: #047857;
+  --ecsi-success-soft: #d1fae5;
+  --ecsi-warning: #b45309;
+  --ecsi-warning-soft: #fef3c7;
+  --ecsi-danger: #b91c1c;
+  --ecsi-danger-soft: #fee2e2;
+
+  --ecsi-sidebar: #0b1730;
+  --ecsi-sidebar-foreground: #e6ecf7;
+  --ecsi-sidebar-muted: #8fa0bf;
+  --ecsi-sidebar-active: #1d3a73;
+
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --ecsi-background: #0b1120;
+    --ecsi-surface: #111a2e;
+    --ecsi-surface-muted: #16213a;
+    --ecsi-foreground: #e6ecf7;
+    --ecsi-muted: #9aa7bf;
+    --ecsi-border: #23304d;
+    --ecsi-ring: #60a5fa;
+    --ecsi-primary: #3b82f6;
+    --ecsi-primary-hover: #60a5fa;
+    --ecsi-primary-foreground: #ffffff;
+    --ecsi-primary-soft: #172554;
+    --ecsi-success: #34d399;
+    --ecsi-success-soft: #064e3b;
+    --ecsi-warning: #fbbf24;
+    --ecsi-warning-soft: #451a03;
+    --ecsi-danger: #f87171;
+    --ecsi-danger-soft: #450a0a;
+    --ecsi-sidebar: #070e1d;
+    --ecsi-sidebar-active: #172554;
+    color-scheme: dark;
+  }
+}
