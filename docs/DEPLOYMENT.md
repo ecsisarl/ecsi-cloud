@@ -26,6 +26,20 @@ Ordre de démarrage : PostgreSQL sain → migrations réussies → API (avec Red
 
 Réinitialiser complètement l'environnement local (efface les données) : `docker compose down -v`.
 
+### Secrets et variables ajoutés au Sprint 1
+
+| Variable                          | Rôle                                                                                       |
+| --------------------------------- | ------------------------------------------------------------------------------------------ |
+| `ECSI_DB_AUTH_PASSWORD`           | Mot de passe du rôle PostgreSQL `ecsi_auth` (créé par `infra/postgres/init/01-roles.sh`)   |
+| `DATABASE_AUTH_URL`               | Connexion de l'API avec le rôle `ecsi_auth`                                                |
+| `JWT_ACCESS_SECRET`               | Signature des jetons d'accès (32 caractères minimum)                                       |
+| `ENCRYPTION_KEY`                  | Clé de 32 octets en base64 : chiffrement des secrets 2FA, empreintes (HMAC)                |
+| `COOKIE_SECURE`, `WEB_PUBLIC_URL` | Cookies `Secure` et URL des liens envoyés par e-mail (obligatoirement HTTPS en production) |
+| `TRUST_PROXY_HOPS`                | Nombre de proxies de confiance devant l'API (1 avec Nginx)                                 |
+| `SMTP_*`                          | Envoi des e-mails (Mailpit en développement)                                               |
+
+Un volume PostgreSQL créé avant le Sprint 1 ne contient pas le rôle `ecsi_auth` : la migration 0002 échoue avec un message explicite. En développement, recréer le volume (`docker compose down -v`) ; en production, créer le rôle par le provisioning avant de migrer. Changer `ENCRYPTION_KEY` rend illisibles les secrets 2FA existants (rotation de clé à concevoir avec le chiffrement enveloppe du Sprint 2).
+
 ## Images
 
 | Image               | Dockerfile                                                 | Contenu                                                                                       |

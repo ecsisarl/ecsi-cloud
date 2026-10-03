@@ -2,7 +2,7 @@
 
 Plateforme SaaS multi-entreprises de gestion de **WiFi Zones**, **Hotspots MikroTik** (RouterOS v7) et petits fournisseurs d'accès Internet : sites, routeurs, forfaits, tickets, vendeurs, ventes, caisse, paiements, supervision et rapports.
 
-> **État : Sprint 0 (fondations) terminé.** Aucun module métier n'est encore livré : l'interface affiche honnêtement le sprint prévu pour chaque module. Voir [docs/ROADMAP.md](docs/ROADMAP.md).
+> **État : Sprint 1 (authentification, multi-entreprise, RBAC) terminé, en attente de validation.** Connexion, 2FA, sessions, invitations et isolation des entreprises sont livrées ; les modules métier (sites, routeurs, tickets…) affichent le sprint prévu. Voir [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Démarrage rapide
 
@@ -19,6 +19,14 @@ docker compose up --build
 | API : documentation OpenAPI | http://localhost:8080/api/docs      |
 | Portail captif (gabarit)    | http://localhost:8081               |
 | Mailpit (e-mails capturés)  | http://localhost:8025               |
+
+### Comptes de démonstration
+
+```bash
+docker compose run --rm -e SEED_PASSWORD='choisir-un-mot-de-passe-long' migrate node dist/database/seed.js
+```
+
+Crée ENTREPRISE_A (`admin.a@ecsi.test`, `gerant.a@ecsi.test`, `vendeur.a@ecsi.test`) et ENTREPRISE_B (`admin.b@ecsi.test`, `gerant.b@ecsi.test`) avec ce mot de passe. Les administrateurs doivent activer la 2FA à la première connexion (application TOTP). Les e-mails (réinitialisation, invitations) arrivent dans Mailpit.
 
 Aucun fichier `.env` n'est nécessaire en développement : `docker-compose.yml` fournit des valeurs marquées `devonly`, refusées par l'API en production. Pour utiliser des secrets aléatoires : `./scripts/generate-dev-env.sh` puis `docker compose down -v && docker compose up --build`.
 
@@ -39,17 +47,20 @@ pnpm dev                                               # API :4000, dashboard :3
 
 ## Commandes
 
-| Commande                            | Rôle                                                                  |
-| ----------------------------------- | --------------------------------------------------------------------- |
-| `pnpm lint`                         | ESLint (TypeScript strict, règles React/Next)                         |
-| `pnpm typecheck`                    | Vérification des types de tous les paquets                            |
-| `pnpm test`                         | Tests unitaires                                                       |
-| `pnpm test:integration`             | Tests d'intégration sur PostgreSQL, Redis et S3 réels (Docker requis) |
-| `pnpm format` / `pnpm format:check` | Prettier                                                              |
-| `pnpm build`                        | Build de production de tous les paquets                               |
-| `pnpm db:generate`                  | Génère une migration SQL (Drizzle)                                    |
-| `pnpm db:migrate`                   | Applique les migrations (rôle `ecsi_migrator`)                        |
-| `pnpm validate`                     | Tout ce qui précède, comme la CI                                      |
+| Commande                            | Rôle                                                                          |
+| ----------------------------------- | ----------------------------------------------------------------------------- |
+| `pnpm lint`                         | ESLint (TypeScript strict, règles React/Next)                                 |
+| `pnpm typecheck`                    | Vérification des types de tous les paquets                                    |
+| `pnpm test`                         | Tests unitaires                                                               |
+| `pnpm test:integration`             | Tests d'intégration sur PostgreSQL, Redis et S3 réels (Docker requis)         |
+| `pnpm test:e2e`                     | Tests Playwright sur l'environnement Docker démarré et initialisé             |
+| `pnpm db:seed`                      | Données de démonstration (`SEED_PASSWORD` requis, refusé en production)       |
+| `pnpm platform:create-admin`        | Crée un super administrateur (`--email`, `--name`, `PLATFORM_ADMIN_PASSWORD`) |
+| `pnpm format` / `pnpm format:check` | Prettier                                                                      |
+| `pnpm build`                        | Build de production de tous les paquets                                       |
+| `pnpm db:generate`                  | Génère une migration SQL (Drizzle)                                            |
+| `pnpm db:migrate`                   | Applique les migrations (rôle `ecsi_migrator`)                                |
+| `pnpm validate`                     | Tout ce qui précède, comme la CI                                              |
 
 ## Structure
 
@@ -65,6 +76,7 @@ infra/
   docker/     Dockerfiles (API, applications Next.js)
   nginx/      Reverse proxy de développement
   postgres/   Initialisation des rôles PostgreSQL
+e2e/         Tests Playwright de bout en bout
 lab/routeros/ Laboratoire MikroTik (CHR et matériel réel)
 docs/         Architecture, base de données, sécurité, MikroTik, API, déploiement, ADR
 ```

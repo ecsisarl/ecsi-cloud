@@ -25,8 +25,8 @@ Pour les fonctions MikroTik : checklist de [MIKROTIK.md](MIKROTIK.md) cochée su
 
 | Sprint | Contenu                                                                                          | Statut                               |
 | ------ | ------------------------------------------------------------------------------------------------ | ------------------------------------ |
-| **S0** | Fondations : monorepo, Docker, CI, API de base, dashboard, portail, design system, documentation | ✅ Terminé, en attente de validation |
-| S1     | Authentification, multi-tenant, RBAC, tests d'isolation                                          | ○                                    |
+| **S0** | Fondations : monorepo, Docker, CI, API de base, dashboard, portail, design system, documentation | ✅ Validé (commit `119ec9a`)         |
+| **S1** | Authentification, multi-tenant, RBAC, tests d'isolation                                          | ✅ Terminé, en attente de validation |
 | S2     | Entreprises, utilisateurs, sites, groupes de sites, audit                                        | ○                                    |
 | S3     | Enrôlement MikroTik + WireGuard (1 routeur, puis 2)                                              | ○                                    |
 | S4     | Monitoring, statut ONLINE/OFFLINE, alertes in-app                                                | ○                                    |
