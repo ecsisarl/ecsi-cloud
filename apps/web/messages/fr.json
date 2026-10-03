@@ -67,5 +67,112 @@
   "notFound": {
     "title": "Page introuvable",
     "back": "Retour au tableau de bord"
+  },
+  "auth": {
+    "brand": "Plateforme de gestion WiFi Zones et Hotspots",
+    "email": "Adresse e-mail",
+    "password": "Mot de passe",
+    "newPassword": "Nouveau mot de passe",
+    "confirmPassword": "Confirmer le mot de passe",
+    "passwordHint": "12 caractères minimum. Une phrase de passe est plus simple à retenir.",
+    "passwordMismatch": "Les deux mots de passe ne correspondent pas.",
+    "passwordTooShort": "Le mot de passe doit contenir au moins 12 caractères.",
+    "fullName": "Nom complet",
+    "submit": "Se connecter",
+    "submitting": "Connexion…",
+    "forgot": "Mot de passe oublié ?",
+    "backToLogin": "Retour à la connexion",
+    "genericError": "Une erreur est survenue. Réessayez.",
+    "networkError": "Serveur injoignable. Vérifiez votre connexion.",
+    "tooMany": "Trop de tentatives. Réessayez dans quelques minutes.",
+    "invalidCredentials": "Adresse e-mail ou mot de passe incorrect.",
+    "login": {
+      "title": "Connexion",
+      "subtitle": "Accédez à votre espace ECSI CLOUD"
+    },
+    "mfa": {
+      "title": "Vérification en deux étapes",
+      "subtitle": "Saisissez le code à 6 chiffres affiché dans votre application d’authentification.",
+      "code": "Code de vérification",
+      "recoveryCode": "Code de récupération",
+      "useRecovery": "Utiliser un code de récupération",
+      "useTotp": "Utiliser l’application d’authentification",
+      "verify": "Vérifier",
+      "invalid": "Code invalide. Réessayez.",
+      "expired": "La vérification a expiré. Reconnectez-vous."
+    },
+    "forgotPage": {
+      "title": "Mot de passe oublié",
+      "subtitle": "Indiquez votre adresse e-mail : si un compte existe, vous recevrez un lien de réinitialisation valable 30 minutes.",
+      "submit": "Envoyer le lien",
+      "sent": "Si un compte correspond à cette adresse, un e-mail vient d’être envoyé. Pensez à vérifier vos courriers indésirables."
+    },
+    "reset": {
+      "title": "Nouveau mot de passe",
+      "subtitle": "Choisissez un nouveau mot de passe. Toutes vos sessions ouvertes seront déconnectées.",
+      "submit": "Enregistrer le mot de passe",
+      "done": "Mot de passe modifié. Vous pouvez vous connecter.",
+      "invalidLink": "Ce lien est invalide ou a expiré. Faites une nouvelle demande."
+    },
+    "invitation": {
+      "title": "Invitation",
+      "subtitle": "Vous êtes invité(e) à rejoindre {company}.",
+      "existing": "Un compte existe déjà pour {email}. Saisissez votre mot de passe pour accepter.",
+      "create": "Créez votre compte pour {email}.",
+      "accept": "Accepter l’invitation",
+      "done": "Invitation acceptée. Connectez-vous pour accéder à votre espace.",
+      "invalid": "Cette invitation est invalide, a expiré ou a déjà été utilisée.",
+      "loading": "Vérification de l’invitation…"
+    }
+  },
+  "security": {
+    "title": "Sécurité",
+    "mfa": {
+      "title": "Authentification à deux facteurs",
+      "subtitle": "Protégez votre compte avec un code temporaire généré par votre téléphone.",
+      "required": "Votre rôle exige l’authentification à deux facteurs. Configurez-la pour continuer.",
+      "enabled": "L’authentification à deux facteurs est activée.",
+      "step1": "1. Installez une application d’authentification (Google Authenticator, Microsoft Authenticator, Aegis…).",
+      "step2": "2. Scannez ce QR code avec l’application.",
+      "manual": "Saisie manuelle de la clé",
+      "step3": "3. Saisissez le code à 6 chiffres affiché pour confirmer.",
+      "start": "Configurer",
+      "confirm": "Activer",
+      "recoveryTitle": "Codes de récupération",
+      "recoveryHelp": "Conservez ces codes en lieu sûr. Chacun permet une seule connexion si vous perdez votre téléphone. Ils ne seront plus affichés.",
+      "copy": "Copier les codes",
+      "copied": "Codes copiés",
+      "download": "Télécharger",
+      "continue": "J’ai conservé mes codes",
+      "regenerate": "Générer de nouveaux codes de récupération",
+      "regenerateHelp": "Les anciens codes seront invalidés. Saisissez un code de votre application pour confirmer."
+    },
+    "sessions": {
+      "title": "Sessions actives",
+      "subtitle": "Appareils actuellement connectés à votre compte.",
+      "current": "Cet appareil",
+      "lastActive": "Dernière activité : {date}",
+      "started": "Connecté le {date}",
+      "revoke": "Déconnecter",
+      "revokeOthers": "Déconnecter tous les autres appareils",
+      "revokedOthers": "{count, plural, =0 {Aucune autre session} one {# session déconnectée} other {# sessions déconnectées}}",
+      "unknownDevice": "Appareil inconnu",
+      "empty": "Aucune session active."
+    }
+  },
+  "userMenu": {
+    "open": "Menu du compte",
+    "company": "Entreprise",
+    "switchCompany": "Changer d’entreprise",
+    "security2fa": "Double authentification",
+    "sessions": "Sessions actives",
+    "logout": "Se déconnecter"
+  },
+  "platform": {
+    "loginTitle": "Console plateforme ECSI",
+    "loginSubtitle": "Réservée aux super administrateurs ECSI. Double authentification obligatoire.",
+    "consoleTitle": "Console plateforme",
+    "consoleSubtitle": "La gestion des entreprises clientes arrive au Sprint 2. Toutes les actions plateforme seront tracées dans le journal d’audit.",
+    "signedInAs": "Connecté en tant que {name}"
   }
 }

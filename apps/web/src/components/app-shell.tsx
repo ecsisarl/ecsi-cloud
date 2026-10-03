@@ -1,5 +1,6 @@
 'use client';
 
+import type { MeResponse } from '@ecsi/shared';
 import { cn, Logo } from '@ecsi/ui';
 import { Menu, X } from 'lucide-react';
 import Link from 'next/link';
@@ -7,6 +8,7 @@ import { usePathname } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { type ReactNode, useState } from 'react';
 import { NAVIGATION, isActive } from '@/lib/navigation';
+import { UserPanel } from './user-panel';
 
 function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const t = useTranslations('nav');
@@ -52,7 +54,7 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   );
 }
 
-export function AppShell({ children }: { children: ReactNode }) {
+export function AppShell({ me, children }: { me: MeResponse; children: ReactNode }) {
   const t = useTranslations('nav');
   const [open, setOpen] = useState(false);
 
@@ -64,6 +66,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <Logo className="text-white" />
         </div>
         <Sidebar />
+        <UserPanel me={me} />
       </aside>
 
       {/* Tiroir sur mobile et tablette */}
@@ -96,6 +99,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                 setOpen(false);
               }}
             />
+            <UserPanel me={me} />
           </aside>
         </div>
       ) : null}

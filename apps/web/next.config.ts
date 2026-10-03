@@ -18,6 +18,12 @@ const config: NextConfig = {
   transpilePackages: ['@ecsi/ui'],
   poweredByHeader: false,
   reactStrictMode: true,
+  // Développement hors Docker (`pnpm dev`) : /api est relayé vers l'API (même origine pour
+  // les cookies). En Docker et en production, Nginx route /api directement vers l'API.
+  rewrites() {
+    const api = process.env.API_INTERNAL_URL ?? 'http://localhost:4000';
+    return Promise.resolve([{ source: '/api/:path*', destination: `${api}/api/:path*` }]);
+  },
   headers() {
     return Promise.resolve([{ source: '/:path*', headers: securityHeaders }]);
   },
