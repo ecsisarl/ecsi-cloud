@@ -11,12 +11,18 @@ fi
 
 rand() { openssl rand -hex 24; }
 
-PG=$(rand); MIG=$(rand); APP=$(rand); REDIS=$(rand); S3=$(rand)
+PG=$(rand); MIG=$(rand); APP=$(rand); AUTH=$(rand); REDIS=$(rand); S3=$(rand); SEED=$(rand)
+JWT=$(openssl rand -hex 32)
+KEY=$(openssl rand -base64 32)
 
 sed \
   -e "s/devonly-postgres-password/$PG/g" \
   -e "s/devonly-migrator-password/$MIG/g" \
   -e "s/devonly-app-password/$APP/g" \
+  -e "s/devonly-auth-password/$AUTH/g" \
+  -e "s/devonly-demo-password/$SEED/g" \
+  -e "s/devonly-jwt-access-secret-change-me-0000/$JWT/g" \
+  -e "s|devonlydevonlydevonlydevonlydevonlydevonlyA=|$KEY|g" \
   -e "s/devonly-redis-password/$REDIS/g" \
   -e "s/devonly-s3-secret-key/$S3/g" \
   .env.example > .env

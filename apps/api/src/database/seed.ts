@@ -1,7 +1,8 @@
 /**
  * Données de démonstration (DÉVELOPPEMENT ET TESTS UNIQUEMENT) : deux entreprises isolées,
  * ENTREPRISE_A et ENTREPRISE_B, avec des utilisateurs de rôles différents. Utilisées par
- * les tests E2E et pour essayer le dashboard. Idempotent. Refusé en production.
+ * les tests E2E et pour essayer le dashboard. Idempotent : chaque exécution remet les comptes
+ * de démonstration dans leur état initial (mot de passe, rôles, 2FA, sessions). Refusé en production.
  *
  *   DATABASE_MIGRATOR_URL=… SEED_PASSWORD=… node dist/database/seed.js
  */
@@ -11,7 +12,17 @@ import { drizzle, type NodePgDatabase } from 'drizzle-orm/node-postgres';
 import pg from 'pg';
 import { hashPassword } from '../auth/crypto/password.js';
 import { ensureSystemRoles } from './catalog.js';
-import { companies, membershipRoles, memberships, userCredentials, users } from './schema/index.js';
+import { inArray } from 'drizzle-orm';
+import {
+  authSessions,
+  companies,
+  membershipRoles,
+  memberships,
+  mfaFactors,
+  mfaRecoveryCodes,
+  userCredentials,
+  users,
+} from './schema/index.js';
 
 export const SEED_COMPANIES = {
   A: { slug: 'entreprise-a', name: 'ENTREPRISE_A' },
@@ -95,6 +106,11 @@ export async function seedDevData(
         .values({ companyId, membershipId: membership.id, roleId, scope: 'COMPANY' })
         .onConflictDoNothing();
     }
+    // Comptes de démonstration remis à zéro : 2FA à reconfigurer, sessions fermées.
+    const demoUsers = Object.values(result.users);
+    await tx.delete(mfaFactors).where(inArray(mfaFactors.userId, demoUsers));
+    await tx.delete(mfaRecoveryCodes).where(inArray(mfaRecoveryCodes.userId, demoUsers));
+    await tx.delete(authSessions).where(inArray(authSessions.userId, demoUsers));
     return result;
   });
 }
