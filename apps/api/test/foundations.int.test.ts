@@ -35,7 +35,7 @@ describe('migrations', () => {
       infra.urls.migrator,
       'select count(*) from drizzle.__drizzle_migrations',
     );
-    expect(Number(rows[0]?.count)).toBe(3);
+    expect(Number(rows[0]?.count)).toBe(5);
   });
 
   it('installent les fonctions de contexte tenant', async () => {

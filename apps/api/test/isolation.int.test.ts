@@ -7,6 +7,12 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { HttpClient, loginAs, SEED_PASSWORD, startTestApp, type TestApp } from './helpers/app.js';
 import { startInfra, type TestInfra } from './helpers/infra.js';
+import { SEED_USERS } from '../src/database/seed.js';
+
+/** Compte de l'entreprise : jeu de démonstration ou créé par ce test (suffixe .a@ / .b@). */
+const belongsTo = (key: 'A' | 'B', email: string) =>
+  SEED_USERS.some((u) => u.email === email && u.company === key) ||
+  email.endsWith(`.${key.toLowerCase()}@ecsi.test`);
 
 let infra: TestInfra;
 let t: TestApp;
@@ -66,7 +72,7 @@ describe.each([
     const own = key === 'A' ? 'a' : 'b';
     const users = (await client().get('/users')).json<{ email: string }[]>();
     expect(users.length).toBeGreaterThan(0);
-    expect(users.every((u) => u.email.includes(`.${own}@`))).toBe(true);
+    expect(users.every((u) => belongsTo(key, u.email))).toBe(true);
 
     const roles = (await client().get('/roles')).json<{ id: string }[]>();
     const ownRoles = Object.values(t.seed.roles[key]);
@@ -144,16 +150,16 @@ describe('ENTREPRISE_A ne peut pas atteindre ENTREPRISE_B en manipulant la requ�
       'x-tenant-id': t.seed.companies.B,
       'x-forwarded-host': 'entreprise-b.ecsi.test',
     };
-    const users = await gerantA.get(
+    // Paramètre inconnu dans la requête : refusé (schéma strict), jamais interprété.
+    const withQuery = await gerantA.get(
       `/users?companyId=${t.seed.companies.B}&company_id=${t.seed.companies.B}`,
-      {
-        headers,
-      },
+      { headers },
     );
+    expect(withQuery.statusCode).toBe(422);
+    // En-têtes : ignorés, l'entreprise vient de la session.
+    const users = await gerantA.get('/users', { headers });
     expect(users.statusCode).toBe(200);
-    expect(users.json<{ email: string }[]>().every((u) => u.email.endsWith('.a@ecsi.test'))).toBe(
-      true,
-    );
+    expect(users.json<{ email: string }[]>().every((u) => belongsTo('A', u.email))).toBe(true);
     const foreign = await gerantA.get(`/users/${ids().adminB}`, { headers });
     expect(foreign.statusCode).toBe(404);
   });

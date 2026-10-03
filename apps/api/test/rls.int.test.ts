@@ -25,6 +25,9 @@ const TENANT_TABLES = [
   'membership_role_sites',
   'invitations',
   'invitation_roles',
+  'sites',
+  'site_groups',
+  'site_group_members',
 ] as const;
 
 const SECRET_TABLES = [
@@ -91,8 +94,9 @@ beforeAll(async () => {
     );
     await pool.query(
       `insert into membership_role_sites (company_id, membership_role_id, site_id)
-       select company_id, id, uuidv7() from membership_roles where company_id = $1 limit 1`,
-      [seed.companies[key]],
+       select company_id, id, $2 from membership_roles where company_id = $1 limit 1
+       on conflict do nothing`,
+      [seed.companies[key], seed.sites[key]['SITE-A']],
     );
   }
   await pool.end();
@@ -168,7 +172,9 @@ describe('RLS : ENTREPRISE_A ne peut pas atteindre ENTREPRISE_B', () => {
       expect(rows.map((r) => r.email)).toEqual([
         'admin.a@ecsi.test',
         'gerant.a@ecsi.test',
+        'gerant.site-a@ecsi.test',
         'vendeur.a@ecsi.test',
+        'vendeur.site-b@ecsi.test',
       ]);
     });
   });
@@ -181,6 +187,7 @@ describe('RLS : ENTREPRISE_A ne peut pas atteindre ENTREPRISE_B', () => {
         ["update companies set name = 'piraté' where id = $1", [seed.companies.B]],
         ["update roles set name = 'piraté' where id = $1", [seed.roles.B.GERANT]],
         ["update users set full_name = 'piraté' where id = $1", [seed.users['admin.b@ecsi.test']]],
+        ["update sites set name = 'piraté' where id = $1", [seed.sites.B['SITE-A']]],
       ] as const;
       for (const [sql, params] of updates) {
         expect((await c.query(sql, [...params])).rowCount, sql).toBe(0);
@@ -351,5 +358,134 @@ describe('le rôle ecsi_app ne peut pas contourner la RLS', () => {
       );
       expect(tenant.rows.length).toBeGreaterThanOrEqual(TENANT_TABLES.length);
     });
+  });
+});
+
+describe('Sprint 2 : profil d’entreprise, privilèges par colonne', () => {
+  const ctxA = () => ({ companyId: seed.companies.A, userId: seed.users['admin.a@ecsi.test'] });
+
+  it('ecsi_app modifie le profil de SON entreprise, jamais son statut ni son identifiant', async () => {
+    await as(infra.urls.app, ctxA(), async (c) => {
+      const ok = await c.query(
+        "update companies set name = 'ENTREPRISE_A', city = 'Abidjan' where id = $1",
+        [seed.companies.A],
+      );
+      expect(ok.rowCount).toBe(1);
+    });
+    const forbidden = [
+      "update companies set status = 'SUSPENDED'",
+      'update companies set suspended_at = now()',
+      "update companies set slug = 'pirate'",
+      'update companies set id = uuidv7()',
+    ];
+    for (const sql of forbidden) {
+      await expect(
+        as(infra.urls.app, ctxA(), (c) => c.query(sql)),
+        sql,
+      ).rejects.toThrow(/permission denied/);
+    }
+  });
+
+  it('un groupe ne peut pas contenir le site d’une autre entreprise (clé composite)', async () => {
+    await as(infra.urls.migrator, {}, async (c) => {
+      const { rows } = await c.query<{ id: string }>(
+        "insert into site_groups (company_id, name, code) values ($1, 'G', 'G-FK') returning id",
+        [seed.companies.A],
+      );
+      await expect(
+        c.query(
+          'insert into site_group_members (company_id, group_id, site_id) values ($1, $2, $3)',
+          [seed.companies.A, rows[0]?.id, seed.sites.B['SITE-A']],
+        ),
+      ).rejects.toThrow(/foreign key/);
+    });
+  });
+});
+
+describe('Sprint 2 : journal d’audit inaltérable', () => {
+  const userA = () => seed.users['admin.a@ecsi.test'] ?? '';
+  const insertEvent = (companyId: string | null, actorId: string | null, action = 'test.event') =>
+    `insert into audit_events (company_id, chain_key, chain_seq, hash, actor_type, actor_id, action,
+       resource_type, result)
+     values (${companyId ? `'${companyId}'` : 'null'}, 'x', 0, ''::bytea, 'USER',
+       ${actorId ? `'${actorId}'` : 'null'}, '${action}', 'test', 'SUCCESS')`;
+
+  beforeAll(async () => {
+    const pool = new pg.Pool({ connectionString: infra.urls.migrator, max: 1 });
+    await pool.query(insertEvent(seed.companies.A, userA()));
+    await pool.query(insertEvent(seed.companies.A, userA(), 'test.second'));
+    await pool.query(insertEvent(seed.companies.B, seed.users['admin.b@ecsi.test'] ?? ''));
+    await pool.end();
+  });
+
+  it('chaîne les événements par entreprise (numéro de séquence et empreinte calculés par la base)', async () => {
+    await as(infra.urls.migrator, {}, async (c) => {
+      const { rows } = await c.query<{ chain_key: string; chain_seq: string; has_prev: boolean }>(
+        `select chain_key, chain_seq::text, prev_hash is not null as has_prev
+         from audit_events where company_id = $1 order by chain_seq`,
+        [seed.companies.A],
+      );
+      expect(rows.map((r) => [r.chain_key, r.chain_seq, r.has_prev])).toEqual([
+        [seed.companies.A, '1', false],
+        [seed.companies.A, '2', true],
+      ]);
+    });
+    await as(infra.urls.auth, {}, async (c) => {
+      expect(
+        (await c.query('select * from app.audit_verify_chain($1)', [seed.companies.A])).rows,
+      ).toEqual([]);
+    });
+  });
+
+  it('ecsi_app ne lit que les événements de son entreprise', async () => {
+    await as(infra.urls.app, { companyId: seed.companies.A, userId: userA() }, async (c) => {
+      expect(await count(c, 'select * from audit_events')).toBe(2);
+      expect(
+        await count(c, 'select * from audit_events where company_id <> $1', [seed.companies.A]),
+      ).toBe(0);
+    });
+  });
+
+  it('ecsi_app n’écrit qu’au nom de l’utilisateur et de l’entreprise de la transaction', async () => {
+    const ctx = { companyId: seed.companies.A, userId: userA() };
+    await as(infra.urls.app, ctx, async (c) => {
+      expect((await c.query(insertEvent(seed.companies.A, userA()))).rowCount).toBe(1);
+    });
+    for (const sql of [
+      insertEvent(seed.companies.B, userA()),
+      insertEvent(seed.companies.A, seed.users['gerant.a@ecsi.test'] ?? ''),
+      insertEvent(null, userA()),
+    ]) {
+      await expect(
+        as(infra.urls.app, ctx, (c) => c.query(sql)),
+        sql,
+      ).rejects.toThrow(/row-level security/);
+    }
+  });
+
+  it('personne ne peut modifier ni supprimer un événement, pas même le propriétaire des tables', async () => {
+    const ctx = { companyId: seed.companies.A, userId: userA() };
+    for (const sql of ["update audit_events set action = 'x.y'", 'delete from audit_events']) {
+      await expect(
+        as(infra.urls.app, ctx, (c) => c.query(sql)),
+        sql,
+      ).rejects.toThrow(/permission denied/);
+      await expect(
+        as(infra.urls.auth, {}, (c) => c.query(sql)),
+        sql,
+      ).rejects.toThrow(/permission denied/);
+      await expect(
+        as(infra.urls.migrator, {}, (c) => c.query(sql)),
+        sql,
+      ).rejects.toThrow(/journal d.audit|append-only|interdit/i);
+    }
+    await expect(
+      as(infra.urls.migrator, {}, (c) => c.query('truncate audit_events')),
+    ).rejects.toThrow(/journal d.audit|append-only|interdit/i);
+    await expect(
+      as(infra.urls.app, ctx, (c) =>
+        c.query('select * from app.audit_verify_chain($1)', [seed.companies.A]),
+      ),
+    ).rejects.toThrow(/permission denied/);
   });
 });

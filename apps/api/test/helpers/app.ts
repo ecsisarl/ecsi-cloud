@@ -11,6 +11,7 @@ import pg from 'pg';
 import { createApp } from '../../src/app.factory.js';
 import { parseEnv } from '../../src/config/env.js';
 import { runMigrations } from '../../src/database/migrate.js';
+import { totp } from '../../src/auth/crypto/totp.js';
 import { type SeedResult, seedDevData } from '../../src/database/seed.js';
 import type { MailTransport, OutgoingMail } from '../../src/mail/mail.service.js';
 import { S3_TEST_CREDENTIALS, type TestInfra } from './infra.js';
@@ -116,7 +117,7 @@ export class HttpClient {
   ) {}
 
   async request(
-    method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
+    method: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE',
     url: string,
     options: RequestOptions = {},
   ) {
@@ -167,9 +168,38 @@ export class HttpClient {
     return this.request('PATCH', url, { ...options, body });
   }
 
+  put(url: string, body?: unknown, options?: RequestOptions) {
+    return this.request('PUT', url, { ...options, body });
+  }
+
   delete(url: string, options?: RequestOptions) {
     return this.request('DELETE', url, options);
   }
+}
+
+/**
+ * Configure la 2FA d'un compte connecté (prefix « /auth » ou « /platform/auth »). Retourne
+ * le secret et un générateur de codes successifs : chaque code TOTP n'est accepté qu'une
+ * fois (anti-rejeu), on avance donc d'un pas de 30 s à chaque appel.
+ */
+export async function enrollMfa(client: HttpClient, prefix = '/auth') {
+  const setup = await client.post(`${prefix}/mfa/setup`, {});
+  if (setup.statusCode !== 200)
+    throw new Error(`Configuration 2FA : ${setup.statusCode} ${setup.body}`);
+  const { secret } = setup.json<{ secret: string }>();
+  const confirm = await client.post(`${prefix}/mfa/confirm`, { code: totp(secret, Date.now()) });
+  if (confirm.statusCode !== 200)
+    throw new Error(`Confirmation 2FA : ${confirm.statusCode} ${confirm.body}`);
+  let step = 0;
+  return {
+    secret,
+    /** Code du pas suivant (fenêtre de tolérance ±1 pas côté serveur). */
+    nextCode: () => {
+      step += 1;
+      if (step > 1) throw new Error('Un seul code « futur » est utilisable par test (anti-rejeu)');
+      return totp(secret, Date.now() + 30_000);
+    },
+  };
 }
 
 export async function loginAs(

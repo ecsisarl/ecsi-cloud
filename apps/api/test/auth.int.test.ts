@@ -362,7 +362,7 @@ describe('2FA TOTP (obligatoire pour ADMIN_ENTREPRISE)', () => {
     );
     expect(rows.length).toBeGreaterThan(0);
     for (const row of rows) {
-      expect(row.secret_enc).toMatch(/^v1:/);
+      expect(row.secret_enc).toMatch(/^v2:k1:/);
       expect(row.secret_enc).not.toContain(secret);
     }
   });
