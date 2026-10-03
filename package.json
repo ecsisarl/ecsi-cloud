@@ -1,0 +1,38 @@
+{
+  "name": "ecsi-cloud",
+  "private": true,
+  "license": "UNLICENSED",
+  "description": "ECSI CLOUD — plateforme SaaS de gestion de WiFi Zones, Hotspots MikroTik et petits FAI",
+  "packageManager": "pnpm@10.28.0",
+  "engines": {
+    "node": ">=22.12.0",
+    "pnpm": ">=10"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "test:integration": "turbo run test:integration",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "db:migrate": "pnpm --filter @ecsi/api db:migrate",
+    "db:generate": "pnpm --filter @ecsi/api db:generate",
+    "validate": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm test:integration"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.5",
+    "@next/eslint-plugin-next": "16.3.8",
+    "@types/node": "^22.20.5",
+    "eslint": "^9.39.5",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.13.0",
+    "prettier": "^3.9.9",
+    "turbo": "^2.11.7",
+    "typescript": "~6.0.3",
+    "typescript-eslint": "^8.71.0",
+    "vitest": "^4.1.11"
+  }
+}

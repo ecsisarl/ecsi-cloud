@@ -1,0 +1,30 @@
+# Dépendances
+node_modules/
+
+# Builds
+dist/
+.next/
+out/
+.turbo/
+*.tsbuildinfo
+next-env.d.ts
+
+# Tests
+coverage/
+playwright-report/
+test-results/
+
+# Secrets : ne JAMAIS committer
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets/
+
+# Divers
+.DS_Store
+*.log
+.idea/
+.vscode/*
+!.vscode/extensions.json
