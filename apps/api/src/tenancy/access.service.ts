@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { isPermission, type Permission } from '@ecsi/shared';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import {
   membershipRoleSites,
   membershipRoles,
@@ -49,6 +49,30 @@ export class Grants {
   }
 
   /**
+   * Anti-escalade appliquée à un autre membre : on ne peut agir sur lui que si l'on détient
+   * chacune de ses permissions, sur la même portée (entreprise, ou chacun de ses sites).
+   */
+  covers(target: Grants): boolean {
+    for (const permission of target.companyWide) {
+      if (!this.hasCompanyWide(permission)) return false;
+    }
+    for (const [site, set] of target.bySite) {
+      for (const permission of set) if (!this.hasForSite(permission, site)) return false;
+    }
+    return true;
+  }
+
+  /**
+   * Permission d'agir sur un membre (ex. users.update) : pour toute l'entreprise si le membre
+   * a une portée entreprise (ou aucun droit), sinon sur chacun des sites où il intervient.
+   */
+  hasOverMember(permission: Permission, target: Grants): boolean {
+    if (this.hasCompanyWide(permission)) return true;
+    if (target.companyWide.size > 0 || target.bySite.size === 0) return false;
+    return [...target.bySite.keys()].every((site) => this.hasForSite(permission, site));
+  }
+
+  /**
    * Règle anti-escalade : un membre ne peut accorder que des permissions qu'il détient
    * lui-même, sur la même portée (entreprise, ou chacun des sites demandés).
    */
@@ -64,6 +88,60 @@ export class Grants {
 
 @Injectable()
 export class AccessService {
+  /**
+   * Droits de plusieurs membres (gestion des utilisateurs), quel que soit leur statut : un
+   * membre désactivé conserve ses rôles, et l'anti-escalade doit en tenir compte.
+   */
+  async resolveMany(
+    tx: TenantTransaction,
+    companyId: string,
+    userIds?: readonly string[],
+  ): Promise<Map<string, Grants>> {
+    const rows = await tx
+      .select({
+        userId: memberships.userId,
+        membershipRoleId: membershipRoles.id,
+        roleCode: roles.code,
+        scope: membershipRoles.scope,
+        permission: rolePermissions.permissionCode,
+      })
+      .from(membershipRoles)
+      .innerJoin(memberships, eq(memberships.id, membershipRoles.membershipId))
+      .innerJoin(roles, eq(roles.id, membershipRoles.roleId))
+      .leftJoin(rolePermissions, eq(rolePermissions.roleId, roles.id))
+      .where(
+        and(
+          eq(memberships.companyId, companyId),
+          userIds ? inArray(memberships.userId, [...userIds]) : undefined,
+        ),
+      );
+    const siteRows = await tx
+      .select({
+        membershipRoleId: membershipRoleSites.membershipRoleId,
+        siteId: membershipRoleSites.siteId,
+      })
+      .from(membershipRoleSites)
+      .where(eq(membershipRoleSites.companyId, companyId));
+    const sitesByAssignment = new Map<string, string[]>();
+    for (const row of siteRows) {
+      const list = sitesByAssignment.get(row.membershipRoleId) ?? [];
+      list.push(row.siteId);
+      sitesByAssignment.set(row.membershipRoleId, list);
+    }
+    const byUser = new Map<string, typeof rows>();
+    for (const row of rows) {
+      const list = byUser.get(row.userId) ?? [];
+      list.push(row);
+      byUser.set(row.userId, list);
+    }
+    const result = new Map<string, Grants>();
+    for (const [userId, userRows] of byUser) {
+      result.set(userId, buildGrants(userRows, sitesByAssignment));
+    }
+    for (const userId of userIds ?? []) if (!result.has(userId)) result.set(userId, Grants.empty());
+    return result;
+  }
+
   /** Lit les droits dans la transaction tenant (donc sous RLS) de la requête. */
   async resolve(tx: TenantTransaction, context: TenantContext): Promise<Grants> {
     const rows = await tx
@@ -104,22 +182,34 @@ export class AccessService {
       sitesByAssignment.set(row.membershipRoleId, list);
     }
 
-    const roleCodes = new Set<string>();
-    const companyWide = new Set<Permission>();
-    const bySite = new Map<string, Set<Permission>>();
-    for (const row of rows) {
-      roleCodes.add(row.roleCode);
-      if (!row.permission || !isPermission(row.permission)) continue;
-      if (row.scope === 'COMPANY') {
-        companyWide.add(row.permission);
-      } else {
-        for (const site of sitesByAssignment.get(row.membershipRoleId) ?? []) {
-          const set = bySite.get(site) ?? new Set<Permission>();
-          set.add(row.permission);
-          bySite.set(site, set);
-        }
+    return buildGrants(rows, sitesByAssignment);
+  }
+}
+
+function buildGrants(
+  rows: readonly {
+    membershipRoleId: string;
+    roleCode: string;
+    scope: string;
+    permission: string | null;
+  }[],
+  sitesByAssignment: ReadonlyMap<string, string[]>,
+): Grants {
+  const roleCodes = new Set<string>();
+  const companyWide = new Set<Permission>();
+  const bySite = new Map<string, Set<Permission>>();
+  for (const row of rows) {
+    roleCodes.add(row.roleCode);
+    if (!row.permission || !isPermission(row.permission)) continue;
+    if (row.scope === 'COMPANY') {
+      companyWide.add(row.permission);
+    } else {
+      for (const site of sitesByAssignment.get(row.membershipRoleId) ?? []) {
+        const set = bySite.get(site) ?? new Set<Permission>();
+        set.add(row.permission);
+        bySite.set(site, set);
       }
     }
-    return new Grants([...roleCodes].sort(), companyWide, bySite);
   }
+  return new Grants([...roleCodes].sort(), companyWide, bySite);
 }

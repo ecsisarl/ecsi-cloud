@@ -38,6 +38,8 @@ import {
 } from '@ecsi/shared';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { and, eq } from 'drizzle-orm';
+import { Audited } from '../audit/audit.interceptor.js';
+import { AuditService } from '../audit/audit.service.js';
 import { ZodValidationPipe } from '../common/zod-validation.pipe.js';
 import { ENV } from '../config/config.module.js';
 import { type Env, isCookieSecure } from '../config/env.js';
@@ -66,6 +68,7 @@ export class AuthController {
     private readonly mfa: MfaService,
     private readonly accessTokens: AccessTokenService,
     private readonly rateLimiter: RateLimiterService,
+    private readonly audit: AuditService,
   ) {
     this.secure = isCookieSecure(env);
   }
@@ -138,6 +141,11 @@ export class AuthController {
     const claims = access ? await this.accessTokens.verify(access) : null;
     if (claims) {
       await this.sessions.revoke(claims.sid, 'LOGOUT');
+      await this.audit.writeDirect(
+        null,
+        { action: 'auth.logout', resourceType: 'session', resourceId: claims.sid },
+        await this.audit.principal(claims.realm, claims.sub),
+      );
     } else {
       const refresh = request.cookies[AUTH_COOKIES.refresh];
       if (refresh) await this.sessions.revokeByRefreshToken(refresh, 'LOGOUT');
@@ -175,6 +183,7 @@ export class AuthController {
   }
 
   @AllowMfaSetup()
+  @Audited({ action: 'auth.session_revoke', resourceType: 'session' })
   @Delete('sessions/:id')
   @HttpCode(HttpStatus.NO_CONTENT)
   async revokeSession(
@@ -188,6 +197,7 @@ export class AuthController {
     if (id === auth.sessionId) clearAuthCookies(reply, this.secure);
   }
 
+  @Audited({ action: 'auth.session_revoke_others', resourceType: 'session' })
   @Post('sessions/revoke-others')
   @HttpCode(HttpStatus.OK)
   async revokeOthers(@CurrentAuth() auth: AuthContext): Promise<{ revoked: number }> {
@@ -225,6 +235,7 @@ export class AuthController {
     return { recoveryCodes };
   }
 
+  @Audited({ action: 'auth.mfa_recovery_codes_regenerate', resourceType: 'mfa' })
   @Post('mfa/recovery-codes')
   @HttpCode(HttpStatus.OK)
   async regenerateRecoveryCodes(

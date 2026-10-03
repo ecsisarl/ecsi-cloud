@@ -24,6 +24,7 @@ import {
 } from '@ecsi/shared';
 import { eq } from 'drizzle-orm';
 import type { FastifyReply, FastifyRequest } from 'fastify';
+import { AuditService } from '../audit/audit.service.js';
 import { ZodValidationPipe } from '../common/zod-validation.pipe.js';
 import { ENV } from '../config/config.module.js';
 import { type Env, isCookieSecure } from '../config/env.js';
@@ -43,7 +44,7 @@ import { SECRET_BOX } from './secret-box.provider.js';
  * Connexion des super administrateurs ECSI : /api/v1/platform/auth/*.
  * Espace distinct (table platform_admins, realm « platform ») : un compte d'entreprise ne
  * peut pas s'y connecter, et une session plateforme est refusée sur les routes d'entreprise.
- * La 2FA y est toujours obligatoire. Les actions plateforme seront auditées (Sprint 2).
+ * La 2FA y est toujours obligatoire. Les connexions et actions plateforme sont auditées.
  */
 @ApiTags('platform')
 @PlatformRealm()
@@ -58,6 +59,7 @@ export class PlatformAuthController {
     private readonly auth: AuthService,
     private readonly mfa: MfaService,
     private readonly rateLimiter: RateLimiterService,
+    private readonly audit: AuditService,
   ) {
     this.secure = isCookieSecure(env);
   }
@@ -90,6 +92,16 @@ export class PlatformAuthController {
       : await verifyAgainstDummy(body.password);
     if (!admin || !valid || admin.status !== 'ACTIVE') {
       await this.rateLimiter.hit(`plogin:fail:${emailKey}`, RATE_LIMITS.loginFailuresPerEmail);
+      await this.audit.writeDirect(
+        null,
+        {
+          action: 'platform.auth.login',
+          resourceType: 'session',
+          result: 'FAILURE',
+          details: { emailFingerprint: emailKey },
+        },
+        admin ? await this.audit.principal('platform', admin.id) : { type: 'ANONYMOUS', id: null },
+      );
       throw new UnauthorizedException(INVALID_CREDENTIALS);
     }
     await this.rateLimiter.reset(`plogin:fail:${emailKey}`);

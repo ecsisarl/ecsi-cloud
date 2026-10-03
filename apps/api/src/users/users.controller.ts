@@ -9,43 +9,65 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Put,
+  Query,
   Req,
 } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import {
   type CreateInvitationRequest,
   createInvitationRequestSchema,
+  type ListMembersQuery,
+  listMembersQuerySchema,
+  type ReplaceMemberRolesRequest,
+  replaceMemberRolesRequestSchema,
+  type ResetMemberMfaRequest,
+  resetMemberMfaRequestSchema,
   updateMemberStatusRequestSchema,
 } from '@ecsi/shared';
 import type { FastifyRequest } from 'fastify';
+import { Audited } from '../audit/audit.interceptor.js';
 import { CurrentAuth } from '../auth/auth.decorators.js';
 import type { AuthContext } from '../auth/auth.types.js';
 import { ZodValidationPipe } from '../common/zod-validation.pipe.js';
 import { Grants } from '../tenancy/access.service.js';
-import { RequirePermissions } from '../tenancy/permissions.guard.js';
+import { RequirePermissions, RequireSitePermission } from '../tenancy/permissions.guard.js';
 import { tenantContextOf } from '../tenancy/tenant-database.js';
 import { UsersService } from './users.service.js';
 
-const grantsOf = (request: FastifyRequest) => request.grants ?? Grants.empty();
+export const grantsOf = (request: FastifyRequest) => request.grants ?? Grants.empty();
 
+/**
+ * Membres de l'entreprise courante. Les routes acceptent une portée par site : un gérant
+ * limité à ses sites gère les membres de ses sites (voir UsersService).
+ */
 @ApiTags('users')
 @Controller()
 export class UsersController {
   constructor(private readonly users: UsersService) {}
 
-  @RequirePermissions('users.read')
+  @RequireSitePermission('users.read')
   @Get('users')
-  list(@CurrentAuth() auth: AuthContext) {
-    return this.users.listMembers(tenantContextOf(auth));
+  list(
+    @CurrentAuth() auth: AuthContext,
+    @Req() request: FastifyRequest,
+    @Query(new ZodValidationPipe(listMembersQuerySchema)) query: ListMembersQuery,
+  ) {
+    return this.users.listMembers(tenantContextOf(auth), grantsOf(request), query);
   }
 
-  @RequirePermissions('users.read')
+  @RequireSitePermission('users.read')
   @Get('users/:id')
-  get(@CurrentAuth() auth: AuthContext, @Param('id', new ParseUUIDPipe()) id: string) {
-    return this.users.getMember(tenantContextOf(auth), id);
+  get(
+    @CurrentAuth() auth: AuthContext,
+    @Req() request: FastifyRequest,
+    @Param('id', new ParseUUIDPipe()) id: string,
+  ) {
+    return this.users.getMember(tenantContextOf(auth), grantsOf(request), id);
   }
 
-  @RequirePermissions('users.disable')
+  @RequireSitePermission('users.disable')
+  @Audited({ action: 'users.status_update', resourceType: 'user' })
   @Patch('users/:id/status')
   setStatus(
     @CurrentAuth() auth: AuthContext,
@@ -57,19 +79,57 @@ export class UsersController {
     return this.users.setMemberStatus(tenantContextOf(auth), grantsOf(request), id, body.status);
   }
 
+  @RequireSitePermission('users.update')
+  @Audited({ action: 'users.roles_update', resourceType: 'user' })
+  @Put('users/:id/roles')
+  replaceRoles(
+    @CurrentAuth() auth: AuthContext,
+    @Req() request: FastifyRequest,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body(new ZodValidationPipe(replaceMemberRolesRequestSchema)) body: ReplaceMemberRolesRequest,
+  ) {
+    return this.users.replaceRoles(tenantContextOf(auth), grantsOf(request), id, body.roles);
+  }
+
+  @RequireSitePermission('users.remove')
+  @Audited({ action: 'users.remove', resourceType: 'user' })
+  @Delete('users/:id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async remove(
+    @CurrentAuth() auth: AuthContext,
+    @Req() request: FastifyRequest,
+    @Param('id', new ParseUUIDPipe()) id: string,
+  ): Promise<void> {
+    await this.users.removeMember(tenantContextOf(auth), grantsOf(request), id);
+  }
+
+  @RequireSitePermission('users.mfa.reset')
+  @Audited({ action: 'users.mfa_reset', resourceType: 'user' })
+  @Post('users/:id/mfa/reset')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async resetMfa(
+    @CurrentAuth() auth: AuthContext,
+    @Req() request: FastifyRequest,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body(new ZodValidationPipe(resetMemberMfaRequestSchema)) body: ResetMemberMfaRequest,
+  ): Promise<void> {
+    await this.users.resetMfa(tenantContextOf(auth), grantsOf(request), auth, id, body);
+  }
+
   @RequirePermissions('roles.read')
   @Get('roles')
   roles(@CurrentAuth() auth: AuthContext) {
     return this.users.listRoles(tenantContextOf(auth));
   }
 
-  @RequirePermissions('users.read')
+  @RequireSitePermission('users.read')
   @Get('invitations')
-  invitations(@CurrentAuth() auth: AuthContext) {
-    return this.users.listInvitations(tenantContextOf(auth));
+  invitations(@CurrentAuth() auth: AuthContext, @Req() request: FastifyRequest) {
+    return this.users.listInvitations(tenantContextOf(auth), grantsOf(request));
   }
 
-  @RequirePermissions('users.invite')
+  @RequireSitePermission('users.invite')
+  @Audited({ action: 'invitations.create', resourceType: 'invitation' })
   @Post('invitations')
   @HttpCode(HttpStatus.CREATED)
   invite(
@@ -80,10 +140,15 @@ export class UsersController {
     return this.users.createInvitation(tenantContextOf(auth), grantsOf(request), body);
   }
 
-  @RequirePermissions('users.invite')
+  @RequireSitePermission('users.invite')
+  @Audited({ action: 'invitations.revoke', resourceType: 'invitation' })
   @Delete('invitations/:id')
   @HttpCode(HttpStatus.NO_CONTENT)
-  async revoke(@CurrentAuth() auth: AuthContext, @Param('id', new ParseUUIDPipe()) id: string) {
-    await this.users.revokeInvitation(tenantContextOf(auth), id);
+  async revoke(
+    @CurrentAuth() auth: AuthContext,
+    @Req() request: FastifyRequest,
+    @Param('id', new ParseUUIDPipe()) id: string,
+  ): Promise<void> {
+    await this.users.revokeInvitation(tenantContextOf(auth), grantsOf(request), id);
   }
 }

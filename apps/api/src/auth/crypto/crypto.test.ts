@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import { createCipheriv, createHmac, hkdfSync, randomBytes } from 'node:crypto';
 import { hashPassword, verifyAgainstDummy, verifyPassword } from './password.js';
-import { SecretBox } from './secret-box.js';
+import { parseKeyList, SecretBox } from './secret-box.js';
 import {
   generateOpaqueToken,
   generateRecoveryCodes,
@@ -47,12 +48,29 @@ describe('jetons opaques', () => {
   });
 });
 
-describe('SecretBox (AES-256-GCM)', () => {
-  const box = new SecretBox(Buffer.alloc(32, 1).toString('base64'));
+describe('SecretBox (enveloppe AES-256-GCM, clés versionnées)', () => {
+  const k1 = Buffer.alloc(32, 1).toString('base64');
+  const k2 = Buffer.alloc(32, 2).toString('base64');
+  const box = new SecretBox(k1);
 
-  it('chiffre de façon non déterministe et déchiffre', () => {
+  /** Chiffré au format v1 du Sprint 1 (clé dérivée directement, sans enveloppe). */
+  function legacyV1(masterBase64: string, plaintext: string, aad: string): string {
+    const key = Buffer.from(
+      hkdfSync('sha256', Buffer.from(masterBase64, 'base64'), '', 'ecsi:aes-gcm:v1', 32),
+    );
+    const iv = randomBytes(12);
+    const cipher = createCipheriv('aes-256-gcm', key, iv);
+    cipher.setAAD(Buffer.from(aad, 'utf8'));
+    const ct = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
+    return ['v1', iv, cipher.getAuthTag(), ct]
+      .map((p) => (typeof p === 'string' ? p : p.toString('base64url')))
+      .join(':');
+  }
+
+  it('chiffre de façon non déterministe (v2, identifiant de clé) et déchiffre', () => {
     const a = box.encrypt('JBSWY3DPEHPK3PXP', 'user:1');
-    expect(a).toMatch(/^v1:/);
+    expect(a).toMatch(/^v2:k1:/);
+    expect(a.split(':')).toHaveLength(8);
     expect(a).not.toContain('JBSWY3DPEHPK3PXP');
     expect(box.encrypt('JBSWY3DPEHPK3PXP', 'user:1')).not.toBe(a);
     expect(box.decrypt(a, 'user:1')).toBe('JBSWY3DPEHPK3PXP');
@@ -61,15 +79,75 @@ describe('SecretBox (AES-256-GCM)', () => {
   it('refuse un chiffré altéré ou associé à un autre propriétaire', () => {
     const payload = box.encrypt('secret', 'user:1');
     expect(() => box.decrypt(payload, 'user:2')).toThrow();
-    const parts = payload.split(':');
-    parts[3] = Buffer.from('autre').toString('base64url');
-    expect(() => box.decrypt(parts.join(':'), 'user:1')).toThrow();
+    for (const index of [4, 7]) {
+      const parts = payload.split(':');
+      parts[index] = Buffer.from('autre-valeur-quelconque').toString('base64url');
+      expect(() => box.decrypt(parts.join(':'), 'user:1')).toThrow();
+    }
+    // Changer l'identifiant de clé ne permet pas de contourner l'authentification.
+    const swapped = payload.replace(/^v2:k1:/, 'v2:k0:');
+    expect(() => box.decrypt(swapped, 'user:1')).toThrow();
   });
 
-  it('refuse une clé de mauvaise taille et produit des empreintes stables', () => {
+  it('refuse une clé de mauvaise taille, un identifiant invalide et produit des empreintes stables', () => {
     expect(() => new SecretBox(Buffer.alloc(16).toString('base64'))).toThrow();
+    expect(() => new SecretBox(k1, { id: 'Pas Valide' })).toThrow();
+    expect(() => new SecretBox(k1, { id: 'k1', previous: [{ id: 'k1', base64: k2 }] })).toThrow();
     expect(box.fingerprint('a@b.ci')).toBe(box.fingerprint('a@b.ci'));
     expect(box.fingerprint('a@b.ci')).not.toContain('a@b');
+  });
+
+  it('lit encore le format v1 du Sprint 1, avec la clé active ou une ancienne clé', () => {
+    const v1 = legacyV1(k1, 'GRAINE', 'mfa:user:1');
+    expect(box.decrypt(v1, 'mfa:user:1')).toBe('GRAINE');
+    const rotated = new SecretBox(k2, { id: 'k2', previous: [{ id: 'k1', base64: k1 }] });
+    expect(rotated.decrypt(v1, 'mfa:user:1')).toBe('GRAINE');
+    expect(() => rotated.decrypt(v1, 'mfa:user:2')).toThrow();
+  });
+
+  it('rotation : ré-enveloppe la clé de données sans changer le chiffré du secret', () => {
+    const old = box.encrypt('GRAINE', 'mfa:user:1');
+    const rotated = new SecretBox(k2, { id: 'k2', previous: [{ id: 'k1', base64: k1 }] });
+    expect(rotated.decrypt(old, 'mfa:user:1')).toBe('GRAINE');
+    expect(rotated.needsRewrap(old)).toBe(true);
+    const rewrapped = rotated.rewrap(old, 'mfa:user:1');
+    expect(rewrapped).toMatch(/^v2:k2:/);
+    expect(rotated.needsRewrap(rewrapped)).toBe(false);
+    // Seule l'enveloppe change : IV, tag et chiffré du secret sont identiques.
+    expect(rewrapped.split(':').slice(5)).toEqual(old.split(':').slice(5));
+    // L'ancienne clé peut être retirée une fois la rotation faite.
+    const k2Only = new SecretBox(k2, { id: 'k2' });
+    expect(k2Only.decrypt(rewrapped, 'mfa:user:1')).toBe('GRAINE');
+    expect(() => k2Only.decrypt(old, 'mfa:user:1')).toThrow(/indisponible/);
+    // Le v1 est converti en v2.
+    const fromV1 = rotated.rewrap(legacyV1(k1, 'GRAINE', 'a'), 'a');
+    expect(fromV1).toMatch(/^v2:k2:/);
+    expect(k2Only.decrypt(fromV1, 'a')).toBe('GRAINE');
+  });
+
+  it('empreintes HMAC versionnées : retrouvées après rotation, y compris le format du Sprint 1', () => {
+    const legacyMac = createHmac(
+      'sha256',
+      Buffer.from(hkdfSync('sha256', Buffer.from(k1, 'base64'), '', 'ecsi:hmac:v1', 32)),
+    )
+      .update('CODE', 'utf8')
+      .digest('base64url');
+    expect(box.mac('CODE')).toBe(`k1$${legacyMac}`);
+    const rotated = new SecretBox(k2, { id: 'k2', previous: [{ id: 'k1', base64: k1 }] });
+    expect(rotated.mac('CODE')).toMatch(/^k2\$/);
+    const candidates = rotated.macCandidates('CODE');
+    expect(candidates).toContain(box.mac('CODE'));
+    expect(candidates).toContain(legacyMac);
+    expect(candidates).toContain(rotated.mac('CODE'));
+  });
+
+  it('analyse la liste des anciennes clés', () => {
+    expect(parseKeyList(undefined)).toEqual([]);
+    expect(parseKeyList(`k1:${k1},k0:${k2}`)).toEqual([
+      { id: 'k1', base64: k1 },
+      { id: 'k0', base64: k2 },
+    ]);
+    expect(() => parseKeyList('sans-separateur')).toThrow();
   });
 });
 

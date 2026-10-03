@@ -50,10 +50,35 @@ export const envSchema = z.object({
   S3_AUTO_CREATE_BUCKET: booleanFromString.default(false),
   /** Secret de signature des jetons d'accès (HS256), 32 caractères minimum. */
   JWT_ACCESS_SECRET: z.string().min(32),
-  /** Clé de chiffrement AES-256-GCM des secrets stockés (TOTP) : 32 octets encodés en base64. */
+  /**
+   * Clé maîtresse ACTIVE du chiffrement enveloppe des secrets stockés (TOTP) : 32 octets en
+   * base64. Rotation : voir docs/SECURITY.md (ENCRYPTION_KEY_ID, ENCRYPTION_PREVIOUS_KEYS).
+   */
   ENCRYPTION_KEY: z.string().refine((value) => Buffer.from(value, 'base64').length === 32, {
     message: 'doit contenir 32 octets encodés en base64 (openssl rand -base64 32)',
   }),
+  /** Identifiant de version de la clé active, inscrit dans chaque chiffré. */
+  ENCRYPTION_KEY_ID: z
+    .string()
+    .regex(/^[a-z0-9][a-z0-9-]{0,15}$/, { message: 'minuscules, chiffres, tirets (16 max.)' })
+    .default('k1'),
+  /** Anciennes clés, encore nécessaires en lecture pendant une rotation : « id:base64,… ». */
+  ENCRYPTION_PREVIOUS_KEYS: z
+    .string()
+    .optional()
+    .refine(
+      (value) =>
+        !value?.trim() ||
+        value.split(',').every((entry) => {
+          const index = entry.indexOf(':');
+          return (
+            index > 0 &&
+            /^[a-z0-9][a-z0-9-]{0,15}$/.test(entry.slice(0, index).trim()) &&
+            Buffer.from(entry.slice(index + 1).trim(), 'base64').length === 32
+          );
+        }),
+      { message: 'format « id:base64,… » attendu, chaque clé de 32 octets' },
+    ),
   /** Cookies « Secure » (HTTPS). Obligatoire en production. */
   COOKIE_SECURE: booleanFromString.optional(),
   /** URL publique du dashboard, utilisée dans les liens envoyés par e-mail. */

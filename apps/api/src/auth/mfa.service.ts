@@ -125,14 +125,15 @@ export class MfaService {
   /** Vérifie un code TOTP (anti-rejeu) ou consomme un code de récupération (usage unique). */
   async verify(realm: Realm, principalId: string, input: MfaVerifyRequest): Promise<boolean> {
     if ('recoveryCode' in input) {
-      const codeHash = this.secretBox.mac(normalizeRecoveryCode(input.recoveryCode));
+      // Empreintes sous toutes les clés connues : un code reste valable après une rotation.
+      const candidates = this.secretBox.macCandidates(normalizeRecoveryCode(input.recoveryCode));
       const used = await this.db
         .update(mfaRecoveryCodes)
         .set({ usedAt: new Date() })
         .where(
           and(
             this.recoveryOwner(realm, principalId),
-            eq(mfaRecoveryCodes.codeHash, codeHash),
+            inArray(mfaRecoveryCodes.codeHash, candidates),
             isNull(mfaRecoveryCodes.usedAt),
           ),
         )
@@ -176,6 +177,23 @@ export class MfaService {
       .from(mfaRecoveryCodes)
       .where(and(this.recoveryOwner(realm, principalId), isNull(mfaRecoveryCodes.usedAt)));
     return rows.length;
+  }
+
+  /**
+   * Récupération administrative : supprime le facteur et les codes de récupération. Le
+   * secret n'est jamais lu ni renvoyé ; l'utilisateur en configurera un nouveau.
+   * Retourne vrai si une 2FA (confirmée ou en cours) existait.
+   */
+  async reset(realm: Realm, principalId: string): Promise<boolean> {
+    const { column } = this.owner(realm, principalId);
+    return this.db.transaction(async (tx) => {
+      const removed = await tx
+        .delete(mfaFactors)
+        .where(eq(column, principalId))
+        .returning({ id: mfaFactors.id });
+      await tx.delete(mfaRecoveryCodes).where(this.recoveryOwner(realm, principalId));
+      return removed.length > 0;
+    });
   }
 
   private async replaceRecoveryCodes(

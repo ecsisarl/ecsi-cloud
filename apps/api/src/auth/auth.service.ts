@@ -16,7 +16,7 @@ import {
   type MfaVerifyRequest,
   passwordSchema,
 } from '@ecsi/shared';
-import { and, asc, eq, gt, isNull } from 'drizzle-orm';
+import { and, asc, eq, gt, inArray, isNull } from 'drizzle-orm';
 import { ENV } from '../config/config.module.js';
 import type { Env } from '../config/env.js';
 import { AUTH_DRIZZLE, type Database } from '../database/database.module.js';
@@ -28,11 +28,13 @@ import {
   membershipRoles,
   memberships,
   passwordResetTokens,
+  sites,
   userCredentials,
   users,
 } from '../database/schema/index.js';
-import { invitationMail, passwordResetMail } from '../mail/templates.js';
+import { invitationMail, mfaResetMail, passwordResetMail } from '../mail/templates.js';
 import { MailService } from '../mail/mail.service.js';
+import { AuditService } from '../audit/audit.service.js';
 import { AccessService } from '../tenancy/access.service.js';
 import { TenantDatabase } from '../tenancy/tenant-database.js';
 import type { AuthContext, Realm, RequestMeta } from './auth.types.js';
@@ -80,6 +82,7 @@ export class AuthService {
     private readonly mail: MailService,
     private readonly tenantDb: TenantDatabase,
     private readonly access: AccessService,
+    private readonly audit: AuditService,
   ) {}
 
   async login(input: LoginRequest, meta: RequestMeta): Promise<LoginOutcome> {
@@ -104,6 +107,17 @@ export class AuthService {
     if (!account || !valid || account.status !== 'ACTIVE') {
       await this.rateLimiter.hit(`login:fail:${emailKey}`, RATE_LIMITS.loginFailuresPerEmail);
       this.logger.warn({ event: 'auth.login_failed', emailKey, ip: meta.ip }, 'Échec de connexion');
+      // Compte connu : l'échec lui est attribué ; sinon acteur anonyme, adresse pseudonymisée.
+      await this.audit.writeDirect(
+        null,
+        {
+          action: 'auth.login',
+          resourceType: 'session',
+          result: 'FAILURE',
+          details: { emailFingerprint: emailKey, accountStatus: account ? account.status : null },
+        },
+        account ? await this.audit.principal('user', account.id) : { type: 'ANONYMOUS', id: null },
+      );
       throw new UnauthorizedException(INVALID_CREDENTIALS);
     }
 
@@ -131,13 +145,23 @@ export class AuthService {
     const mfaState = (await this.mfa.isRequired(realm, principalId))
       ? 'SETUP_REQUIRED'
       : 'NOT_REQUIRED';
-    const { tokens } = await this.sessions.create({
+    const { sessionId, tokens } = await this.sessions.create({
       realm,
       principalId,
       companyId,
       mfaState,
       meta,
     });
+    await this.audit.writeDirect(
+      realm === 'user' ? companyId : null,
+      {
+        action: realm === 'platform' ? 'platform.auth.login' : 'auth.login',
+        resourceType: 'session',
+        resourceId: sessionId,
+        details: { mfaState },
+      },
+      await this.audit.principal(realm, principalId),
+    );
     return { kind: 'session', tokens, mfaState };
   }
 
@@ -161,21 +185,44 @@ export class AuthService {
       await this.challenges.delete(challengeId);
       throw new UnauthorizedException('Trop de codes invalides : reconnectez-vous');
     }
+    const method = 'recoveryCode' in input ? 'RECOVERY_CODE' : 'TOTP';
+    const actor = await this.audit.principal(realm, challenge.principalId);
+    const auditCompany = realm === 'user' ? challenge.companyId : null;
     if (!(await this.mfa.verify(realm, challenge.principalId, input))) {
       this.logger.warn(
         { event: 'auth.mfa_failed', realm, principalId: challenge.principalId, ip: meta.ip },
         'Code 2FA invalide',
       );
+      await this.audit.writeDirect(
+        auditCompany,
+        {
+          action: realm === 'platform' ? 'platform.auth.mfa_verify' : 'auth.mfa_verify',
+          resourceType: 'session',
+          result: 'FAILURE',
+          details: { method },
+        },
+        actor,
+      );
       throw new UnauthorizedException('Code de vérification invalide');
     }
     await this.challenges.delete(challengeId);
-    const { tokens } = await this.sessions.create({
+    const { sessionId, tokens } = await this.sessions.create({
       realm,
       principalId: challenge.principalId,
       companyId: challenge.companyId,
       mfaState: 'VERIFIED',
       meta,
     });
+    await this.audit.writeDirect(
+      auditCompany,
+      {
+        action: realm === 'platform' ? 'platform.auth.login' : 'auth.login',
+        resourceType: 'session',
+        resourceId: sessionId,
+        details: { mfaState: 'VERIFIED', method },
+      },
+      actor,
+    );
     return tokens;
   }
 
@@ -196,6 +243,11 @@ export class AuthService {
     this.logger.log(
       { event: 'auth.mfa_enabled', realm: auth.realm, principalId: auth.principalId },
       '2FA activée',
+    );
+    await this.audit.writeDirect(
+      auth.realm === 'user' ? auth.companyId : null,
+      { action: 'auth.mfa_enable', resourceType: 'mfa', resourceId: auth.principalId },
+      await this.audit.principal(auth.realm, auth.principalId),
     );
     return { tokens, recoveryCodes };
   }
@@ -239,6 +291,11 @@ export class AuthService {
       throw new ForbiddenException('Accès refusé');
     }
     await this.sessions.setCompany(auth.sessionId, companyId);
+    await this.audit.writeDirect(
+      companyId,
+      { action: 'auth.switch_company', resourceType: 'session', resourceId: auth.sessionId },
+      await this.audit.principal('user', auth.principalId),
+    );
   }
 
   private async activeCompanies(userId: string) {
@@ -302,6 +359,11 @@ export class AuthService {
       { event: 'auth.password_reset_requested', userId: user.id },
       'Réinitialisation demandée',
     );
+    await this.audit.writeDirect(
+      null,
+      { action: 'auth.password_reset_request', resourceType: 'user', resourceId: user.id },
+      await this.audit.principal('user', user.id),
+    );
   }
 
   /** Réinitialisation : jeton à usage unique, 30 minutes ; toutes les sessions sont révoquées. */
@@ -341,6 +403,16 @@ export class AuthService {
     this.logger.log(
       { event: 'auth.password_reset_completed', userId, revokedSessions: revoked },
       'Mot de passe réinitialisé',
+    );
+    await this.audit.writeDirect(
+      null,
+      {
+        action: 'auth.password_reset',
+        resourceType: 'user',
+        resourceId: userId,
+        details: { revokedSessions: revoked },
+      },
+      await this.audit.principal('user', userId),
     );
   }
 
@@ -443,15 +515,32 @@ export class AuthService {
             scope: grant.scope,
           })
           .returning({ id: membershipRoles.id });
-        if (assignment && grant.siteIds.length > 0) {
-          await tx.insert(membershipRoleSites).values(
-            grant.siteIds.map((siteId) => ({
-              companyId: invitation.companyId,
-              membershipRoleId: assignment.id,
-              siteId,
-            })),
-          );
+        if (!assignment || grant.scope !== 'SITES') continue;
+        // Sites encore existants (un site a pu être supprimé depuis l'invitation).
+        const stillValid = grant.siteIds.length
+          ? await tx
+              .select({ id: sites.id })
+              .from(sites)
+              .where(
+                and(
+                  eq(sites.companyId, invitation.companyId),
+                  inArray(sites.id, grant.siteIds),
+                  isNull(sites.deletedAt),
+                ),
+              )
+          : [];
+        if (stillValid.length === 0) {
+          // Rôle limité à des sites qui n'existent plus : il n'est pas attribué.
+          await tx.delete(membershipRoles).where(eq(membershipRoles.id, assignment.id));
+          continue;
         }
+        await tx.insert(membershipRoleSites).values(
+          stillValid.map((site) => ({
+            companyId: invitation.companyId,
+            membershipRoleId: assignment.id,
+            siteId: site.id,
+          })),
+        );
       }
 
       await tx
@@ -469,6 +558,16 @@ export class AuthService {
         newAccount: !existing,
       },
       'Invitation acceptée',
+    );
+    await this.audit.writeDirect(
+      invitation.companyId,
+      {
+        action: 'invitations.accept',
+        resourceType: 'invitation',
+        resourceId: invitation.id,
+        details: { userId, newAccount: !existing },
+      },
+      await this.audit.principal('user', userId),
     );
   }
 
@@ -497,6 +596,19 @@ export class AuthService {
   }
 
   /** Envoie l'e-mail d'invitation (appelé par le module Utilisateurs après création). */
+  /** Informe l'utilisateur que sa 2FA a été réinitialisée (sécurité). */
+  sendMfaResetMail(email: string, resetBy: string, locale: string): void {
+    this.mail.sendInBackground(
+      mfaResetMail(
+        email,
+        `${this.env.WEB_PUBLIC_URL}/connexion`,
+        resetBy,
+        locale === 'en' ? 'en' : 'fr',
+      ),
+      'mfa_reset',
+    );
+  }
+
   sendInvitationMail(email: string, token: string, companyName: string, inviterName: string): void {
     const url = `${this.env.WEB_PUBLIC_URL}/invitation?token=${token}`;
     this.mail.sendInBackground(

@@ -77,3 +77,38 @@ export function invitationMail(
     html: layout(t.title, t.lines, { label: t.action, url }),
   };
 }
+
+/** Information de sécurité : la 2FA du compte a été réinitialisée par un administrateur. */
+export function mfaResetMail(
+  to: string,
+  loginUrl: string,
+  resetBy: string,
+  locale: Locale,
+): OutgoingMail {
+  const t =
+    locale === 'en'
+      ? {
+          subject: 'Your ECSI CLOUD two-factor authentication was reset',
+          title: 'Two-factor authentication reset',
+          lines: [
+            `Your two-factor authentication was reset by ${resetBy}. All your sessions were signed out.`,
+            'At your next sign-in, set up a new authenticator app. If you did not ask for this, contact your administrator immediately.',
+          ],
+          action: 'Sign in',
+        }
+      : {
+          subject: 'Votre double authentification ECSI CLOUD a été réinitialisée',
+          title: 'Double authentification réinitialisée',
+          lines: [
+            `Votre double authentification a été réinitialisée par ${resetBy}. Toutes vos sessions ont été fermées.`,
+            "À votre prochaine connexion, configurez une nouvelle application d'authentification. Si vous n'êtes pas à l'origine de cette demande, prévenez immédiatement votre administrateur.",
+          ],
+          action: 'Se connecter',
+        };
+  return {
+    to,
+    subject: t.subject,
+    text: `${t.title}\n\n${t.lines.join('\n\n')}\n\n${loginUrl}\n`,
+    html: layout(t.title, t.lines, { label: t.action, url: loginUrl }),
+  };
+}

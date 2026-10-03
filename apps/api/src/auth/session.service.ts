@@ -39,7 +39,10 @@ export type RevokeReason =
   | 'REFRESH_TOKEN_REUSE'
   | 'PASSWORD_RESET'
   | 'MFA_ELEVATION'
-  | 'OTHER_SESSIONS_REVOKED';
+  | 'OTHER_SESSIONS_REVOKED'
+  | 'MFA_RESET'
+  | 'ACCESS_REMOVED'
+  | 'COMPANY_SUSPENDED';
 
 export interface NewSession {
   readonly realm: Realm;
@@ -320,6 +323,32 @@ export class SessionService {
           exceptSessionId ? ne(authSessions.id, exceptSessionId) : sql`true`,
         ),
       )
+      .returning({ id: authSessions.id });
+    return result.length;
+  }
+
+  /** Révoque les sessions d'un utilisateur ouvertes sur une entreprise donnée. */
+  async revokeForCompany(userId: string, companyId: string, reason: RevokeReason): Promise<number> {
+    const result = await this.db
+      .update(authSessions)
+      .set({ revokedAt: new Date(), revokedReason: reason })
+      .where(
+        and(
+          eq(authSessions.userId, userId),
+          eq(authSessions.companyId, companyId),
+          isNull(authSessions.revokedAt),
+        ),
+      )
+      .returning({ id: authSessions.id });
+    return result.length;
+  }
+
+  /** Révoque toutes les sessions ouvertes sur une entreprise (suspension). */
+  async revokeAllForCompany(companyId: string, reason: RevokeReason): Promise<number> {
+    const result = await this.db
+      .update(authSessions)
+      .set({ revokedAt: new Date(), revokedReason: reason })
+      .where(and(eq(authSessions.companyId, companyId), isNull(authSessions.revokedAt)))
       .returning({ id: authSessions.id });
     return result.length;
   }

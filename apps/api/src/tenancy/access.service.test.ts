@@ -30,4 +30,40 @@ describe('Grants (portée entreprise / sites)', () => {
     expect(grants.canGrant(['permission.inexistante'], 'COMPANY', [])).toBe(false);
     expect(Grants.empty().canGrant(['users.read'], 'COMPANY', [])).toBe(false);
   });
+
+  it('ne permet d’agir sur un membre que si l’on couvre tous ses droits (anti-escalade)', () => {
+    const gerantSiteA = new Grants(
+      ['GERANT'],
+      new Set(),
+      new Map([[SITE_A, new Set(['users.read', 'users.update', 'sales.read'] as const)]]),
+    );
+    const vendeurSiteA = new Grants(
+      ['VENDEUR'],
+      new Set(),
+      new Map([[SITE_A, new Set(['sales.read'] as const)]]),
+    );
+    const vendeurSiteB = new Grants(
+      ['VENDEUR'],
+      new Set(),
+      new Map([[SITE_B, new Set(['sales.read'] as const)]]),
+    );
+    const admin = new Grants(
+      ['ADMIN_ENTREPRISE'],
+      new Set(['users.update', 'sales.read', 'users.read']),
+      new Map(),
+    );
+
+    expect(gerantSiteA.covers(vendeurSiteA)).toBe(true);
+    expect(gerantSiteA.hasOverMember('users.update', vendeurSiteA)).toBe(true);
+    // Vendeur d'un autre site : hors portée.
+    expect(gerantSiteA.covers(vendeurSiteB)).toBe(false);
+    expect(gerantSiteA.hasOverMember('users.update', vendeurSiteB)).toBe(false);
+    // Membre à portée entreprise : jamais administrable par un gérant de site.
+    expect(gerantSiteA.covers(admin)).toBe(false);
+    expect(gerantSiteA.hasOverMember('users.update', admin)).toBe(false);
+    expect(gerantSiteA.hasOverMember('users.update', Grants.empty())).toBe(false);
+    // L'administrateur couvre tout le monde.
+    expect(admin.hasOverMember('users.update', vendeurSiteB)).toBe(true);
+    expect(admin.covers(gerantSiteA)).toBe(true);
+  });
 });

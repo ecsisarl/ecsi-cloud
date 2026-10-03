@@ -20,7 +20,8 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "node dist/database/migrate.js",
     "db:seed": "node dist/database/seed.js",
-    "platform:create-admin": "node dist/cli/create-platform-admin.js"
+    "platform:create-admin": "node dist/cli/create-platform-admin.js",
+    "keys:rotate": "node dist/cli/rotate-encryption-keys.js"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1146.0",

@@ -1,4 +1,11 @@
-import { CreateBucketCommand, HeadBucketCommand, S3Client } from '@aws-sdk/client-s3';
+import {
+  CreateBucketCommand,
+  DeleteObjectCommand,
+  GetObjectCommand,
+  HeadBucketCommand,
+  PutObjectCommand,
+  S3Client,
+} from '@aws-sdk/client-s3';
 import {
   Global,
   Inject,
@@ -15,7 +22,8 @@ export const S3 = Symbol('S3');
 
 /**
  * Accès au stockage objet S3 compatible (SeaweedFS en développement, S3 managé en production).
- * Les fichiers sont privés ; l'accès se fera par URLs présignées courtes (Sprint 2, logos).
+ * Les fichiers sont privés : ils ne sont jamais servis directement par le stockage, mais par
+ * l'API après contrôle d'accès (logos des entreprises).
  */
 @Injectable()
 export class StorageService implements OnModuleInit {
@@ -43,6 +51,27 @@ export class StorageService implements OnModuleInit {
         this.logger.warn(`Création du bucket impossible : ${(error as Error).message}`);
       }
     }
+  }
+
+  async put(key: string, body: Buffer, contentType: string): Promise<void> {
+    await this.s3.send(
+      new PutObjectCommand({ Bucket: this.bucket, Key: key, Body: body, ContentType: contentType }),
+    );
+  }
+
+  async get(key: string): Promise<Buffer | null> {
+    try {
+      const result = await this.s3.send(new GetObjectCommand({ Bucket: this.bucket, Key: key }));
+      if (!result.Body) return null;
+      return Buffer.from(await result.Body.transformToByteArray());
+    } catch (error) {
+      if ((error as { name?: string }).name === 'NoSuchKey') return null;
+      throw error;
+    }
+  }
+
+  async delete(key: string): Promise<void> {
+    await this.s3.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: key }));
   }
 
   async ping(): Promise<void> {
