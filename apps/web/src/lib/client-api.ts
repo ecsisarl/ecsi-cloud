@@ -33,7 +33,7 @@ export function refreshSession(): Promise<boolean> {
 }
 
 export interface ApiOptions {
-  method?: 'GET' | 'POST' | 'PATCH' | 'DELETE';
+  method?: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
   body?: unknown;
   /** false pour les routes publiques (connexion…) : pas de rafraîchissement automatique. */
   retryOnUnauthorized?: boolean;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { NAVIGATION, findNavItem, isActive } from './navigation';
+import { NAVIGATION, findNavItem, isActive, visibleNavigation } from './navigation';
 import fr from '../../messages/fr.json';
 import en from '../../messages/en.json';
 
@@ -27,6 +27,33 @@ describe('navigation', () => {
     expect(isActive('/ventes', '/')).toBe(false);
     expect(isActive('/reseau/mikrotik/abc', '/reseau/mikrotik')).toBe(true);
     expect(findNavItem('/tickets')?.plannedSprint).toBe('S6');
+  });
+});
+
+describe('navigation selon les permissions', () => {
+  const keys = (permissions: string[]) =>
+    visibleNavigation(permissions).flatMap((group) => group.items.map((item) => item.key));
+
+  it('masque les modules d’administration sans la permission correspondante', () => {
+    const vendeur = keys(['sites.read', 'sales.read']);
+    expect(vendeur).toContain('sites');
+    expect(vendeur).not.toContain('users');
+    expect(vendeur).not.toContain('audit');
+    expect(vendeur).not.toContain('company');
+    expect(vendeur).not.toContain('siteGroups');
+  });
+
+  it('affiche les modules du Sprint 2 à un administrateur', () => {
+    const admin = keys([
+      'sites.read',
+      'site_groups.read',
+      'companies.read',
+      'users.read',
+      'audit.read',
+    ]);
+    expect(admin).toEqual(
+      expect.arrayContaining(['sites', 'siteGroups', 'company', 'users', 'audit']),
+    );
   });
 });
 

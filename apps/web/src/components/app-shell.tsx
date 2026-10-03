@@ -7,10 +7,11 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { type ReactNode, useState } from 'react';
-import { NAVIGATION, isActive } from '@/lib/navigation';
+import { isActive, visibleNavigation } from '@/lib/navigation';
+import { MeProvider } from './me-context';
 import { UserPanel } from './user-panel';
 
-function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
+function Sidebar({ permissions, onNavigate }: { permissions: string[]; onNavigate?: () => void }) {
   const t = useTranslations('nav');
   const pathname = usePathname();
 
@@ -19,7 +20,7 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
       aria-label="Navigation principale"
       className="flex flex-1 flex-col gap-6 overflow-y-auto px-3 py-4"
     >
-      {NAVIGATION.map((group) => (
+      {visibleNavigation(permissions).map((group) => (
         <div key={group.key}>
           <p className="px-3 pb-2 text-xs font-semibold tracking-wide text-sidebar-muted uppercase">
             {t(`groups.${group.key}`)}
@@ -65,7 +66,7 @@ export function AppShell({ me, children }: { me: MeResponse; children: ReactNode
         <div className="flex h-16 items-center px-6">
           <Logo className="text-white" />
         </div>
-        <Sidebar />
+        <Sidebar permissions={me.permissions} />
         <UserPanel me={me} />
       </aside>
 
@@ -95,6 +96,7 @@ export function AppShell({ me, children }: { me: MeResponse; children: ReactNode
               </button>
             </div>
             <Sidebar
+              permissions={me.permissions}
               onNavigate={() => {
                 setOpen(false);
               }}
@@ -118,7 +120,9 @@ export function AppShell({ me, children }: { me: MeResponse; children: ReactNode
         <Logo />
       </header>
 
-      <main className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8 lg:py-8">{children}</main>
+      <main className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+        <MeProvider me={me}>{children}</MeProvider>
+      </main>
     </div>
   );
 }
