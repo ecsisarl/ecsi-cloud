@@ -49,30 +49,61 @@ Décisions détaillées : [ADR 0011](adr/0011-roles-postgresql-rls-module-auth.m
 | Validation           | Zod sur chaque corps, paramètre et requête ; requêtes SQL paramétrées (Drizzle) ; React échappe les sorties (aucun `dangerouslySetInnerHTML`)                                                             |
 | Journaux             | Mots de passe, jetons, codes, cookies et chaîne de requête jamais journalisés (testé) ; adresse IP réelle via `TRUST_PROXY_HOPS`                                                                          |
 
+## Mesures en place (Sprint 2 : entreprises, utilisateurs, sites, audit)
+
+Décisions détaillées : [ADR 0013](adr/0013-console-plateforme-role-auth.md) (console super administrateur), [ADR 0014](adr/0014-chiffrement-enveloppe-rotation.md) (chiffrement enveloppe et rotation), [ADR 0015](adr/0015-journal-audit-chaine.md) (journal d'audit).
+
+| Domaine              | Mesure                                                                                                                                                                                                                          |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Portée par site      | Rôle attribué à toute l'entreprise ou à des sites ; un site hors portée répond 404, un site visible sans la permission demandée répond 403 ; les listes sont filtrées côté serveur                                              |
+| Contournements       | `companyId` et tout champ ou paramètre inconnu refusés (422) dans le corps et la requête ; en-têtes ignorés ; l'entreprise vient toujours de la session (testé par UUID, URL, corps, en-tête)                                   |
+| Anti-escalade        | Attribuer, modifier ou retirer un rôle exige de détenir toutes ses permissions **sur la même portée** ; un membre plus privilégié que soi ne peut être ni modifié ni désactivé                                                  |
+| Auto-protection      | Impossible de modifier son propre statut, ses rôles ou son accès (403)                                                                                                                                                          |
+| Changement de rôles  | Toutes les sessions du membre sont révoquées ; ses nouveaux droits s'appliquent à la reconnexion                                                                                                                                |
+| Profil d'entreprise  | `ecsi_app` ne peut modifier que les colonnes du profil (privilèges PostgreSQL par colonne) ; statut, suspension et identifiant réservés à la plateforme                                                                         |
+| Logo                 | PNG, JPEG ou WebP vérifiés par leur signature (pas par l'extension), 512 Ko maximum ; SVG refusé ; servi avec la CSP `default-src 'none'; sandbox`                                                                              |
+| Journal d'audit      | Ajout seul (déclencheurs, même pour le propriétaire), chaîne SHA-256 calculée en base, vérification de chaîne ; refus et échecs audités ; IP, user-agent et identifiant de requête                                              |
+| Secrets dans l'audit | Clés `password`, `token`, `secret`, `cookie`, `totp`, `hash`, `private_key`, `api_key`, `encryption`, `recovery`, `credential`… masquées à toute profondeur ; métadonnées de site refusant ces clés                             |
+| Chiffrement          | Enveloppe AES-256-GCM (clé de données par valeur, clé maîtresse versionnée) ; rotation sans interruption                                                                                                                        |
+| Récupération 2FA     | Permission dédiée `users.mfa.reset` (administrateur) ou console plateforme ; code TOTP de l'auteur et motif exigés ; sessions de l'utilisateur révoquées ; e-mail d'information ; auditée ; l'ancien secret n'est jamais révélé |
+| Super administrateur | Console `/api/v1/platform/*` (domaine séparé, 2FA vérifiée) ; création, suspension (sessions révoquées) et réactivation auditées dans la chaîne `platform` et dans celle de l'entreprise                                        |
+
+### Rotation de la clé de chiffrement
+
+1. Générer une nouvelle clé : `openssl rand -base64 32`.
+2. Déployer avec `ENCRYPTION_KEY=<nouvelle>`, `ENCRYPTION_KEY_ID=<nouvel id>` (ex. `k2`) et `ENCRYPTION_PREVIOUS_KEYS=k1:<ancienne clé>`. Les secrets existants restent lisibles.
+3. Simuler puis exécuter la rotation : `docker compose run --rm migrate node dist/cli/rotate-encryption-keys.js --dry-run`, puis sans `--dry-run` (ou `pnpm --filter @ecsi/api keys:rotate` hors Docker, après build). La commande est idempotente et n'affiche ni valeur ni clé.
+4. Retirer l'ancienne clé de `ENCRYPTION_PREVIOUS_KEYS` **uniquement** quand la commande indique qu'aucune donnée n'en dépend. Les codes de récupération encore liés à l'ancienne clé deviennent sinon inutilisables (l'utilisateur peut les régénérer).
+
 ### Limites de débit
 
-| Action                        | Limite                                                    |
-| ----------------------------- | --------------------------------------------------------- |
-| Connexion                     | 20 / 15 min par IP ; 5 échecs / 15 min par adresse e-mail |
-| Vérification 2FA              | 30 / 15 min par IP ; 5 essais par défi                    |
-| Mot de passe oublié           | 5 / h par adresse e-mail ; 20 / h par IP                  |
-| Réinitialisation              | 20 / h par IP                                             |
-| Invitation (aperçu, accepter) | 30 / h par IP                                             |
-| Refresh                       | 300 / 15 min par IP                                       |
+| Action                        | Limite                                                                                                                      |
+| ----------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| Connexion                     | 20 / 15 min par IP (`RATE_LIMIT_LOGIN_PER_IP`, relevé uniquement pour les tests E2E) ; 5 échecs / 15 min par adresse e-mail |
+| Vérification 2FA              | 30 / 15 min par IP ; 5 essais par défi                                                                                      |
+| Mot de passe oublié           | 5 / h par adresse e-mail ; 20 / h par IP                                                                                    |
+| Réinitialisation              | 20 / h par IP                                                                                                               |
+| Invitation (aperçu, accepter) | 30 / h par IP                                                                                                               |
+| Refresh                       | 300 / 15 min par IP                                                                                                         |
 
 Les clés Redis ne contiennent jamais d'adresse e-mail en clair (empreinte HMAC).
 
 ### Limites connues (Sprint 1)
 
-- Journal d'audit en base : Sprint 2 ; les événements de sécurité vont pour l'instant dans les journaux applicatifs.
-- Désactivation de la 2FA par l'utilisateur et réinitialisation par un administrateur : non livrées.
+- Désactivation de la 2FA par l'utilisateur : non livrée (la réinitialisation par un administrateur l'est depuis le Sprint 2).
 - Pas de nonce CSP dans le dashboard Next.js (en-têtes Helmet côté API et Nginx uniquement).
 - Pas de mode Bearer pour les clients non navigateur (applications mobiles, intégrations) : à concevoir avec l'API publique.
 - La RLS protège contre les oublis de filtre, pas contre un rôle `ecsi_auth` compromis (voir ADR 0011).
 
+### Limites connues (Sprint 2)
+
+- La chaîne d'audit détecte la modification d'un maillon, pas la suppression des derniers maillons par un superutilisateur PostgreSQL : export externe des empreintes prévu au Sprint 10.
+- La garde « dernier administrateur » existe dans le service mais n'est pas atteignable par l'API avec les rôles système (l'auto-protection et l'anti-escalade s'appliquent avant) : elle reste en défense en profondeur.
+- Une rotation de clé remet à zéro les compteurs de limitation de débit fondés sur une empreinte d'e-mail.
+- Rôles personnalisés : non livrés (seuls les 7 rôles système sont attribuables).
+
 ## À venir (par sprint)
 
-- **S2** : journal d'audit chaîné par hachage, chiffrement enveloppe des secrets (AES-256-GCM).
 - **S3** : sécurité MikroTik (voir ci-dessous).
 
 ## Sécurité MikroTik (règles validées)

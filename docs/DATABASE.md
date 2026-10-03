@@ -44,9 +44,23 @@ Ces privilèges sont vérifiés par les tests d'intégration (`apps/api/test/fou
 
 Après les migrations, `pnpm db:migrate` synchronise le catalogue des permissions et les rôles système de chaque entreprise (`src/database/catalog.ts`), de façon idempotente.
 
+### Migration 0003 : profil d'entreprise, sites, groupes, audit (générée par Drizzle)
+
+- `companies` : raison sociale, téléphone, WhatsApp, e-mail, adresse, ville, pays, devise (`XOF` par défaut), langue (`fr`), fuseau, logo, paramètres (`jsonb`), suspension (`suspended_at`, `suspension_reason`).
+- `sites` : code unique par entreprise (`(company_id, code)`), adresse, coordonnées, fuseau, contact, statut (`ACTIVE`, `MAINTENANCE`, `INACTIVE`), métadonnées.
+- `site_groups` et `site_group_members` (préparation du roaming GROUPE) : clés composites `(company_id, …)`, un site peut appartenir à plusieurs groupes.
+- `membership_role_sites` référence désormais `sites` (clé composite).
+- `audit_events` : voir [ADR 0015](adr/0015-journal-audit-chaine.md).
+
+### Migration 0004 : RLS, privilèges et journal d'audit (écrite à la main)
+
+- Isolation `tenant_isolation` sur `sites`, `site_groups`, `site_group_members` ; lecture accordée à `ecsi_auth` (compteurs de la console plateforme).
+- `companies` : `ecsi_app` ne peut mettre à jour que les colonnes du profil (`GRANT UPDATE (…)` par colonne) ; `ecsi_auth` crée et suspend les entreprises ([ADR 0013](adr/0013-console-plateforme-role-auth.md)).
+- `audit_events` : `SELECT` et `INSERT` seulement ; déclencheurs refusant `UPDATE`, `DELETE` et `TRUNCATE` (même au propriétaire) ; déclencheur de chaînage SHA-256 (`app.audit_events_chain`) ; fonction `app.audit_verify_chain(chain_key)` exécutable par `ecsi_auth` seulement ; RLS : une entreprise lit ses événements et n'écrit qu'au nom de l'utilisateur authentifié.
+
 ### Données de démonstration
 
-`SEED_PASSWORD=… pnpm db:seed` (refusé en production) crée ENTREPRISE_A (`admin.a`, `gerant.a`, `vendeur.a`) et ENTREPRISE_B (`admin.b`, `gerant.b`), adresses `@ecsi.test`. Chaque exécution réinitialise mots de passe, 2FA et sessions de ces comptes.
+`SEED_PASSWORD=… pnpm db:seed` (refusé en production) crée ENTREPRISE_A (`admin.a`, `gerant.a`, `vendeur.a`, `gerant.site-a` limité à SITE-A, `vendeur.site-b` limité à SITE-B), ENTREPRISE_B (`admin.b`, `gerant.b`) et le super administrateur `superadmin@ecsi.test`, adresses `@ecsi.test`. Sites : SITE-A « Cocody Riviera » et SITE-B « Yopougon Selmer » (groupe GROUPE-ABIDJAN) pour A, SITE-A « Plateau Centre (B) » pour B (même code, autre entreprise). Chaque exécution réinitialise mots de passe, 2FA, sessions, rôles et statut de ces comptes et entreprises.
 
 ## Conventions
 
@@ -71,4 +85,4 @@ CREATE POLICY tenant_isolation ON <table> TO ecsi_app
 
 `TenantDatabase.run()` ouvre une transaction et positionne `app.company_id` et `app.user_id` (`set_config(…, true)`, portée transaction) à partir de la session authentifiée, jamais d'un paramètre client. Sans contexte, aucune ligne n'est visible. Les services ajoutent en plus un filtre explicite sur `company_id` (défense en profondeur).
 
-Vérifié par `apps/api/test/rls.int.test.ts` (politiques et privilèges, 18 tests) et `apps/api/test/isolation.int.test.ts` (endpoints avec ENTREPRISE_A et ENTREPRISE_B, 11 tests).
+Vérifié par `apps/api/test/rls.int.test.ts` (politiques, privilèges par colonne, journal d'audit en ajout seul et chaîné) et `apps/api/test/isolation.int.test.ts` (endpoints avec ENTREPRISE_A et ENTREPRISE_B) ; la portée par site par `apps/api/test/sites.int.test.ts`.

@@ -2,6 +2,26 @@
 
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Versions par sprint.
 
+## [S2] — 2026-10-03 — Entreprises, utilisateurs, sites, audit
+
+### Ajouté
+
+- Profil d'entreprise complet (nom commercial, raison sociale, logo, téléphone, WhatsApp, e-mail, adresse, pays, devise, langue, fuseau, paramètres ; FR / XOF par défaut).
+- Gestion des membres : liste, recherche, filtres, détail, invitation avec portée par site, activation et désactivation, changement de rôles (sessions révoquées), retrait d'accès ; anti-escalade par portée et auto-protection.
+- Sites (code unique par entreprise) et groupes de sites (un site dans plusieurs groupes, préparation du roaming GROUPE).
+- Portée RBAC par site appliquée côté serveur (404 hors portée, 403 sans permission), `GERANT` et `VENDEUR` limités à leurs sites.
+- Journal d'audit persistant en ajout seul, chaîné par hachage SHA-256 en base, vérifiable ; refus et échecs audités ; secrets masqués (migrations 0003 et 0004, ADR 0015).
+- Chiffrement enveloppe versionné et commande de rotation `keys:rotate` (ADR 0014).
+- Récupération 2FA par un administrateur ou par la plateforme : permission dédiée, code TOTP et motif exigés, sessions révoquées, e-mail, audit.
+- Console super administrateur : entreprises (liste, recherche, détail, création, suspension, réactivation), support 2FA, audit de la plateforme et vérification des chaînes (ADR 0013).
+- Dashboard : pages Entreprise, Utilisateurs, Sites, Groupes de sites, Journal d'audit, console `/plateforme` ; menu filtré par permissions.
+- Tests : intégration (portée par site, administration, plateforme, RLS du journal d'audit), unitaires (chiffrement v2, assainissement, logo, schémas), E2E Sprint 2 (bureau et mobile).
+- `RATE_LIMIT_LOGIN_PER_IP` configurable (relevé uniquement pour les E2E).
+
+### Corrigé
+
+- Mise à jour partielle d'un site : les valeurs par défaut de Zod 4 (appliquées même sous `.partial()`) réinitialisaient le statut et les métadonnées.
+
 ## [S1] — 2026-10-03 — Authentification, multi-entreprise, RBAC
 
 ### Ajouté

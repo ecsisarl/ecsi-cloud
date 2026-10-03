@@ -26,7 +26,7 @@ docker compose up --build
 docker compose run --rm -e SEED_PASSWORD='choisir-un-mot-de-passe-long' migrate node dist/database/seed.js
 ```
 
-Crée ENTREPRISE_A (`admin.a@ecsi.test`, `gerant.a@ecsi.test`, `vendeur.a@ecsi.test`) et ENTREPRISE_B (`admin.b@ecsi.test`, `gerant.b@ecsi.test`) avec ce mot de passe. Les administrateurs doivent activer la 2FA à la première connexion (application TOTP). Les e-mails (réinitialisation, invitations) arrivent dans Mailpit.
+Crée ENTREPRISE_A (`admin.a@ecsi.test`, `gerant.a@ecsi.test`, `vendeur.a@ecsi.test`, `gerant.site-a@ecsi.test` limité au site SITE-A, `vendeur.site-b@ecsi.test` limité au site SITE-B), ENTREPRISE_B (`admin.b@ecsi.test`, `gerant.b@ecsi.test`) et le super administrateur `superadmin@ecsi.test` (console sur `/plateforme`, connexion sur `/plateforme/connexion`) avec ce mot de passe. Les administrateurs et le super administrateur doivent activer la 2FA à la première connexion (application TOTP). Les e-mails (réinitialisation, invitations) arrivent dans Mailpit.
 
 Aucun fichier `.env` n'est nécessaire en développement : `docker-compose.yml` fournit des valeurs marquées `devonly`, refusées par l'API en production. Pour utiliser des secrets aléatoires : `./scripts/generate-dev-env.sh` puis `docker compose down -v && docker compose up --build`.
 

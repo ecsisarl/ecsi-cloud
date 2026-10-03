@@ -67,20 +67,78 @@ L'entreprise courante vient toujours de la session : aucun endpoint n'accepte de
 
 `POST /login`, `POST /mfa/verify`, `GET /me`, `POST /mfa/setup`, `POST /mfa/confirm`. Domaine séparé : un jeton d'entreprise y est refusé et inversement. Création du premier compte : `pnpm platform:create-admin --email … --name …` (mot de passe dans `PLATFORM_ADMIN_PASSWORD`).
 
-### Utilisateurs et rôles de l'entreprise courante
+## Endpoints Sprint 2
 
-| Méthode | Chemin                     | Permission      | Description                                                                                              |
-| ------- | -------------------------- | --------------- | -------------------------------------------------------------------------------------------------------- |
-| GET     | `/api/v1/users`            | `users.read`    | Membres de l'entreprise                                                                                  |
-| GET     | `/api/v1/users/:id`        | `users.read`    | Un membre (404 s'il appartient à une autre entreprise)                                                   |
-| PATCH   | `/api/v1/users/:id/status` | `users.disable` | `{ status: ACTIVE \| DISABLED }` ; ni soi-même ni un membre plus privilégié                              |
-| GET     | `/api/v1/roles`            | `roles.read`    | Rôles et permissions                                                                                     |
-| GET     | `/api/v1/invitations`      | `users.read`    | Invitations en attente                                                                                   |
-| POST    | `/api/v1/invitations`      | `users.invite`  | `{ email, roles: [{ roleId, scope }] }` ; anti-escalade ; portée `SITES` refusée (422) jusqu'au Sprint 2 |
-| DELETE  | `/api/v1/invitations/:id`  | `users.invite`  | Révoque une invitation                                                                                   |
+Contrats Zod : `packages/shared/src/{company,members,sites,audit,platform}.ts`. Les routes marquées « par site » acceptent une permission détenue sur toute l'entreprise **ou** sur les sites concernés : un site hors de la portée de l'appelant répond 404, un site visible sans la permission demandée répond 403. Toute modification est inscrite au journal d'audit (refus et échecs compris).
+
+### Entreprise courante (`/api/v1/company`)
+
+| Méthode | Chemin      | Permission         | Description                                                                          |
+| ------- | ----------- | ------------------ | ------------------------------------------------------------------------------------ |
+| GET     | `/`         | `companies.read`   | Profil : noms, contacts, adresse, pays, devise, langue, fuseau, statut, paramètres   |
+| PATCH   | `/`         | `companies.update` | Modifie le profil ; statut et identifiant refusés (422)                              |
+| PUT     | `/settings` | `settings.manage`  | Remplace les paramètres                                                              |
+| PUT     | `/logo`     | `companies.update` | `{ contentType, data }` base64, PNG/JPEG/WebP vérifiés par signature, 512 Ko maximum |
+| DELETE  | `/logo`     | `companies.update` | Supprime le logo                                                                     |
+| GET     | `/logo`     | session            | Logo de l'entreprise courante                                                        |
+
+### Membres, rôles et invitations
+
+| Méthode | Chemin                        | Permission (par site) | Description                                                                                          |
+| ------- | ----------------------------- | --------------------- | ---------------------------------------------------------------------------------------------------- |
+| GET     | `/api/v1/users`               | `users.read`          | `?q=&status=&roleId=&siteId=` ; un gestionnaire de site ne voit que les membres de ses sites         |
+| GET     | `/api/v1/users/:id`           | `users.read`          | Détail, rôles et sites                                                                               |
+| PATCH   | `/api/v1/users/:id/status`    | `users.disable`       | `{ status: ACTIVE \| DISABLED }` ; sessions révoquées à la désactivation ; jamais sur soi-même (403) |
+| PUT     | `/api/v1/users/:id/roles`     | `users.update`        | `{ roles: [{ roleId, scope, siteIds? }] }` ; anti-escalade ; sessions du membre révoquées            |
+| DELETE  | `/api/v1/users/:id`           | `users.remove`        | Retire l'accès à l'entreprise (le compte personnel est conservé)                                     |
+| POST    | `/api/v1/users/:id/mfa/reset` | `users.mfa.reset`     | `{ code, reason }` : code TOTP de l'auteur et motif ; sessions révoquées, e-mail envoyé (204)        |
+| GET     | `/api/v1/roles`               | `roles.read`          | Rôles et permissions                                                                                 |
+| GET     | `/api/v1/invitations`         | `users.read`          | Invitations en attente (limitées aux sites de l'appelant)                                            |
+| POST    | `/api/v1/invitations`         | `users.invite`        | `{ email, roles: [{ roleId, scope, siteIds? }] }` ; portée `SITES` disponible ; anti-escalade        |
+| DELETE  | `/api/v1/invitations/:id`     | `users.invite`        | Révoque une invitation                                                                               |
+
+### Sites et groupes de sites
+
+| Méthode | Chemin                                 | Permission                  | Description                                                              |
+| ------- | -------------------------------------- | --------------------------- | ------------------------------------------------------------------------ |
+| GET     | `/api/v1/sites`                        | `sites.read` (par site)     | `?q=&status=&groupId=` ; uniquement les sites de la portée de l'appelant |
+| GET     | `/api/v1/sites/:id`                    | `sites.read` (par site)     | Détail et groupes                                                        |
+| POST    | `/api/v1/sites`                        | `sites.create` (entreprise) | Code unique dans l'entreprise (409 sinon)                                |
+| PATCH   | `/api/v1/sites/:id`                    | `sites.update` (par site)   | Mise à jour partielle                                                    |
+| DELETE  | `/api/v1/sites/:id`                    | `sites.delete` (par site)   | Suppression (retirée des groupes et des rôles par site)                  |
+| GET     | `/api/v1/site-groups`                  | `site_groups.read`          | Groupes et leurs sites                                                   |
+| GET     | `/api/v1/site-groups/:id`              | `site_groups.read`          | Détail                                                                   |
+| POST    | `/api/v1/site-groups`                  | `site_groups.manage`        | Crée un groupe (code unique)                                             |
+| PATCH   | `/api/v1/site-groups/:id`              | `site_groups.manage`        | Modifie un groupe                                                        |
+| DELETE  | `/api/v1/site-groups/:id`              | `site_groups.manage`        | Supprime un groupe (les sites sont conservés)                            |
+| POST    | `/api/v1/site-groups/:id/sites`        | `site_groups.manage`        | `{ siteIds }` : ajoute des sites                                         |
+| POST    | `/api/v1/site-groups/:id/sites/remove` | `site_groups.manage`        | `{ siteIds }` : retire des sites                                         |
+
+### Journal d'audit de l'entreprise
+
+| Méthode | Chemin              | Permission   | Description                                                                                                                 |
+| ------- | ------------------- | ------------ | --------------------------------------------------------------------------------------------------------------------------- |
+| GET     | `/api/v1/audit`     | `audit.read` | `?from=&to=&actorId=&action=&resourceType=&resourceId=&siteId=&result=&q=&cursor=&limit=` (100 max), pagination par curseur |
+| GET     | `/api/v1/audit/:id` | `audit.read` | Détail : avant/après, IP, user-agent, identifiant de requête, maillon de chaîne                                             |
+
+### Console super administrateur (`/api/v1/platform`)
+
+Domaine plateforme uniquement, 2FA vérifiée ([ADR 0013](adr/0013-console-plateforme-role-auth.md)).
+
+| Méthode | Chemin                    | Description                                                                                           |
+| ------- | ------------------------- | ----------------------------------------------------------------------------------------------------- |
+| GET     | `/companies`              | `?q=&status=&page=&limit=` : entreprises, nombre de membres et de sites                               |
+| GET     | `/companies/:id`          | Détail, administrateurs, invitations en attente, suspension                                           |
+| POST    | `/companies`              | Crée l'entreprise, ses rôles système et l'invitation de son premier administrateur (`adminEmail`)     |
+| PATCH   | `/companies/:id/status`   | `{ status: SUSPENDED \| ACTIVE, reason }` ; la suspension révoque toutes les sessions                 |
+| GET     | `/users`                  | `?q=` (3 caractères minimum) : recherche d'un utilisateur, ses entreprises et l'état de sa 2FA        |
+| POST    | `/users/:id/mfa/reset`    | `{ code, reason }` : réinitialisation 2FA (code TOTP du super administrateur exigé)                   |
+| GET     | `/audit`                  | Mêmes filtres que l'audit d'entreprise, plus `companyId`                                              |
+| GET     | `/audit/:id`              | Détail d'un événement                                                                                 |
+| GET     | `/audit/verify/:chainKey` | `platform` ou identifiant d'entreprise : vérifie la chaîne de hachage, renvoie les maillons invalides |
 
 Codes : 401 non authentifié, 403 permission ou CSRF manquants (ou 2FA à activer), 404 ressource absente ou d'une autre entreprise, 415 corps non JSON, 422 validation, 429 limite de débit (`Retry-After`).
 
 ## Ressources prévues
 
-companies (gestion), sites, routers, hotspots, plans, vouchers, sessions, vendors, sales, payments, reports, notifications, audit (voir [ROADMAP.md](ROADMAP.md)).
+routers, hotspots, plans, vouchers, sessions, vendors, sales, payments, reports, notifications (voir [ROADMAP.md](ROADMAP.md)).

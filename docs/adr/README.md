@@ -16,3 +16,6 @@ Chaque décision structurante est consignée ici : contexte, décision, conséqu
 | [0010](0010-fiabilite-avant-optimisation.md)     | Fiabilité avant optimisation, montée en charge par paliers       | Acceptée |
 | [0011](0011-roles-postgresql-rls-module-auth.md) | RLS par rôle PostgreSQL, rôle dédié au module d'authentification | Acceptée |
 | [0012](0012-sessions-jetons-cookies.md)          | Sessions serveur, jetons courts, cookies httpOnly                | Acceptée |
+| [0013](0013-console-plateforme-role-auth.md)     | Console super administrateur via le rôle `ecsi_auth`             | Acceptée |
+| [0014](0014-chiffrement-enveloppe-rotation.md)   | Chiffrement enveloppe versionné, rotation de la clé maîtresse    | Acceptée |
+| [0015](0015-journal-audit-chaine.md)             | Journal d'audit en ajout seul, chaîné par hachage en base        | Acceptée |

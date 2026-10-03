@@ -38,7 +38,17 @@ Réinitialiser complètement l'environnement local (efface les données) : `dock
 | `TRUST_PROXY_HOPS`                | Nombre de proxies de confiance devant l'API (1 avec Nginx)                                 |
 | `SMTP_*`                          | Envoi des e-mails (Mailpit en développement)                                               |
 
-Un volume PostgreSQL créé avant le Sprint 1 ne contient pas le rôle `ecsi_auth` : la migration 0002 échoue avec un message explicite. En développement, recréer le volume (`docker compose down -v`) ; en production, créer le rôle par le provisioning avant de migrer. Changer `ENCRYPTION_KEY` rend illisibles les secrets 2FA existants (rotation de clé à concevoir avec le chiffrement enveloppe du Sprint 2).
+Un volume PostgreSQL créé avant le Sprint 1 ne contient pas le rôle `ecsi_auth` : la migration 0002 échoue avec un message explicite. En développement, recréer le volume (`docker compose down -v`) ; en production, créer le rôle par le provisioning avant de migrer.
+
+### Variables ajoutées au Sprint 2
+
+| Variable                   | Rôle                                                                                                                    |
+| -------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `ENCRYPTION_KEY_ID`        | Identifiant de la clé maîtresse active, inscrit dans chaque chiffré (`k1` par défaut)                                   |
+| `ENCRYPTION_PREVIOUS_KEYS` | Anciennes clés encore lisibles pendant une rotation : `id:base64,…` (vide hors rotation)                                |
+| `RATE_LIMIT_LOGIN_PER_IP`  | Connexions par IP et par 15 min (20 par défaut) ; relevé à 200 uniquement pour les tests E2E (toutes depuis la même IP) |
+
+**Changer de clé de chiffrement** : ne jamais remplacer `ENCRYPTION_KEY` seule. Suivre la procédure de rotation de [SECURITY.md](SECURITY.md#rotation-de-la-clé-de-chiffrement) : nouvelle clé active avec un nouvel identifiant, ancienne clé dans `ENCRYPTION_PREVIOUS_KEYS`, puis `docker compose run --rm migrate node dist/cli/rotate-encryption-keys.js --dry-run` et sans `--dry-run` ([ADR 0014](adr/0014-chiffrement-enveloppe-rotation.md)).
 
 ## Images
 
@@ -64,4 +74,4 @@ Phase pilote : un serveur applicatif (Compose), PostgreSQL managé avec PITR, Re
 
 ## Points de restauration
 
-Chaque sprint validé est marqué par un tag Git `sN-done` (ex. `s0-done`). Revenir à un point de restauration : `git checkout s0-done`.
+Chaque sprint validé est marqué par un tag Git `sN-done` (ex. `s0-done`, `s1-done`). Revenir à un point de restauration : `git checkout s0-done`.

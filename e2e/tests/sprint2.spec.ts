@@ -11,7 +11,10 @@ const PNG_1PX = Buffer.from(
 );
 
 test.describe('Sites et groupes de sites', () => {
-  test('un gérant d’entreprise crée un site et l’ajoute à un groupe @mobile', async ({ page, isMobile }) => {
+  test('un gérant d’entreprise crée un site et l’ajoute à un groupe @mobile', async ({
+    page,
+    isMobile,
+  }) => {
     await login(page, 'gerant.a@ecsi.test');
     await expect(page.getByRole('heading', { name: 'Tableau de bord' })).toBeVisible();
     await openMenu(page, isMobile);
@@ -58,7 +61,10 @@ test.describe('Sites et groupes de sites', () => {
       data: { email: 'gerant.a@ecsi.test', password: SEED_PASSWORD },
     });
     expect(admin.ok()).toBe(true);
-    const all = (await (await request.get('/api/v1/sites')).json()) as { id: string; code: string }[];
+    const all = (await (await request.get('/api/v1/sites')).json()) as {
+      id: string;
+      code: string;
+    }[];
     const siteB = all.find((site) => site.code === 'SITE-B');
     expect(siteB).toBeDefined();
     await page.goto(`/sites/${siteB?.id ?? ''}`);
@@ -66,7 +72,9 @@ test.describe('Sites et groupes de sites', () => {
     expect((await page.request.get(`/api/v1/sites/${siteB?.id ?? ''}`)).status()).toBe(404);
   });
 
-  test('VENDEUR_SITE_B : lecture seule de son site, aucun menu d’administration', async ({ page }) => {
+  test('VENDEUR_SITE_B : lecture seule de son site, aucun menu d’administration', async ({
+    page,
+  }) => {
     await login(page, 'vendeur.site-b@ecsi.test');
     await expect(page.getByRole('heading', { name: 'Tableau de bord' })).toBeVisible();
     const nav = page.getByRole('navigation', { name: 'Navigation principale' }).first();
@@ -74,7 +82,9 @@ test.describe('Sites et groupes de sites', () => {
     await expect(nav.getByRole('link', { name: 'Utilisateurs' })).toHaveCount(0);
     await expect(nav.getByRole('link', { name: 'Journal d’audit' })).toHaveCount(0);
     await page.goto('/sites');
-    await expect(page.getByTestId('sites-table').getByRole('link', { name: 'Yopougon Selmer' })).toBeVisible();
+    await expect(
+      page.getByTestId('sites-table').getByRole('link', { name: 'Yopougon Selmer' }),
+    ).toBeVisible();
     await expect(page.getByRole('button', { name: 'Ajouter un site' })).toHaveCount(0);
     await page.goto('/administration/audit');
     await expect(page.getByRole('main').getByRole('alert')).toBeVisible();
@@ -103,7 +113,9 @@ test.describe('Utilisateurs et journal d’audit', () => {
     await expect(page.getByTestId('invitations-list').getByText(email)).toBeVisible();
   });
 
-  test('le journal d’audit trace l’invitation, se filtre et affiche le détail sans secret', async ({ page }) => {
+  test('le journal d’audit trace l’invitation, se filtre et affiche le détail sans secret', async ({
+    page,
+  }) => {
     await login(page, 'gerant.a@ecsi.test');
     await expect(page.getByRole('heading', { name: 'Tableau de bord' })).toBeVisible();
     await page.goto('/administration/audit');
@@ -134,7 +146,9 @@ test.describe('Profil de l’entreprise', () => {
     await page.getByLabel('Raison sociale').fill('Entreprise B SARL');
     await page.getByLabel('WhatsApp').fill('+225 07 00 00 00 09');
     await page.getByRole('button', { name: 'Enregistrer' }).first().click();
-    await expect(page.getByRole('main').getByRole('status').first()).toHaveText('Modifications enregistrées.');
+    await expect(page.getByRole('main').getByRole('status').first()).toHaveText(
+      'Modifications enregistrées.',
+    );
 
     await page.getByTestId('logo-input').setInputFiles({
       name: 'logo.png',
@@ -158,7 +172,10 @@ test.describe('Profil de l’entreprise', () => {
 });
 
 test.describe('Console SUPER_ADMIN', () => {
-  test('crée, suspend et réactive une entreprise ; chaque action est auditée', async ({ page, browser }) => {
+  test('crée, suspend et réactive une entreprise ; chaque action est auditée', async ({
+    page,
+    browser,
+  }) => {
     await page.goto('/plateforme/connexion');
     await page.getByLabel('Adresse e-mail').fill('superadmin@ecsi.test');
     await page.getByLabel('Mot de passe', { exact: true }).fill(SEED_PASSWORD);
