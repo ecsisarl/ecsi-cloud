@@ -1,0 +1,16 @@
+# Configuration du scan de secrets (gitleaks), exécuté en CI et recommandé en pre-commit.
+title = "ECSI CLOUD"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Valeurs de développement explicitement factices (marqueur devonly) et identifiants de tests"
+regexes = [
+  '''devonly[-_a-z0-9]*''',
+  '''test-(superuser|migrator|app)-password''',
+  '''ecsi-test-secret''',
+]
+paths = [
+  '''pnpm-lock\.yaml''',
+]
