@@ -1,0 +1,15 @@
+@import 'tailwindcss';
+@import '@ecsi/ui/styles.css';
+
+/* Les classes utilisées par les composants du design system doivent être générées. */
+@source '../../../../packages/ui/src';
+
+@layer base {
+  html,
+  body {
+    background: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+}

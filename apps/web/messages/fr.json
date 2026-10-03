@@ -1,0 +1,71 @@
+{
+  "app": {
+    "name": "ECSI CLOUD",
+    "tagline": "Gestion de WiFi Zones et Hotspots MikroTik"
+  },
+  "nav": {
+    "groups": {
+      "main": "Activité",
+      "network": "Réseau",
+      "admin": "Administration"
+    },
+    "dashboard": "Tableau de bord",
+    "sales": "Ventes",
+    "tickets": "Tickets",
+    "plans": "Forfaits",
+    "vendors": "Vendeurs",
+    "clients": "Clients",
+    "sites": "Sites",
+    "reports": "Rapports",
+    "mikrotik": "MikroTik",
+    "hotspots": "Hotspots",
+    "monitoring": "Monitoring",
+    "users": "Utilisateurs",
+    "notifications": "Notifications",
+    "audit": "Journal d’audit",
+    "settings": "Paramètres",
+    "designSystem": "Design system",
+    "openMenu": "Ouvrir le menu",
+    "closeMenu": "Fermer le menu"
+  },
+  "dashboard": {
+    "title": "Tableau de bord",
+    "subtitle": "Vue d’ensemble de votre activité WiFi",
+    "kpi": {
+      "revenueToday": "CA aujourd’hui",
+      "revenueMonth": "CA du mois",
+      "ticketsSold": "Tickets vendus aujourd’hui",
+      "connectedClients": "Clients connectés",
+      "routersOnline": "Routeurs en ligne",
+      "openAlerts": "Alertes ouvertes"
+    },
+    "availableAt": "Disponible au sprint {sprint}",
+    "emptyTitle": "Aucune donnée pour le moment",
+    "emptyDescription": "Les indicateurs s’afficheront dès que vos sites, routeurs et ventes seront enregistrés.",
+    "platform": {
+      "title": "État de la plateforme",
+      "description": "Services techniques d’ECSI CLOUD",
+      "unreachable": "API injoignable",
+      "status": {
+        "ok": "Opérationnel",
+        "degraded": "Dégradé",
+        "down": "Indisponible"
+      },
+      "checks": {
+        "database": "Base de données",
+        "redis": "Cache et files d’attente",
+        "storage": "Stockage de fichiers"
+      },
+      "version": "Version {version}"
+    }
+  },
+  "placeholder": {
+    "title": "Module en préparation",
+    "description": "Ce module sera livré au sprint {sprint}, après validation des modules précédents.",
+    "later": "Ce module est prévu dans une version ultérieure ({sprint})."
+  },
+  "notFound": {
+    "title": "Page introuvable",
+    "back": "Retour au tableau de bord"
+  }
+}

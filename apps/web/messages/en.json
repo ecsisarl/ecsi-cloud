@@ -1,0 +1,71 @@
+{
+  "app": {
+    "name": "ECSI CLOUD",
+    "tagline": "WiFi Zone and MikroTik Hotspot management"
+  },
+  "nav": {
+    "groups": {
+      "main": "Business",
+      "network": "Network",
+      "admin": "Administration"
+    },
+    "dashboard": "Dashboard",
+    "sales": "Sales",
+    "tickets": "Vouchers",
+    "plans": "Plans",
+    "vendors": "Vendors",
+    "clients": "Customers",
+    "sites": "Sites",
+    "reports": "Reports",
+    "mikrotik": "MikroTik",
+    "hotspots": "Hotspots",
+    "monitoring": "Monitoring",
+    "users": "Users",
+    "notifications": "Notifications",
+    "audit": "Audit log",
+    "settings": "Settings",
+    "designSystem": "Design system",
+    "openMenu": "Open menu",
+    "closeMenu": "Close menu"
+  },
+  "dashboard": {
+    "title": "Dashboard",
+    "subtitle": "Overview of your WiFi business",
+    "kpi": {
+      "revenueToday": "Revenue today",
+      "revenueMonth": "Revenue this month",
+      "ticketsSold": "Vouchers sold today",
+      "connectedClients": "Connected customers",
+      "routersOnline": "Routers online",
+      "openAlerts": "Open alerts"
+    },
+    "availableAt": "Available in sprint {sprint}",
+    "emptyTitle": "No data yet",
+    "emptyDescription": "Indicators will appear once your sites, routers and sales are recorded.",
+    "platform": {
+      "title": "Platform status",
+      "description": "ECSI CLOUD technical services",
+      "unreachable": "API unreachable",
+      "status": {
+        "ok": "Operational",
+        "degraded": "Degraded",
+        "down": "Unavailable"
+      },
+      "checks": {
+        "database": "Database",
+        "redis": "Cache and queues",
+        "storage": "File storage"
+      },
+      "version": "Version {version}"
+    }
+  },
+  "placeholder": {
+    "title": "Module in preparation",
+    "description": "This module will ship in sprint {sprint}, once the previous modules are validated.",
+    "later": "This module is planned for a later release ({sprint})."
+  },
+  "notFound": {
+    "title": "Page not found",
+    "back": "Back to dashboard"
+  }
+}
