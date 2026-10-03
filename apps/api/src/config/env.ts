@@ -57,6 +57,11 @@ export const envSchema = z.object({
   ENCRYPTION_KEY: z.string().refine((value) => Buffer.from(value, 'base64').length === 32, {
     message: 'doit contenir 32 octets encodés en base64 (openssl rand -base64 32)',
   }),
+  /**
+   * Connexions autorisées par adresse IP et par 15 minutes (anti force brute). 20 par défaut ;
+   * relevé uniquement pour les tests de bout en bout, qui se connectent tous depuis la même IP.
+   */
+  RATE_LIMIT_LOGIN_PER_IP: z.coerce.number().int().min(5).max(1000).default(20),
   /** Identifiant de version de la clé active, inscrit dans chaque chiffré. */
   ENCRYPTION_KEY_ID: z
     .string()

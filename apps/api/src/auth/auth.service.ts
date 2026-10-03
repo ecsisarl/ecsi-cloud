@@ -87,7 +87,7 @@ export class AuthService {
 
   async login(input: LoginRequest, meta: RequestMeta): Promise<LoginOutcome> {
     const emailKey = this.secretBox.fingerprint(input.email);
-    await this.rateLimiter.consume(`login:ip:${meta.ip}`, RATE_LIMITS.loginPerIp);
+    await this.rateLimiter.consume(`login:ip:${meta.ip}`, this.rateLimiter.loginPerIp);
     await this.rateLimiter.assertNotLimited(
       `login:fail:${emailKey}`,
       RATE_LIMITS.loginFailuresPerEmail,
@@ -263,11 +263,13 @@ export class AuthService {
 
     let grantedRoles: string[] = [];
     let granted: string[] = [];
+    let companyWide: string[] = [];
     if (company) {
       const tenant = { companyId: company.id, userId: auth.principalId };
       const grants = await this.tenantDb.run(tenant, (tx) => this.access.resolve(tx, tenant));
       grantedRoles = [...grants.roles];
       granted = grants.all();
+      companyWide = [...grants.companyWide].sort();
     }
     return {
       realm: 'user',
@@ -276,6 +278,7 @@ export class AuthService {
       companies: companyList,
       roles: grantedRoles,
       permissions: granted,
+      companyPermissions: companyWide,
       mfa: {
         enabled: await this.mfa.isEnabled('user', auth.principalId),
         required: await this.mfa.isRequired('user', auth.principalId),

@@ -73,7 +73,7 @@ export class PlatformAuthController {
     @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<LoginResponse> {
     const emailKey = this.secretBox.fingerprint(`platform:${body.email}`);
-    await this.rateLimiter.consume(`plogin:ip:${meta.ip}`, RATE_LIMITS.loginPerIp);
+    await this.rateLimiter.consume(`plogin:ip:${meta.ip}`, this.rateLimiter.loginPerIp);
     await this.rateLimiter.assertNotLimited(
       `plogin:fail:${emailKey}`,
       RATE_LIMITS.loginFailuresPerEmail,

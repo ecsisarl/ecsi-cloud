@@ -80,7 +80,10 @@ export const meResponseSchema = z.object({
   company: companySummarySchema.nullable(),
   companies: z.array(companySummarySchema),
   roles: z.array(z.string()),
+  /** Permissions détenues sur au moins un site ou sur toute l'entreprise. */
   permissions: z.array(z.string()),
+  /** Permissions détenues pour toute l'entreprise (création de site, groupes…). */
+  companyPermissions: z.array(z.string()),
   mfa: z.object({ enabled: z.boolean(), required: z.boolean(), state: z.enum(MFA_STATES) }),
 });
 export type MeResponse = z.infer<typeof meResponseSchema>;

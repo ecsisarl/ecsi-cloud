@@ -31,7 +31,7 @@ import { CurrentAuth } from '../auth/auth.decorators.js';
 import type { AuthContext } from '../auth/auth.types.js';
 import { ZodValidationPipe } from '../common/zod-validation.pipe.js';
 import { Grants } from '../tenancy/access.service.js';
-import { RequirePermissions, RequireSitePermission } from '../tenancy/permissions.guard.js';
+import { RequireSitePermission } from '../tenancy/permissions.guard.js';
 import { tenantContextOf } from '../tenancy/tenant-database.js';
 import { UsersService } from './users.service.js';
 
@@ -116,7 +116,8 @@ export class UsersController {
     await this.users.resetMfa(tenantContextOf(auth), grantsOf(request), auth, id, body);
   }
 
-  @RequirePermissions('roles.read')
+  /** Catalogue des rôles (non sensible) : lisible aussi par un gestionnaire limité à ses sites. */
+  @RequireSitePermission('roles.read')
   @Get('roles')
   roles(@CurrentAuth() auth: AuthContext) {
     return this.users.listRoles(tenantContextOf(auth));

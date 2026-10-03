@@ -1,6 +1,8 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type { Redis } from 'ioredis';
 import { TooManyRequestsException } from '../common/errors.js';
+import { ENV } from '../config/config.module.js';
+import type { Env } from '../config/env.js';
 import { REDIS } from '../redis/redis.module.js';
 
 export interface RateLimitRule {
@@ -34,7 +36,15 @@ export const RATE_LIMITS = {
  */
 @Injectable()
 export class RateLimiterService {
-  constructor(@Inject(REDIS) private readonly redis: Redis) {}
+  /** Limite des connexions par IP (configurable : RATE_LIMIT_LOGIN_PER_IP). */
+  readonly loginPerIp: RateLimitRule;
+
+  constructor(
+    @Inject(REDIS) private readonly redis: Redis,
+    @Inject(ENV) env: Env,
+  ) {
+    this.loginPerIp = { ...RATE_LIMITS.loginPerIp, limit: env.RATE_LIMIT_LOGIN_PER_IP };
+  }
 
   /** Compte un événement et lève 429 si la limite est dépassée. */
   async consume(key: string, rule: RateLimitRule): Promise<void> {

@@ -35,6 +35,11 @@ x-api-env: &api-env
   S3_AUTO_CREATE_BUCKET: 'true'
   JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-devonly-jwt-access-secret-change-me-0000}
   ENCRYPTION_KEY: ${ENCRYPTION_KEY:-devonlydevonlydevonlydevonlydevonlydevonlyA=}
+  # Rotation de la clé (docs/SECURITY.md) : identifiant de la clé active, anciennes clés.
+  ENCRYPTION_KEY_ID: ${ENCRYPTION_KEY_ID:-k1}
+  ENCRYPTION_PREVIOUS_KEYS: ${ENCRYPTION_PREVIOUS_KEYS:-}
+  # Anti force brute : 20 connexions / IP / 15 min. Les E2E le relèvent (une seule IP).
+  RATE_LIMIT_LOGIN_PER_IP: ${RATE_LIMIT_LOGIN_PER_IP:-20}
   # HTTP en local : cookies non « Secure ». En production (HTTPS), COOKIE_SECURE est imposé.
   COOKIE_SECURE: 'false'
   WEB_PUBLIC_URL: ${WEB_PUBLIC_URL:-http://localhost:8080}
