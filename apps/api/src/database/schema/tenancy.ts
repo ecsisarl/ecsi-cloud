@@ -4,6 +4,7 @@ import {
   check,
   foreignKey,
   index,
+  jsonb,
   pgTable,
   primaryKey,
   text,
@@ -14,23 +15,48 @@ import {
 } from 'drizzle-orm/pg-core';
 import { bytea, citext, createdAt, deletedAt, id, updatedAt } from './columns.js';
 import { users } from './identity.js';
+import { sites } from './sites.js';
 
 /**
- * Entreprises (tenants). La gestion complète (profil, logo, paramètres) arrive au Sprint 2 ;
- * le Sprint 1 ne pose que ce qui est nécessaire à l'isolation et à l'authentification.
+ * Entreprises (tenants) : profil, préférences régionales et paramètres généraux.
+ * Valeurs par défaut ECSI CLOUD : français, XOF, Côte d'Ivoire, Africa/Abidjan.
+ * Le statut (ACTIVE / SUSPENDED) n'est modifiable que par un super administrateur.
  */
 export const companies = pgTable(
   'companies',
   {
     id: id(),
+    /** Nom commercial. */
     name: text('name').notNull(),
     slug: citext('slug').notNull().unique(),
+    /** Raison sociale. */
+    legalName: text('legal_name'),
+    phone: text('phone'),
+    whatsapp: text('whatsapp'),
+    email: citext('email'),
+    address: text('address'),
+    city: text('city'),
+    country: text('country').notNull().default('CI'),
+    currency: text('currency').notNull().default('XOF'),
+    locale: text('locale').notNull().default('fr'),
+    timezone: text('timezone').notNull().default('Africa/Abidjan'),
+    /** Clé de l'objet S3 du logo (fichier privé, servi par l'API). */
+    logoObjectKey: text('logo_object_key'),
+    logoContentType: text('logo_content_type'),
+    settings: jsonb('settings').$type<Record<string, unknown>>().notNull().default({}),
     status: text('status').notNull().default('ACTIVE'),
+    suspendedAt: timestamp('suspended_at', { withTimezone: true }),
+    suspensionReason: text('suspension_reason'),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
     deletedAt: deletedAt(),
   },
-  (t) => [check('companies_status_check', sql`${t.status} in ('ACTIVE', 'SUSPENDED')`)],
+  (t) => [
+    check('companies_status_check', sql`${t.status} in ('ACTIVE', 'SUSPENDED')`),
+    check('companies_country_check', sql`${t.country} ~ '^[A-Z]{2}$'`),
+    check('companies_currency_check', sql`${t.currency} ~ '^[A-Z]{3}$'`),
+    check('companies_locale_check', sql`${t.locale} in ('fr', 'en')`),
+  ],
 );
 
 /** Appartenance d'un utilisateur (identité globale) à une entreprise. */
@@ -133,10 +159,7 @@ export const membershipRoles = pgTable(
   ],
 );
 
-/**
- * Sites couverts par une attribution de portée SITES. La clé étrangère vers `sites`
- * sera ajoutée au Sprint 2, lors de la création de la table des sites.
- */
+/** Sites couverts par une attribution de portée SITES (clé composite : même entreprise). */
 export const membershipRoleSites = pgTable(
   'membership_role_sites',
   {
@@ -151,6 +174,12 @@ export const membershipRoleSites = pgTable(
       columns: [t.companyId, t.membershipRoleId],
       foreignColumns: [membershipRoles.companyId, membershipRoles.id],
     }).onDelete('cascade'),
+    foreignKey({
+      name: 'membership_role_sites_site_fk',
+      columns: [t.companyId, t.siteId],
+      foreignColumns: [sites.companyId, sites.id],
+    }).onDelete('cascade'),
+    index('membership_role_sites_site_idx').on(t.companyId, t.siteId),
   ],
 );
 

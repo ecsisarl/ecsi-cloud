@@ -4,3 +4,5 @@
  */
 export * from './identity.js';
 export * from './tenancy.js';
+export * from './audit.js';
+export * from './sites.js';
