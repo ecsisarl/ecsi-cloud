@@ -11,7 +11,7 @@ describe('catalogue des permissions', () => {
   it('a des codes uniques au format ressource.action', () => {
     expect(new Set(PERMISSION_CODES).size).toBe(PERMISSION_CODES.length);
     for (const permission of PERMISSIONS) {
-      expect(permission.code).toMatch(/^[a-z]+(\.[a-z]+)+$/);
+      expect(permission.code).toMatch(/^[a-z_]+(\.[a-z_]+)+$/);
       expect(permission.code.startsWith(`${permission.module}.`)).toBe(true);
     }
   });

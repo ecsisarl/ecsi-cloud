@@ -4,3 +4,8 @@ export * from './i18n.js';
 export * from './money.js';
 export * from './permissions.js';
 export * from './roles.js';
+export * from './audit.js';
+export * from './company.js';
+export * from './members.js';
+export * from './sites.js';
+export * from './platform.js';
