@@ -92,6 +92,10 @@ test.describe('Parcours de connexion', () => {
     const since = new Date(Date.now() - 1_000);
     await page.goto('/connexion');
     await page.getByRole('link', { name: 'Mot de passe oublié ?' }).click();
+    // La page de connexion a aussi un champ « Adresse e-mail » : attendre la fin de la
+    // navigation côté client avant de saisir, sinon la saisie part dans l'ancien formulaire.
+    await expect(page).toHaveURL(/\/mot-de-passe-oublie$/);
+    await expect(page.getByRole('heading', { name: 'Mot de passe oublié' })).toBeVisible();
     await page.getByLabel('Adresse e-mail').fill(email);
     await page.getByRole('button', { name: 'Envoyer le lien' }).click();
     await expect(page.getByRole('main').getByRole('status')).toContainText(

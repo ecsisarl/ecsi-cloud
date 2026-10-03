@@ -102,6 +102,7 @@
       "expired": "La vérification a expiré. Reconnectez-vous."
     },
     "forgotPage": {
+      "invalidEmail": "Saisissez une adresse e-mail valide.",
       "title": "Mot de passe oublié",
       "subtitle": "Indiquez votre adresse e-mail : si un compte existe, vous recevrez un lien de réinitialisation valable 30 minutes.",
       "submit": "Envoyer le lien",

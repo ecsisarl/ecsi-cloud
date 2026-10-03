@@ -102,6 +102,7 @@
       "expired": "Verification expired. Please sign in again."
     },
     "forgotPage": {
+      "invalidEmail": "Enter a valid email address.",
       "title": "Forgot password",
       "subtitle": "Enter your email address: if an account exists, you will receive a reset link valid for 30 minutes.",
       "submit": "Send the link",
