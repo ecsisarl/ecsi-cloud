@@ -1,0 +1,26 @@
+{
+  "name": "@ecsi/shared",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Types, schémas Zod, énumérations, permissions et utilitaires partagés par l'API, le dashboard et le portail.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "dev": "tsc -p tsconfig.build.json --watch --preserveWatchOutput",
+    "lint": "eslint .",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "zod": "^4.6.5"
+  }
+}
