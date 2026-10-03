@@ -28,3 +28,6 @@ secrets/
 .idea/
 .vscode/*
 !.vscode/extensions.json
+
+# Laboratoire : clés WireGuard et disques de travail générés localement
+lab/sim/.state/
