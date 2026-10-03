@@ -1,6 +1,7 @@
 packages:
   - 'apps/*'
   - 'packages/*'
+  - 'e2e'
 
 # Les scripts d'installation des dépendances sont bloqués par défaut (pnpm 10).
 # Seuls les paquets listés ici peuvent exécuter leurs scripts postinstall.
