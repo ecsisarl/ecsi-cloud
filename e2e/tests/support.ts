@@ -62,3 +62,20 @@ export async function linkFromMail(to: string, path: string, since: Date): Promi
   }
   throw new Error(`Aucun e-mail ${path} reçu pour ${to}`);
 }
+
+/** Active la 2FA depuis l'écran de configuration et retourne le secret TOTP. */
+export async function setupMfa(page: Page): Promise<string> {
+  await page.getByRole('button', { name: 'Configurer' }).click();
+  await page.getByText('Saisie manuelle de la clé').click();
+  const secret = (await page.getByTestId('totp-secret').textContent())?.trim() ?? '';
+  await page.getByLabel('Code de vérification').fill(totp(secret));
+  await page.getByRole('button', { name: 'Activer' }).click();
+  await expect(page.getByTestId('recovery-codes').locator('li')).toHaveCount(10);
+  await page.getByRole('button', { name: 'J’ai conservé mes codes' }).click();
+  return secret;
+}
+
+/** Ouvre le menu latéral sur mobile (sans effet sur grand écran). */
+export async function openMenu(page: Page, isMobile: boolean) {
+  if (isMobile) await page.getByRole('button', { name: 'Ouvrir le menu' }).click();
+}
