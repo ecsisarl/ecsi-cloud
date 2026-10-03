@@ -1,0 +1,25 @@
+{
+  "name": "@ecsi/portal",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Portail captif ECSI CLOUD (Next.js) : pages HTML légères, sans JavaScript côté client.",
+  "scripts": {
+    "build": "next build",
+    "dev": "next dev --port 3001",
+    "start": "next start --port 3001",
+    "lint": "eslint .",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@ecsi/shared": "workspace:*",
+    "next": "16.3.8",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0"
+  }
+}
