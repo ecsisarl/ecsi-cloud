@@ -26,6 +26,8 @@ export const envSchema = z.object({
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
   /** Journaux lisibles (pino-pretty) pour `pnpm dev`. JSON structuré sinon (Docker, production). */
   LOG_PRETTY: booleanFromString.default(false),
+  /** Nombre de proxys de confiance devant l'API (Nginx = 1) pour déterminer l'IP client. */
+  TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(5).default(1),
   /** Origines autorisées pour CORS (dashboard, portail), séparées par des virgules. */
   CORS_ORIGINS: csv.default([]),
   /** Active la documentation OpenAPI sur /api/docs (désactivée par défaut en production). */
@@ -34,6 +36,8 @@ export const envSchema = z.object({
   DATABASE_URL: z.url({ protocol: /^postgres(ql)?$/ }),
   /** Connexion des migrations : rôle propriétaire du schéma. */
   DATABASE_MIGRATOR_URL: z.url({ protocol: /^postgres(ql)?$/ }).optional(),
+  /** Connexion du module d'authentification : rôle ecsi_auth (identifiants, sessions, jetons). */
+  DATABASE_AUTH_URL: z.url({ protocol: /^postgres(ql)?$/ }),
   DATABASE_POOL_MAX: z.coerce.number().int().min(1).max(100).default(10),
   REDIS_URL: z.url({ protocol: /^rediss?$/ }),
   S3_ENDPOINT: z.url().optional(),
@@ -44,6 +48,22 @@ export const envSchema = z.object({
   S3_FORCE_PATH_STYLE: booleanFromString.default(true),
   /** Crée le bucket au démarrage s'il n'existe pas (développement uniquement). */
   S3_AUTO_CREATE_BUCKET: booleanFromString.default(false),
+  /** Secret de signature des jetons d'accès (HS256), 32 caractères minimum. */
+  JWT_ACCESS_SECRET: z.string().min(32),
+  /** Clé de chiffrement AES-256-GCM des secrets stockés (TOTP) : 32 octets encodés en base64. */
+  ENCRYPTION_KEY: z.string().refine((value) => Buffer.from(value, 'base64').length === 32, {
+    message: 'doit contenir 32 octets encodés en base64 (openssl rand -base64 32)',
+  }),
+  /** Cookies « Secure » (HTTPS). Obligatoire en production. */
+  COOKIE_SECURE: booleanFromString.optional(),
+  /** URL publique du dashboard, utilisée dans les liens envoyés par e-mail. */
+  WEB_PUBLIC_URL: z.url().default('http://localhost:8080'),
+  SMTP_HOST: z.string().min(1).default('localhost'),
+  SMTP_PORT: z.coerce.number().int().min(1).max(65535).default(1025),
+  SMTP_SECURE: booleanFromString.default(false),
+  SMTP_USER: z.string().optional(),
+  SMTP_PASSWORD: z.string().optional(),
+  SMTP_FROM: z.string().min(3).default('ECSI CLOUD <no-reply@ecsi.local>'),
 });
 
 export type Env = z.infer<typeof envSchema>;
@@ -78,6 +98,12 @@ export function parseEnv(source: Record<string, string | undefined>): Env {
     if (env.S3_AUTO_CREATE_BUCKET) {
       issues.push('S3_AUTO_CREATE_BUCKET : interdit en production');
     }
+    if (env.COOKIE_SECURE === false) {
+      issues.push('COOKIE_SECURE : les cookies doivent être « Secure » en production');
+    }
+    if (!env.WEB_PUBLIC_URL.startsWith('https://')) {
+      issues.push('WEB_PUBLIC_URL : HTTPS obligatoire en production');
+    }
     if (env.CORS_ORIGINS.some((origin) => origin === '*')) {
       issues.push('CORS_ORIGINS : le joker « * » est interdit en production');
     }
@@ -87,6 +113,10 @@ export function parseEnv(source: Record<string, string | undefined>): Env {
   }
 
   return env;
+}
+
+export function isCookieSecure(env: Env): boolean {
+  return env.COOKIE_SECURE ?? env.NODE_ENV === 'production';
 }
 
 export function isApiDocsEnabled(env: Env): boolean {

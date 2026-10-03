@@ -8,6 +8,20 @@
       "when": 1791043179946,
       "tag": "0000_foundations",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1791047371888,
+      "tag": "0001_auth_tenancy_rbac",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791047509559,
+      "tag": "0002_rls_policies_grants",
+      "breakpoints": true
     }
   ]
 }

@@ -10,6 +10,10 @@ regexes = [
   '''devonly[-_a-z0-9]*''',
   '''test-(superuser|migrator|app)-password''',
   '''ecsi-test-secret''',
+  '''test-(auth-password|Motdepasse-ecsi-2026|jwt-access-secret-[0-9a-f]+)''',
+  '''mot-de-passe-faux-[0-9]+''',
+  # Jeton JWT non signé (alg « none ») utilisé pour vérifier qu'il est refusé.
+  '''eyJhbGciOiJub25lIn0\.[A-Za-z0-9_-]+\.''',
 ]
 paths = [
   '''pnpm-lock\.yaml''',

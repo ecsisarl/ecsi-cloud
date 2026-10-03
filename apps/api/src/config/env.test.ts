@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { InvalidEnvironmentError, isApiDocsEnabled, parseEnv } from './env.js';
+import { InvalidEnvironmentError, isApiDocsEnabled, isCookieSecure, parseEnv } from './env.js';
 
 const base = {
   DATABASE_URL: 'postgres://ecsi_app:secret@localhost:5432/ecsi',
@@ -7,7 +7,12 @@ const base = {
   S3_BUCKET: 'ecsi-dev',
   S3_ACCESS_KEY_ID: 'access',
   S3_SECRET_ACCESS_KEY: 'a-long-secret',
+  DATABASE_AUTH_URL: 'postgres://ecsi_auth:secret@localhost:5432/ecsi',
+  JWT_ACCESS_SECRET: 'x'.repeat(32),
+  ENCRYPTION_KEY: Buffer.alloc(32, 7).toString('base64'),
 };
+
+const production = { ...base, NODE_ENV: 'production', WEB_PUBLIC_URL: 'https://app.ecsi.test' };
 
 describe('parseEnv', () => {
   it('applique les valeurs par défaut', () => {
@@ -56,9 +61,21 @@ describe('parseEnv', () => {
   });
 
   it('désactive la documentation OpenAPI par défaut en production', () => {
-    expect(isApiDocsEnabled(parseEnv({ ...base, NODE_ENV: 'production' }))).toBe(false);
-    expect(
-      isApiDocsEnabled(parseEnv({ ...base, NODE_ENV: 'production', API_DOCS_ENABLED: 'true' })),
-    ).toBe(true);
+    expect(isApiDocsEnabled(parseEnv(production))).toBe(false);
+    expect(isApiDocsEnabled(parseEnv({ ...production, API_DOCS_ENABLED: 'true' }))).toBe(true);
+  });
+
+  it('exige des secrets d’authentification valides', () => {
+    expect(() => parseEnv({ ...base, JWT_ACCESS_SECRET: 'court' })).toThrow(/JWT_ACCESS_SECRET/);
+    expect(() => parseEnv({ ...base, ENCRYPTION_KEY: 'abcd' })).toThrow(/ENCRYPTION_KEY/);
+  });
+
+  it('impose des cookies Secure et un lien HTTPS en production', () => {
+    expect(isCookieSecure(parseEnv(base))).toBe(false);
+    expect(isCookieSecure(parseEnv(production))).toBe(true);
+    expect(() => parseEnv({ ...production, COOKIE_SECURE: 'false' })).toThrow(/COOKIE_SECURE/);
+    expect(() => parseEnv({ ...production, WEB_PUBLIC_URL: 'http://app.ecsi.test' })).toThrow(
+      /WEB_PUBLIC_URL/,
+    );
   });
 });

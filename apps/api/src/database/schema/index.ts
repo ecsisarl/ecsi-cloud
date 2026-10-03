@@ -1,6 +1,6 @@
 /**
- * Schéma Drizzle de l'application. Les tables métier sont ajoutées module par module
- * à partir du Sprint 1 (voir docs/DATABASE.md pour les conventions : UUID v7,
- * company_id, horodatages, RLS, clés étrangères composites).
+ * Schéma Drizzle de l'application (conventions : docs/DATABASE.md).
+ * Les politiques RLS et les privilèges sont dans les migrations SQL écrites à la main.
  */
-export {};
+export * from './identity.js';
+export * from './tenancy.js';

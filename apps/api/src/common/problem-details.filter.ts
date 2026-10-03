@@ -9,6 +9,7 @@ import {
 import type { ProblemDetails } from '@ecsi/shared';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { ZodError } from 'zod';
+import { TooManyRequestsException } from './errors.js';
 
 const TITLES: Record<number, string> = {
   400: 'Requête invalide',
@@ -16,6 +17,8 @@ const TITLES: Record<number, string> = {
   403: 'Accès refusé',
   404: 'Ressource introuvable',
   409: 'Conflit',
+  410: 'Ressource expirée',
+  415: 'Type de contenu non pris en charge',
   422: 'Données invalides',
   429: 'Trop de requêtes',
   500: 'Erreur interne',
@@ -72,6 +75,10 @@ export class ProblemDetailsFilter implements ExceptionFilter {
 
     if (problem.status >= 500) {
       this.logger.error({ err: exception, requestId: request.id }, 'Erreur non gérée');
+    }
+
+    if (exception instanceof TooManyRequestsException) {
+      void reply.header('retry-after', String(exception.retryAfterSeconds));
     }
 
     void reply

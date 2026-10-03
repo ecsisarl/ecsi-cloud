@@ -3,9 +3,9 @@ import { healthResponseSchema } from '@ecsi/shared';
 import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createApp } from '../src/app.factory.js';
-import { parseEnv } from '../src/config/env.js';
 import { runMigrations } from '../src/database/migrate.js';
-import { S3_TEST_CREDENTIALS, startInfra, type TestInfra } from './helpers/infra.js';
+import { testEnv } from './helpers/app.js';
+import { startInfra, type TestInfra } from './helpers/infra.js';
 
 let infra: TestInfra;
 
@@ -35,7 +35,7 @@ describe('migrations', () => {
       infra.urls.migrator,
       'select count(*) from drizzle.__drizzle_migrations',
     );
-    expect(Number(rows[0]?.count)).toBe(1);
+    expect(Number(rows[0]?.count)).toBe(3);
   });
 
   it('installent les fonctions de contexte tenant', async () => {
@@ -86,19 +86,7 @@ describe('API', () => {
   let app: NestFastifyApplication;
 
   beforeAll(async () => {
-    const env = parseEnv({
-      NODE_ENV: 'test',
-      LOG_LEVEL: 'silent',
-      DATABASE_URL: infra.urls.app,
-      REDIS_URL: infra.urls.redis,
-      S3_ENDPOINT: infra.urls.s3,
-      S3_BUCKET: 'ecsi-test',
-      S3_ACCESS_KEY_ID: S3_TEST_CREDENTIALS.accessKeyId,
-      S3_SECRET_ACCESS_KEY: S3_TEST_CREDENTIALS.secretAccessKey,
-      S3_AUTO_CREATE_BUCKET: 'true',
-      CORS_ORIGINS: 'http://localhost:3000',
-    });
-    app = await createApp(env);
+    app = await createApp(testEnv(infra));
     await app.init();
     await app.getHttpAdapter().getInstance().ready();
   });

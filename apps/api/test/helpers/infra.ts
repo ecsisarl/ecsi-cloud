@@ -14,6 +14,7 @@ export const TEST_PASSWORDS = {
   superuser: 'test-superuser-password',
   migrator: 'test-migrator-password',
   app: 'test-app-password',
+  auth: 'test-auth-password',
 };
 
 export const S3_TEST_CREDENTIALS = {
@@ -25,7 +26,14 @@ export interface TestInfra {
   postgres: StartedPostgreSqlContainer;
   redis: StartedTestContainer;
   s3: StartedTestContainer;
-  urls: { app: string; migrator: string; superuser: string; redis: string; s3: string };
+  urls: {
+    app: string;
+    auth: string;
+    migrator: string;
+    superuser: string;
+    redis: string;
+    s3: string;
+  };
   stop(): Promise<void>;
 }
 
@@ -38,6 +46,7 @@ export async function startInfra(): Promise<TestInfra> {
       .withEnvironment({
         ECSI_DB_MIGRATOR_PASSWORD: TEST_PASSWORDS.migrator,
         ECSI_DB_APP_PASSWORD: TEST_PASSWORDS.app,
+        ECSI_DB_AUTH_PASSWORD: TEST_PASSWORDS.auth,
       })
       .withCopyFilesToContainer([
         {
@@ -69,6 +78,7 @@ export async function startInfra(): Promise<TestInfra> {
     s3,
     urls: {
       app: url('ecsi_app', TEST_PASSWORDS.app),
+      auth: url('ecsi_auth', TEST_PASSWORDS.auth),
       migrator: url('ecsi_migrator', TEST_PASSWORDS.migrator),
       superuser: url('postgres', TEST_PASSWORDS.superuser),
       redis: `redis://${redis.getHost()}:${redis.getMappedPort(6379)}`,

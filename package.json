@@ -19,6 +19,8 @@
     "format:check": "prettier --check .",
     "db:migrate": "pnpm --filter @ecsi/api db:migrate",
     "db:generate": "pnpm --filter @ecsi/api db:generate",
+    "db:seed": "pnpm --filter @ecsi/api db:seed",
+    "platform:create-admin": "pnpm --filter @ecsi/api platform:create-admin",
     "validate": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm test:integration"
   },
   "devDependencies": {
