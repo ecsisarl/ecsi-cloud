@@ -35,7 +35,7 @@ describe('migrations', () => {
       infra.urls.migrator,
       'select count(*) from drizzle.__drizzle_migrations',
     );
-    expect(Number(rows[0]?.count)).toBe(5);
+    expect(Number(rows[0]?.count)).toBe(6);
   });
 
   it('installent les fonctions de contexte tenant', async () => {
@@ -56,14 +56,17 @@ describe('rôles PostgreSQL (fondation de l’isolation des tenants)', () => {
       rolcreatedb: boolean;
     }>(
       infra.urls.superuser,
-      "select rolsuper, rolbypassrls, rolcreaterole, rolcreatedb from pg_roles where rolname = 'ecsi_app'",
+      "select rolsuper, rolbypassrls, rolcreaterole, rolcreatedb from pg_roles where rolname in ('ecsi_app', 'ecsi_worker')",
     );
-    expect(rows[0]).toEqual({
-      rolsuper: false,
-      rolbypassrls: false,
-      rolcreaterole: false,
-      rolcreatedb: false,
-    });
+    expect(rows).toHaveLength(2);
+    for (const row of rows) {
+      expect(row).toEqual({
+        rolsuper: false,
+        rolbypassrls: false,
+        rolcreaterole: false,
+        rolcreatedb: false,
+      });
+    }
   });
 
   it('le rôle applicatif ne peut pas créer de table', async () => {

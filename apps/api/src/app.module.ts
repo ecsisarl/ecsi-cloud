@@ -19,6 +19,7 @@ import { UsersModule } from './users/users.module.js';
 import { CompaniesModule } from './companies/companies.module.js';
 import { SitesModule } from './sites/sites.module.js';
 import { PlatformModule } from './platform/platform.module.js';
+import { RoutersModule } from './routers/routers.module.js';
 
 export interface AppOptions {
   readonly mailTransport?: MailTransport;
@@ -74,6 +75,7 @@ export class AppModule {
         UsersModule,
         CompaniesModule,
         SitesModule,
+        RoutersModule,
         PlatformModule,
         HealthModule,
       ],

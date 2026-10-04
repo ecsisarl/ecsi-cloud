@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { refineRouterNetwork, routerNetworkShape } from './router-network.js';
 
 /**
  * Marqueur présent dans toutes les valeurs par défaut de développement
@@ -94,6 +95,8 @@ export const envSchema = z.object({
   SMTP_USER: z.string().optional(),
   SMTP_PASSWORD: z.string().optional(),
   SMTP_FROM: z.string().min(3).default('ECSI CLOUD <no-reply@ecsi.local>'),
+  /** Réseau tunnel WireGuard des routeurs MikroTik (Sprint 3A, routers/tunnel-ip.ts). */
+  ...routerNetworkShape,
 });
 
 export type Env = z.infer<typeof envSchema>;
@@ -107,7 +110,7 @@ export class InvalidEnvironmentError extends Error {
 
 /** Valide les variables d'environnement. Les valeurs des secrets ne sont jamais incluses dans les erreurs. */
 export function parseEnv(source: Record<string, string | undefined>): Env {
-  const result = envSchema.safeParse(source);
+  const result = envSchema.superRefine(refineRouterNetwork).safeParse(source);
   if (!result.success) {
     throw new InvalidEnvironmentError(
       result.error.issues.map((issue) => `${issue.path.join('.')} : ${issue.message}`),

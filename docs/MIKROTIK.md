@@ -176,6 +176,18 @@ Voir [PORTAIL-CAPTIF.md](PORTAIL-CAPTIF.md).
 - [ ] Comptes créés par ECSI CLOUD limités au strict nécessaire.
 - [ ] Aucun secret (clé privée, mot de passe) dans les journaux ECSI CLOUD ni dans l'interface.
 
+## Intégration applicative (Sprint 3A)
+
+Code : `apps/api/src/routers` ; worker : `apps/api/src/worker.ts`.
+
+- **Adresse contactée** : uniquement `routers.tunnel_ip`, validée à l'enregistrement ET avant chaque connexion contre `ROUTER_TUNNEL_CIDR` (IPv4 décimale stricte, ni réseau, ni diffusion, ni passerelle ; plage privée RFC 1918 ou RFC 6598 entre /16 et /30). Ports fixés par le code (443 ou 8728), jamais lus en base. Aucune résolution DNS, aucune redirection suivie.
+- **Transports** (lecture seule, menus en liste blanche) : REST HTTPS, cible de production, certificat épinglé par SHA-256 du DER, connexion coupée avant tout envoi d'identifiants si l'empreinte diffère ; API RouterOS TCP 8728, protocole de la documentation officielle (connexion post-v6.43, mot de passe en clair dans la session API : uniquement par le tunnel WireGuard). Le prototype REST du laboratoire (`lab/routeros/chr/probe.py`) est conservé.
+- **Compte de service** : REST `read,api,rest-api` (validé sur CHR 7.24.5) ; API 8728 `read,api` (validation indépendante OVH, CHR 7.23.7).
+- **Données lues** : `system/identity`, `system/resource` (version, carte, architecture, uptime, CPU, nombre de CPU, charge, mémoire totale et libre), `interface` (nom, type, état, MTU, MAC, compteurs). Réservé : trafic dans le temps, santé, pairs WireGuard.
+- **États** : `ONLINE` (collecte réussie) ; `DEGRADED` (le routeur répond mais la collecte échoue, ou silence plus court que le seuil) ; `OFFLINE` (silence ≥ `ROUTER_OFFLINE_AFTER_SECONDS`, 180 s, ET ≥ `ROUTER_OFFLINE_MIN_FAILURES`, 3, échecs consécutifs). Une erreur transitoire isolée ne rend jamais un routeur `OFFLINE`.
+- **Secrets** : mot de passe RouterOS chiffré par le SecretBox, AAD `router:<company_id>:<router_id>:routeros-password` ; jamais journalisé ; messages d'erreur nettoyés et secrets masqués avant journalisation ou stockage dans `last_error`. Aucune clé privée WireGuard de routeur côté cloud.
+- **Base** : rôle `ecsi_worker` limité à la table `routers` (voir [DATABASE.md](DATABASE.md)).
+
 ## Paliers de montée en charge
 
 | Palier       | Objectif                                       | Critère de passage                                                |

@@ -6,14 +6,15 @@ PostgreSQL 18. Schéma complet cible : [dossier d'architecture v0.1, §8](archit
 
 Créés par [`infra/postgres/init/01-roles.sh`](../infra/postgres/init/01-roles.sh) à l'initialisation du volume (en production : par le provisioning de la base managée, avec les mêmes privilèges).
 
-| Rôle                    | Usage                     | Privilèges                                                                                                                                                                                     |
-| ----------------------- | ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `postgres`              | Administration uniquement | Superutilisateur, jamais utilisé par l'application                                                                                                                                             |
-| `ecsi_migrator`         | Migrations                | Propriétaire de la base et des schémas ; pas superutilisateur                                                                                                                                  |
-| `ecsi_app`              | API (requêtes métier)     | `SELECT/INSERT/UPDATE/DELETE` sur les tables tenant, soumis à la RLS ; **aucun accès aux tables de secrets** ; ni DDL, ni TRUNCATE, ni BYPASSRLS                                               |
-| `ecsi_auth`             | Module d'authentification | Tables de secrets (sessions, facteurs 2FA, jetons) et résolution des appartenances avant tout contexte tenant ; ni DDL ni BYPASSRLS ([ADR 0011](adr/0011-roles-postgresql-rls-module-auth.md)) |
-| `radius` _(Sprint 5)_   | FreeRADIUS                | Schéma `radius` uniquement                                                                                                                                                                     |
-| `readonly` _(Sprint 9)_ | Rapports                  | Lecture seule                                                                                                                                                                                  |
+| Rôle                    | Usage                                      | Privilèges                                                                                                                                                                                                                     |
+| ----------------------- | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `postgres`              | Administration uniquement                  | Superutilisateur, jamais utilisé par l'application                                                                                                                                                                             |
+| `ecsi_migrator`         | Migrations                                 | Propriétaire de la base et des schémas ; pas superutilisateur                                                                                                                                                                  |
+| `ecsi_app`              | API (requêtes métier)                      | `SELECT/INSERT/UPDATE/DELETE` sur les tables tenant, soumis à la RLS ; **aucun accès aux tables de secrets** ; ni DDL, ni TRUNCATE, ni BYPASSRLS                                                                               |
+| `ecsi_auth`             | Module d'authentification                  | Tables de secrets (sessions, facteurs 2FA, jetons) et résolution des appartenances avant tout contexte tenant ; ni DDL ni BYPASSRLS ([ADR 0011](adr/0011-roles-postgresql-rls-module-auth.md))                                 |
+| `ecsi_worker`           | Worker de supervision MikroTik (Sprint 3A) | Table `routers` uniquement : lecture des routeurs non supprimés, écriture des seules colonnes de supervision (et du chiffré du mot de passe pour la rotation de clé) ; aucune autre table ; ni INSERT, ni DELETE, ni BYPASSRLS |
+| `radius` _(Sprint 5)_   | FreeRADIUS                                 | Schéma `radius` uniquement                                                                                                                                                                                                     |
+| `readonly` _(Sprint 9)_ | Rapports                                   | Lecture seule                                                                                                                                                                                                                  |
 
 Ces privilèges sont vérifiés par les tests d'intégration (`apps/api/test/foundations.int.test.ts`).
 
@@ -57,6 +58,12 @@ Après les migrations, `pnpm db:migrate` synchronise le catalogue des permission
 - Isolation `tenant_isolation` sur `sites`, `site_groups`, `site_group_members` ; lecture accordée à `ecsi_auth` (compteurs de la console plateforme).
 - `companies` : `ecsi_app` ne peut mettre à jour que les colonnes du profil (`GRANT UPDATE (…)` par colonne) ; `ecsi_auth` crée et suspend les entreprises ([ADR 0013](adr/0013-console-plateforme-role-auth.md)).
 - `audit_events` : `SELECT` et `INSERT` seulement ; déclencheurs refusant `UPDATE`, `DELETE` et `TRUNCATE` (même au propriétaire) ; déclencheur de chaînage SHA-256 (`app.audit_events_chain`) ; fonction `app.audit_verify_chain(chain_key)` exécutable par `ecsi_auth` seulement ; RLS : une entreprise lit ses événements et n'écrit qu'au nom de l'utilisateur authentifié.
+
+### Migration 0005 : routeurs MikroTik supervisés (générée par Drizzle, complétée à la main)
+
+- `routers` : `(company_id, site_id)` référence `sites (company_id, id)` (rattachement inter-entreprises impossible) ; `tunnel_ip` (`inet`, /32, unique parmi les routeurs non supprimés) ; transport `REST_HTTPS` (empreinte TLS SHA-256 obligatoire) ou `API` ; mot de passe RouterOS chiffré SecretBox (`v2:` obligatoire), AAD liée à l'entreprise et au routeur ; aucune colonne de clé privée WireGuard ; données de supervision (identité, version, carte, architecture, uptime, CPU, mémoire, instantané des interfaces), `status` (`ONLINE`, `DEGRADED`, `OFFLINE`), `consecutive_failures`, `last_seen_at` (dernière collecte réussie), `last_sync_at` (dernière tentative), `last_error`.
+- RLS : `tenant_isolation` pour `ecsi_app` (même politique que les sites) ; `ecsi_auth` sans accès ; `ecsi_worker` voit toutes les entreprises (il n'a pas de tenant) mais seulement les routeurs non supprimés, et n'écrit que par `GRANT UPDATE (…)` colonne par colonne.
+- Le rôle `ecsi_worker` doit exister avant la migration (voir [DEPLOYMENT.md](DEPLOYMENT.md#variables-ajoutées-au-sprint-3a)).
 
 ### Données de démonstration
 

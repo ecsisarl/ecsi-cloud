@@ -2,6 +2,16 @@
 
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Versions par sprint.
 
+## [S3A] — 2026-10-04 — Laboratoire MikroTik et fondation applicative
+
+### Ajouté
+
+- Laboratoire RouterOS : réseau simulé WireGuard (NAT, CGNAT, résilience, firewall), CHR RouterOS 7.24.5, protocole d'enrôlement, guide de test matériel (`lab/routeros`).
+- Table `routers` (migration 0005) : clé composite entreprise/site, RLS, mot de passe RouterOS chiffré lié au routeur, données de supervision ; rôle PostgreSQL `ecsi_worker` limité à cette table.
+- Worker de supervision `src/worker.ts` (NestJS sans HTTP, service `worker` de Docker Compose) : collecte périodique par l'adresse tunnel WireGuard uniquement, états ONLINE / DEGRADED / OFFLINE avec seuils.
+- Accès RouterOS en lecture seule : REST HTTPS avec épinglage du certificat, API TCP 8728 ; validation anti-SSRF des adresses tunnel.
+- `keys:rotate` ré-enveloppe aussi les mots de passe RouterOS (avec `DATABASE_WORKER_URL`).
+
 ## [S2] — 2026-10-03 — Entreprises, utilisateurs, sites, audit
 
 ### Ajouté

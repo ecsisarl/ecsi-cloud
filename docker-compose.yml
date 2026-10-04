@@ -26,6 +26,7 @@ x-api-env: &api-env
   DATABASE_URL: postgres://ecsi_app:${ECSI_DB_APP_PASSWORD:-devonly-app-password}@postgres:5432/${POSTGRES_DB:-ecsi}
   DATABASE_MIGRATOR_URL: postgres://ecsi_migrator:${ECSI_DB_MIGRATOR_PASSWORD:-devonly-migrator-password}@postgres:5432/${POSTGRES_DB:-ecsi}
   DATABASE_AUTH_URL: postgres://ecsi_auth:${ECSI_DB_AUTH_PASSWORD:-devonly-auth-password}@postgres:5432/${POSTGRES_DB:-ecsi}
+  DATABASE_WORKER_URL: postgres://ecsi_worker:${ECSI_DB_WORKER_PASSWORD:-devonly-worker-password}@postgres:5432/${POSTGRES_DB:-ecsi}
   REDIS_URL: redis://:${REDIS_PASSWORD:-devonly-redis-password}@redis:6379
   S3_ENDPOINT: http://s3:8333
   S3_BUCKET: ${S3_BUCKET:-ecsi-dev}
@@ -58,6 +59,7 @@ services:
       ECSI_DB_MIGRATOR_PASSWORD: ${ECSI_DB_MIGRATOR_PASSWORD:-devonly-migrator-password}
       ECSI_DB_APP_PASSWORD: ${ECSI_DB_APP_PASSWORD:-devonly-app-password}
       ECSI_DB_AUTH_PASSWORD: ${ECSI_DB_AUTH_PASSWORD:-devonly-auth-password}
+      ECSI_DB_WORKER_PASSWORD: ${ECSI_DB_WORKER_PASSWORD:-devonly-worker-password}
     volumes:
       - postgres-data:/var/lib/postgresql
       - ./infra/postgres/init:/docker-entrypoint-initdb.d:ro
@@ -155,6 +157,26 @@ services:
         condition: service_started
     ports:
       - '127.0.0.1:4000:4000'
+
+  # Worker de supervision MikroTik (Sprint 3A) : ne contacte que les adresses tunnel WireGuard
+  # (ROUTER_TUNNEL_CIDR). En développement, sans passerelle WireGuard, aucun routeur n'est joignable.
+  worker:
+    image: ecsi-cloud/api:dev
+    restart: unless-stopped
+    command: ['node', 'dist/worker.js']
+    environment:
+      NODE_ENV: development
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      APP_VERSION: ${APP_VERSION:-0.1.0-dev}
+      DATABASE_WORKER_URL: postgres://ecsi_worker:${ECSI_DB_WORKER_PASSWORD:-devonly-worker-password}@postgres:5432/${POSTGRES_DB:-ecsi}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-devonlydevonlydevonlydevonlydevonlydevonlyA=}
+      ENCRYPTION_KEY_ID: ${ENCRYPTION_KEY_ID:-k1}
+      ENCRYPTION_PREVIOUS_KEYS: ${ENCRYPTION_PREVIOUS_KEYS:-}
+      ROUTER_TUNNEL_CIDR: ${ROUTER_TUNNEL_CIDR:-10.200.0.0/24}
+      ROUTER_TUNNEL_GATEWAY: ${ROUTER_TUNNEL_GATEWAY:-10.200.0.1}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
 
   web:
     build:

@@ -11,7 +11,9 @@ export const secretBoxProvider: Provider = {
   useFactory: (env: Env) => createSecretBox(env),
 };
 
-export function createSecretBox(env: Env): SecretBox {
+export function createSecretBox(
+  env: Pick<Env, 'ENCRYPTION_KEY' | 'ENCRYPTION_KEY_ID' | 'ENCRYPTION_PREVIOUS_KEYS'>,
+): SecretBox {
   return new SecretBox(env.ENCRYPTION_KEY, {
     id: env.ENCRYPTION_KEY_ID,
     previous: parseKeyList(env.ENCRYPTION_PREVIOUS_KEYS),

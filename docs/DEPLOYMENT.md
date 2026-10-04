@@ -50,6 +50,29 @@ Un volume PostgreSQL créé avant le Sprint 1 ne contient pas le rôle `ecsi_aut
 
 **Changer de clé de chiffrement** : ne jamais remplacer `ENCRYPTION_KEY` seule. Suivre la procédure de rotation de [SECURITY.md](SECURITY.md#rotation-de-la-clé-de-chiffrement) : nouvelle clé active avec un nouvel identifiant, ancienne clé dans `ENCRYPTION_PREVIOUS_KEYS`, puis `docker compose run --rm migrate node dist/cli/rotate-encryption-keys.js --dry-run` et sans `--dry-run` ([ADR 0014](adr/0014-chiffrement-enveloppe-rotation.md)).
 
+### Variables ajoutées au Sprint 3A
+
+| Variable                       | Rôle                                                                                                   |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------ |
+| `ECSI_DB_WORKER_PASSWORD`      | Mot de passe du rôle PostgreSQL `ecsi_worker` (créé par `infra/postgres/init/01-roles.sh`)             |
+| `DATABASE_WORKER_URL`          | Connexion du worker de supervision (rôle `ecsi_worker`) ; aussi utilisée par `keys:rotate` si présente |
+| `ROUTER_TUNNEL_CIDR`           | Plage des adresses tunnel WireGuard des routeurs (`10.200.0.0/24`) : seule plage jamais contactée      |
+| `ROUTER_TUNNEL_GATEWAY`        | Adresse de la passerelle WireGuard (`10.200.0.1`), jamais une cible                                    |
+| `ROUTER_POLL_INTERVAL_SECONDS` | Intervalle de collecte par routeur (60 s)                                                              |
+| `ROUTER_POLL_CONCURRENCY`      | Collectes simultanées (10)                                                                             |
+| `ROUTER_POLL_BATCH_SIZE`       | Routeurs réservés par cycle (100)                                                                      |
+| `ROUTER_OFFLINE_AFTER_SECONDS` | Silence minimal avant OFFLINE (180 s, seuil du laboratoire)                                            |
+| `ROUTER_OFFLINE_MIN_FAILURES`  | Échecs consécutifs minimaux avant OFFLINE (3)                                                          |
+
+Le worker (`node dist/worker.js`, service `worker` de Docker Compose) ne reçoit que `DATABASE_WORKER_URL`, les clés du SecretBox et les variables `ROUTER_*` : ni les connexions `ecsi_app`/`ecsi_auth`, ni le secret JWT, ni Redis/S3. Il doit tourner sur un hôte qui route la plage tunnel vers la passerelle WireGuard ; en développement, sans passerelle, aucun routeur n'est joignable (état `OFFLINE`).
+
+Un volume PostgreSQL créé avant le Sprint 3A ne contient pas le rôle `ecsi_worker` : la migration 0005 échoue avec un message explicite. En développement, recréer le volume (`docker compose down -v`) ; sinon, avant de migrer, en superutilisateur :
+
+```sql
+CREATE ROLE ecsi_worker LOGIN NOSUPERUSER NOCREATEROLE NOCREATEDB NOBYPASSRLS PASSWORD '…';
+GRANT CONNECT ON DATABASE ecsi TO ecsi_worker;
+```
+
 ## Images
 
 | Image               | Dockerfile                                                 | Contenu                                                                                       |
