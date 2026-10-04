@@ -42,3 +42,84 @@
 - **PASS** service réactivé : ONLINE en 0.2 s
 
 **Échecs : 0**
+
+## Validation complémentaire réelle — VPS OVH — 2026-10-04
+
+### Environnement
+
+- MikroTik CHR réel sous QEMU/KVM sur VPS OVH
+- RouterOS : 7.23.7 (long-term)
+- Tunnel WireGuard : 10.200.0.1/24 ↔ 10.200.0.2/24
+- Transport testé : RouterOS API TCP/8728 à travers WireGuard
+- Worker ECSI CLOUD réel sous Docker
+- PostgreSQL réel
+- Routeur supervisé : CHR-LAB
+- Collecte : 60 s
+- Seuil OFFLINE : 180 s et au moins 3 échecs consécutifs
+
+### TESTÉ RÉELLEMENT — indisponibilité du service API
+
+État initial :
+- CHR-LAB ONLINE
+- consecutive_failures = 0
+
+Action :
+- désactivation volontaire du service RouterOS API TCP/8728 ;
+- tunnel WireGuard et CHR laissés actifs.
+
+Résultat :
+- PASS : ONLINE -> DEGRADED ;
+- erreur détectée : SERVICE_UNAVAILABLE / connexion refusée ;
+- le routeur n'est pas déclaré OFFLINE puisque le tunnel reste joignable ;
+- PASS : après réactivation de l'API, DEGRADED -> ONLINE automatiquement ;
+- PASS : consecutive_failures remis à 0 ;
+- PASS : last_error effacé ;
+- aucune intervention ni redémarrage du Worker nécessaire.
+
+### TESTÉ RÉELLEMENT — routeur totalement inaccessible
+
+Action :
+- arrêt complet du service systemd ecsi-chr.service ;
+- ping 10.200.0.2 : 100 % de perte.
+
+Résultat :
+- PASS : ONLINE -> DEGRADED ;
+- erreur détectée : UNREACHABLE / aucune réponse ;
+- PASS : DEGRADED -> OFFLINE après dépassement du seuil ;
+- PostgreSQL a confirmé status = OFFLINE ;
+- le compteur a atteint 6 échecs consécutifs pendant l'indisponibilité.
+
+### TESTÉ RÉELLEMENT — récupération automatique
+
+Action :
+- redémarrage de ecsi-chr.service ;
+- aucune modification du Worker ;
+- aucune modification manuelle de PostgreSQL.
+
+Résultat :
+- PASS : CHR redémarré correctement ;
+- PASS : WireGuard rétabli automatiquement ;
+- ping 10.200.0.2 : 4/4, 0 % de perte ;
+- PASS : OFFLINE -> ONLINE automatiquement ;
+- PASS : consecutive_failures = 0 ;
+- PASS : last_error vide ;
+- PASS : télémétrie de supervision de nouveau actualisée.
+
+### Conclusion de cette validation
+
+Cycle réellement observé :
+
+ONLINE -> DEGRADED -> ONLINE -> DEGRADED -> OFFLINE -> ONLINE
+
+La chaîne suivante est donc TESTÉE RÉELLEMENT :
+
+CHR RouterOS 7.23.7 -> WireGuard -> Worker ECSI CLOUD -> RouterOS API -> PostgreSQL -> supervision -> récupération automatique.
+
+Restent hors de cette validation réelle :
+- transport REST HTTPS sur un RouterOS réel ;
+- hAP ax3 physique ;
+- L009 physique ;
+- RB5009 physique ;
+- Starlink / CGNAT opérateur réel.
+
+Ces éléments ne doivent pas être présentés comme TESTÉS RÉELLEMENT.
