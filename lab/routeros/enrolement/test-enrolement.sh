@@ -11,6 +11,9 @@ TUN="${2:?ip tunnel}"
 LAN="${3:?ip LAN du routeur}"
 URL=https://203.0.113.30/enroll
 FAILS=0
+# Identifiants passés à curl par un fichier de configuration (-K), jamais sur la ligne de
+# commande (visible dans la liste des processus).
+creds() { printf 'user = "ecsi-svc:%s"\n' "$(cat "$1")"; }
 ns() { ip netns exec "$1" "${@:2}"; }
 pass() { echo "- **PASS** $*"; }
 fail() {
@@ -41,7 +44,7 @@ cols=$(sql "SELECT group_concat(name) FROM pragma_table_info('routers')")
 # Le serveur ne journalise que le début des clés publiques : aucune clé complète (44 caractères
 # base64) ne doit apparaître dans ses journaux.
 if grep -Eqs '[A-Za-z0-9+/]{43}=' "$STATE"/enrol-*.log; then fail "clé WireGuard complète dans les journaux"; else pass "journaux du serveur : aucune clé WireGuard complète"; fi
-code=$(ns worker curl -sk --max-time 10 -u "ecsi-svc:$(cat "$STATE/$NAME-svc.pass")" -o /dev/null -w '%{http_code}' "https://$TUN/rest/system/identity")
+code=$(ns worker curl -sk --max-time 10 -K <(creds "$STATE/$NAME-svc.pass") -o /dev/null -w '%{http_code}' "https://$TUN/rest/system/identity")
 [[ "$code" == 200 ]] && pass "worker → API REST de $NAME par le tunnel avec les identifiants reçus : HTTP 200" || fail "worker → REST : $code"
 got=$(ns worker python3 - "$TUN" <<'EOF'
 import hashlib, socket, ssl, sys

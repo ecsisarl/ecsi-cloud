@@ -18,3 +18,9 @@ regexes = [
 paths = [
   '''pnpm-lock\.yaml''',
 ]
+# Faux positifs « curl-auth-user » du commit b3dc263 : `curl -u "ecsi-svc:$(cat fichier)"` dans
+# des scripts de laboratoire (mot de passe lu à l'exécution, aucune valeur dans le dépôt). Les
+# scripts passent désormais les identifiants par `curl -K` (fichier de configuration).
+commits = [
+  '''b3dc2630fe421771fcfdb0677af75347ef918da2''',
+]

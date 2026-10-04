@@ -29,6 +29,9 @@ export LAB_GW_NETNS=""
 export LAB_WG_IFACE=wg0
 STATE="$LAB_STATE"
 OFFLINE_AFTER=180
+# Identifiants passés à curl par un fichier de configuration (-K), jamais sur la ligne de
+# commande (visible dans la liste des processus).
+creds() { printf 'user = "ecsi-svc:%s"\n' "$(cat "$1")"; }
 
 rule() { # rule -A|-D <args...> : règle commentée, ajoutée une seule fois
   local op=$1
@@ -108,7 +111,7 @@ etat() {
   age=$(($(date +%s) - ts))
   if ((age > OFFLINE_AFTER)); then echo "OFFLINE (dernier handshake il y a ${age} s)"; return 0; fi
   if [[ ! -f "$STATE/$1-svc.pass" ]]; then echo "PROVISIONING (tunnel établi, pas d'identifiants)"; return 0; fi
-  code=$(curl -sk --noproxy '*' --max-time 5 -u "ecsi-svc:$(cat "$STATE/$1-svc.pass")" -o /dev/null -w '%{http_code}' "https://$ip/rest/system/identity" || true)
+  code=$(curl -sk --noproxy '*' --max-time 5 -K <(creds "$STATE/$1-svc.pass") -o /dev/null -w '%{http_code}' "https://$ip/rest/system/identity" || true)
   case "$code" in
     200) echo "ONLINE (handshake il y a ${age} s, API 200)" ;;
     401 | 403 | 500) echo "ERROR (handshake il y a ${age} s, API HTTP $code)" ;;
@@ -127,14 +130,14 @@ tcp_open() { timeout 4 bash -c "exec 3<>/dev/tcp/$1/$2" 2>/dev/null; }
 securite() {
   local ip pub fp st code auth
   IFS='|' read -r ip pub fp st <<<"$(row "$1")"
-  auth="ecsi-svc:$(cat "$STATE/$1-svc.pass")"
-  req() { curl -sk --noproxy '*' --max-time 15 -u "$auth" -o /dev/null -w '%{http_code}' -X "$1" -H 'content-type: application/json' ${3:+--data "$3"} "https://$ip/rest/$2"; }
+  auth="$STATE/$1-svc.pass"
+  req() { curl -sk --noproxy '*' --max-time 15 -K <(creds "$auth") -o /dev/null -w '%{http_code}' -X "$1" -H 'content-type: application/json' ${3:+--data "$3"} "https://$ip/rest/$2"; }
   echo "API REST lecture (attendu 200) : $(req GET system/identity)"
   echo "écriture identité (attendu ≠ 200) : $(req POST system/identity/set '{"name":"test-ecsi"}')"
   echo "redémarrage (attendu ≠ 200) : $(req POST system/reboot '{}')"
   echo "création d'utilisateur (attendu ≠ 200/201) : $(req PUT user '{"name":"x","group":"full","password":"Xx123456789!"}')"
-  echo "mauvais mot de passe (attendu 401) : $(curl -sk --noproxy '*' --max-time 15 -u ecsi-svc:mauvais -o /dev/null -w '%{http_code}' "https://$ip/rest/system/identity")"
-  echo "longueur du champ private-key lu (attendu < 44, clé masquée) : $(curl -sk --noproxy '*' --max-time 15 -u "$auth" "https://$ip/rest/interface/wireguard" | python3 -c 'import json,sys; print(max((len(i.get("private-key","")) for i in json.load(sys.stdin)), default=0))')"
+  echo "mauvais mot de passe (attendu 401) : $(curl -sk --noproxy '*' --max-time 15 -K <(printf 'user = "ecsi-svc:%s"\n' mauvais) -o /dev/null -w '%{http_code}' "https://$ip/rest/system/identity")"
+  echo "longueur du champ private-key lu (attendu < 44, clé masquée) : $(curl -sk --noproxy '*' --max-time 15 -K <(creds "$auth") "https://$ip/rest/interface/wireguard" | python3 -c 'import json,sys; print(max((len(i.get("private-key","")) for i in json.load(sys.stdin)), default=0))')"
   for port in 21 22 23 80 8291 8728 8729; do
     if tcp_open "$ip" "$port"; then echo "port $port par le tunnel : OUVERT (anomalie)"; else echo "port $port par le tunnel : refusé"; fi
   done

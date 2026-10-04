@@ -13,6 +13,9 @@ CHR_PUB="$(cat "$STATE/chr1.public")"
 SOCK="$STATE/chr1.sock"
 OFFLINE_AFTER=180
 FAILS=0
+# Identifiants passés à curl par un fichier de configuration (-K), jamais sur la ligne de
+# commande (visible dans la liste des processus).
+creds() { printf 'user = "ecsi-svc:%s"\n' "$(cat "$1")"; }
 
 ns() { ip netns exec "$1" "${@:2}"; }
 now() { date +%s.%N; }
@@ -24,7 +27,7 @@ fail() {
 }
 note() { echo "  - $*"; }
 rest_ok() {
-  [[ "$(ns worker curl -sk --max-time "${1:-5}" -u "ecsi-svc:$(cat "$PASS_FILE")" -o /dev/null \
+  [[ "$(ns worker curl -sk --max-time "${1:-5}" -K <(creds "$PASS_FILE") -o /dev/null \
     -w '%{http_code}' "https://$CHR_TUN/rest/system/identity")" == 200 ]]
 }
 rest_down() { ! rest_ok 3; }
@@ -129,7 +132,7 @@ EOF
     pass "CHR redémarré (émulation sans KVM) : API de nouveau joignable via le tunnel $(since "$start") s après la commande, sans intervention"
   else fail "CHR injoignable après redémarrage"; fi
   local pub
-  pub=$(ns worker curl -sk --max-time 10 -u "ecsi-svc:$(cat "$PASS_FILE")" "https://$CHR_TUN/rest/interface/wireguard?.proplist=public-key" | python3 -c 'import json,sys; print(json.load(sys.stdin)[0]["public-key"])')
+  pub=$(ns worker curl -sk --max-time 10 -K <(creds "$PASS_FILE") "https://$CHR_TUN/rest/interface/wireguard?.proplist=public-key" | python3 -c 'import json,sys; print(json.load(sys.stdin)[0]["public-key"])')
   [[ "$pub" == "$CHR_PUB" ]] && pass "même clé WireGuard après redémarrage (clé persistante, rien à reconfigurer côté cloud)" || fail "clé changée après redémarrage"
 }
 

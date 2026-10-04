@@ -10,6 +10,9 @@ PASS_FILE="${1:?fichier du mot de passe ecsi-svc}"
 CHR_TUN=10.200.0.10
 CHR_LAN=192.168.88.10
 FAILS=0
+# Identifiants passés à curl par un fichier de configuration (-K), jamais sur la ligne de
+# commande (visible dans la liste des processus).
+creds() { printf 'user = "ecsi-svc:%s"\n' "$(cat "$1")"; }
 ns() { ip netns exec "$1" "${@:2}"; }
 pass() { echo "- **PASS** $*"; }
 fail() {
@@ -18,9 +21,9 @@ fail() {
 }
 tcp_open() { ns "$1" timeout 4 bash -c "exec 3<>/dev/tcp/$2/$3" 2>/dev/null; }
 rest() { # rest <ns> <méthode> <chemin> [corps] -> code HTTP
-  local args=(-sk --max-time 15 -u "ecsi-svc:$(cat "$PASS_FILE")" -o /dev/null -w '%{http_code}' -X "$2")
+  local args=(-sk --max-time 15 -o /dev/null -w '%{http_code}' -X "$2")
   [[ -n "${4:-}" ]] && args+=(-H 'content-type: application/json' --data "$4")
-  ns "$1" curl "${args[@]}" "https://$CHR_TUN/rest/$3"
+  ns "$1" curl -K <(creds "$PASS_FILE") "${args[@]}" "https://$CHR_TUN/rest/$3"
 }
 
 echo "### Exposition"
@@ -31,7 +34,7 @@ pass "Internet → IP publique du site (CGNAT), ports 22, 23, 80, 443, 8291, 872
 # Compteur de la règle de refus du CHR : prouve que les paquets du LAN atteignent bien le
 # routeur et que c'est RouterOS qui les refuse (et non le laboratoire, cf. rapport S3A).
 drop_packets() {
-  ns worker curl -sk --max-time 10 -u "ecsi-svc:$(cat "$PASS_FILE")" \
+  ns worker curl -sk --max-time 10 -K <(creds "$PASS_FILE") \
     "https://$CHR_TUN/rest/ip/firewall/filter?.proplist=action,comment,packets" |
     python3 -c 'import json,sys; print(sum(int(r["packets"]) for r in json.load(sys.stdin) if r["action"] == "drop" and r.get("comment", "").startswith("ecsi-lab")))'
 }
@@ -74,12 +77,12 @@ c=$(rest worker POST system/reboot '{}')
 [[ "$c" != 200 ]] && pass "redémarrage refusé : POST system/reboot → HTTP $c" || fail "reboot accepté"
 c=$(rest worker PUT user '{"name":"x","group":"full","password":"Xx123456789!"}')
 [[ "$c" != 201 && "$c" != 200 ]] && pass "création d'utilisateur refusée : PUT user → HTTP $c" || fail "utilisateur créé"
-body=$(ns worker curl -sk --max-time 15 -u "ecsi-svc:$(cat "$PASS_FILE")" "https://$CHR_TUN/rest/interface/wireguard")
+body=$(ns worker curl -sk --max-time 15 -K <(creds "$PASS_FILE") "https://$CHR_TUN/rest/interface/wireguard")
 # Le champ existe mais RouterOS le masque (valeur de 5 caractères au lieu d'une clé base64 de 44).
 key_len=$(printf '%s' "$body" | python3 -c 'import json,sys; print(max((len(i.get("private-key","")) for i in json.load(sys.stdin)), default=0))')
 if ((key_len >= 44)); then fail "la clé privée WireGuard est lisible par le compte de service"
 else pass "clé privée WireGuard masquée pour le compte de service (champ de $key_len caractères, pas de politique sensitive)"; fi
-code=$(ns worker curl -sk --max-time 15 -u "ecsi-svc:mauvais" -o /dev/null -w '%{http_code}' "https://$CHR_TUN/rest/system/identity")
+code=$(ns worker curl -sk --max-time 15 -K <(printf 'user = "ecsi-svc:%s"\n' mauvais) -o /dev/null -w '%{http_code}' "https://$CHR_TUN/rest/system/identity")
 [[ "$code" == 401 ]] && pass "mauvais mot de passe → HTTP 401" || fail "mauvais mot de passe → HTTP $code"
 code=$(ns worker curl -s --max-time 10 -o /dev/null -w '%{http_code}' "http://$CHR_TUN/rest/system/identity")
 [[ "$code" == 000 ]] && pass "HTTP en clair (port 80) via le tunnel : REFUSÉ" || fail "HTTP 80 → $code"
