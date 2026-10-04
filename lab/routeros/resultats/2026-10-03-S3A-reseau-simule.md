@@ -15,7 +15,10 @@ Implémentation WireGuard : wireguard-go v0.0.20230223 (espace utilisateur, prot
 - **PASS** Internet → IP publique du site (CGNAT) :8443 : REFUSÉ (aucun chemin entrant)
 - **PASS** Internet → passerelle :8443 : REFUSÉ (seul UDP 51820 est ouvert)
 - **PASS** Internet → adresse tunnel du routeur (route forcée via la passerelle) : REFUSÉ
-- **PASS** LAN du site (client WiFi) → service d'administration du routeur : REFUSÉ
+- ~~**PASS** LAN du site (client WiFi) → service d'administration du routeur : REFUSÉ~~ —
+  **non probant** : la box du laboratoire bloquait déjà le trafic LAN → LAN (filtrage du pont).
+  Corrigé dans `topology.sh`, rejoué le 2026-10-04 avec preuve par compteur :
+- **PASS** LAN du site (client WiFi) → service d'administration du routeur : REFUSÉ par le firewall du routeur (+5 paquets refusés)
 - **PASS** worker ECSI autorisé → routeur via WireGuard : AUTORISÉ
 - **PASS** autre pair WireGuard (r2) → API de r1 : REFUSÉ par la passerelle (wg → wg interdit)
 - **PASS** défense en profondeur : même avec wg → wg ouvert sur la passerelle, r1 refuse (allowed-ips strict 10.200.0.1/32 + firewall du routeur)

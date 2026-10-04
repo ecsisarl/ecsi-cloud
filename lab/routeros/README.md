@@ -2,11 +2,17 @@
 
 Stratégie, matrice et checklists : [docs/MIKROTIK.md](../../docs/MIKROTIK.md).
 
-## Contenu (complété à partir du Sprint 3)
+## Contenu
 
 - `resultats/` : une fiche par campagne de test (modèle, version RouterOS, checklist, preuves).
 - `RESULTATS-MODELE.md` : modèle de fiche.
-- Les scripts `.rsc` d'enrôlement ne sont **pas** ici : ils sont générés par l'API à partir de gabarits versionnés, testés selon la checklist.
+- `PROTOCOLE-PROVISIONNEMENT.md` : protocole d'enrôlement (testé sur CHR au Sprint 3A).
+- `GUIDE-TEST-MATERIEL.md` : procédure pas à pas sur hAP ax3, L009 et RB5009.
+- `chr/` : outils du laboratoire CHR (lancement QEMU, console série, sonde REST, tests de
+  sécurité et de résilience) et journal des commandes passées (`chr/cmds/`).
+- `enrolement/` : prototype de laboratoire du protocole d'enrôlement (script RouterOS modèle,
+  serveur, tests). En production, les scripts seront générés par l'API à partir de ce modèle.
+- Laboratoire réseau simulé (sans RouterOS) : [`../sim/`](../sim/README.md).
 
 ## Mise en place du CHR
 

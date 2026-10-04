@@ -23,6 +23,8 @@ NAME="${2:-chr1}"
 NIC_MODEL="${CHR_NIC_MODEL:-virtio-net-pci}"
 DISK_IF="${CHR_DISK_IF:-virtio}"
 MEM="${CHR_MEM_MB:-256}"
+# Une adresse MAC distincte par CHR branché sur le même LAN (ex. CHR_MAC=52:54:00:ec:51:02).
+MAC="${CHR_MAC:-52:54:00:ec:51:01}"
 TAP="tap-$NAME"
 DISK="$STATE/$NAME.qcow2"
 SOCK="$STATE/$NAME.sock"
@@ -55,7 +57,7 @@ ip netns exec cpe setsid qemu-system-x86_64 \
   -name "$NAME" -machine q35,accel="$ACCEL" -m "$MEM" -smp 1 \
   -drive file="$DISK",if="$DISK_IF",format=qcow2 \
   -netdev tap,id=wan,ifname="$TAP",script=no,downscript=no \
-  -device "$NIC_MODEL",netdev=wan,mac=52:54:00:ec:51:01 \
+  -device "$NIC_MODEL",netdev=wan,mac="$MAC" \
   -display none -serial unix:"$SOCK",server,nowait -monitor none \
   >"$STATE/$NAME.qemu.log" 2>&1 &
 echo "CHR « $NAME » démarré (accélération : $ACCEL). Console : python3 $HERE/console.py $SOCK"

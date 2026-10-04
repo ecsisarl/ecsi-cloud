@@ -13,7 +13,8 @@
 #   attacker 203.0.113.66 ─┐
 #   gw       203.0.113.10 ─┤  inet (pont « Internet public »)
 #   cgn      203.0.113.20 ─┤
-#   nat2     203.0.113.40 ─┘
+#   nat2     203.0.113.40 ─┤
+#   cloud    203.0.113.30 ─┘  API publique d'enrôlement (HTTPS), voir lab/routeros/enrolement/
 #
 #   gw  : passerelle ECSI (wg-gw 10.200.0.1/24, UDP 51820) ── 10.10.0.0/24 ── worker 10.10.0.2
 #   cgn : NAT opérateur (CGNAT) 100.64.0.1/24 ─ cpe 100.64.0.10 (box 4G / Starlink, 2e NAT)
@@ -26,7 +27,7 @@ set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 STATE="${LAB_STATE:-$HERE/.state}"
-NAMESPACES=(inet gw worker cgn cpe r1 client1 nat2 r2 attacker)
+NAMESPACES=(inet gw worker cgn cpe r1 client1 nat2 r2 attacker cloud)
 WG_PORT=51820
 API_PORT=8443
 KEEPALIVE="${LAB_KEEPALIVE:-25}"
@@ -42,6 +43,7 @@ veth() { # veth <ns1> <if1> <ns2> <if2>
 down() {
   pkill -x wireguard-go 2>/dev/null || true
   pkill -f 'lab/sim/fake_api.py' 2>/dev/null || true
+  pkill -f 'enrolement/serveur_enrolement.py' 2>/dev/null || true
   for n in "${NAMESPACES[@]}"; do ip netns del "$n" 2>/dev/null || true; done
   rm -f /var/run/wireguard/wg-*.sock
 }
@@ -113,7 +115,7 @@ up() {
   # « Internet » : un pont dans le namespace inet.
   ns inet ip link add br0 type bridge
   ns inet ip link set br0 up
-  for pair in gw:203.0.113.10 cgn:203.0.113.20 nat2:203.0.113.40 attacker:203.0.113.66; do
+  for pair in gw:203.0.113.10 cgn:203.0.113.20 nat2:203.0.113.40 attacker:203.0.113.66 cloud:203.0.113.30; do
     n="${pair%%:*}"
     a="${pair#*:}"
     veth inet "p-$n" "$n" wan
@@ -156,6 +158,9 @@ up() {
   ns cpe sysctl -qw net.ipv4.ip_forward=1
   ns cpe iptables -t nat -A POSTROUTING -s 192.168.88.0/24 -o wan -j MASQUERADE
   ns cpe iptables -P FORWARD DROP
+  # La box commute son LAN : sans cette règle, le filtrage du pont (bridge-nf-call-iptables)
+  # bloquerait le trafic LAN → LAN et les tests « LAN → routeur » ne prouveraient rien.
+  ns cpe iptables -A FORWARD -i br-lan -o br-lan -j ACCEPT
   ns cpe iptables -A FORWARD -i br-lan -o wan -j ACCEPT
   ns cpe iptables -A FORWARD -i wan -o br-lan -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
 

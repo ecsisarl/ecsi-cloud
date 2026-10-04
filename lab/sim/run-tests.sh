@@ -125,9 +125,18 @@ t_security() {
     fail "Internet → 10.200.0.2 routé par la passerelle"
   else pass "Internet → adresse tunnel du routeur (route forcée via la passerelle) : REFUSÉ"; fi
   ns attacker ip route del 10.200.0.0/24 via 203.0.113.10 2>/dev/null
+  # Compteur de la politique DROP de r1 : prouve que le paquet du LAN atteint le routeur et
+  # que c'est son firewall qui le refuse (et non la box du laboratoire).
+  local before after
+  before=$(ns r1 iptables -L INPUT -v -x -n | awk 'NR == 1 { print $5 }')
   if ns client1 curl -s --max-time 3 "http://192.168.88.2:$API_PORT/" >/dev/null; then
     fail "LAN du site → service d'administration du routeur joignable"
-  else pass "LAN du site (client WiFi) → service d'administration du routeur : REFUSÉ"; fi
+  else
+    after=$(ns r1 iptables -L INPUT -v -x -n | awk 'NR == 1 { print $5 }')
+    if ((after > before)); then
+      pass "LAN du site (client WiFi) → service d'administration du routeur : REFUSÉ par le firewall du routeur (+$((after - before)) paquets refusés)"
+    else fail "LAN du site → routeur : aucun paquet n'atteint le routeur (test non probant)"; fi
+  fi
   if api_ok 10.200.0.2; then
     pass "worker ECSI autorisé → routeur via WireGuard : AUTORISÉ"
   else fail "worker → routeur refusé"; fi

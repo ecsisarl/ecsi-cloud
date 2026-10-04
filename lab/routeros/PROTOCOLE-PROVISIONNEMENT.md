@@ -1,11 +1,12 @@
 # Protocole d'enrôlement d'un routeur MikroTik (Sprint 3A)
 
-> **Statut : CONÇU MAIS NON TESTÉ sur RouterOS.** La partie réseau (tunnel initié par le
-> routeur, NAT/CGNAT, révocation, reprise) est validée en laboratoire **SIMULÉ**
-> (`lab/sim/`). Les commandes RouterOS du script ne sont pas encore écrites : chacune sera
-> vérifiée dans la documentation officielle (help.mikrotik.com), puis exécutée sur CHR,
-> puis sur matériel, avant d'entrer dans un gabarit. Rien de ce document n'est automatisé
-> en production au Sprint 3A.
+> **Statut (2026-10-04) : TESTÉ RÉELLEMENT sur CHR RouterOS 7.24.5**, avec un serveur
+> d'enrôlement de **laboratoire** (`enrolement/`) : enrôlement d'un CHR vierge derrière box +
+> CGNAT, jeton à usage unique (y compris 8 requêtes simultanées), jeton expiré, relance sans
+> doublon, activation refusée avec retrait du compte, réinitialisation. Résultats :
+> `resultats/2026-10-04-S3A-chr-enrolement.md`. **Non testé** : matériel physique (voir
+> `GUIDE-TEST-MATERIEL.md`), AC publique en production, implémentation dans l'API ECSI CLOUD.
+> Rien de ce document n'est automatisé en production au Sprint 3A.
 
 ## Objectifs
 
@@ -44,18 +45,18 @@ Administrateur         ECSI CLOUD (API)                 Passerelle            Ro
 
 ### Étape par étape
 
-| #   | Où                    | Action                                                                                                                                                                                                                                                                                               | Données transmises                                                               |
-| --- | --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| 0   | ECSI CLOUD            | Création du routeur (`PROVISIONING`), réservation d'une IP tunnel unique dans le pool de la passerelle, jeton d'enrôlement (stocké haché SHA-256, 30 min, usage unique, lié au routeur et à l'entreprise). Événement d'audit.                                                                        | —                                                                                |
-| 1   | Dashboard → admin     | Affichage du script : commentaires FR, valeurs publiques (clé publique et adresse de la passerelle, IP tunnel attribuée) et le jeton. Le jeton n'est affiché qu'une fois.                                                                                                                            | —                                                                                |
-| 2   | Routeur               | Le script vérifie la version minimale, puis crée (ou réutilise, s'il existe déjà avec le commentaire `ecsi-cloud`) l'interface WireGuard : **la clé privée est générée par RouterOS**.                                                                                                               | —                                                                                |
-| 3   | Routeur               | Ajoute l'adresse tunnel, le pair « passerelle » avec `allowed-address` = adresse tunnel de la passerelle **/32 uniquement**, keepalive 25 s, puis les règles de firewall (voir plus bas), **avant** le démarrage du tunnel.                                                                          | —                                                                                |
-| 4   | Routeur → API (HTTPS) | Envoie le jeton et la **clé publique** du routeur à l'endpoint public d'enrôlement, certificat serveur vérifié.                                                                                                                                                                                      | jeton, clé publique                                                              |
-| 5   | API                   | Consommation atomique du jeton (`UPDATE … WHERE used_at IS NULL AND expires_at > now()`). Refus si déjà utilisé, expiré ou révoqué (410), avec audit et alerte « tentative de réutilisation ». Enregistre la clé publique, ajoute le pair à la passerelle (clé publique + `/32`, **sans endpoint**). | —                                                                                |
-| 6   | Routeur → passerelle  | Handshake WireGuard initié par le routeur (fonctionne derrière NAT, CGNAT, Starlink, 4G/5G).                                                                                                                                                                                                         | —                                                                                |
-| 7   | Routeur               | Crée le groupe et l'utilisateur de service avec les seules politiques nécessaires et un **mot de passe aléatoire généré sur le routeur**.                                                                                                                                                            | —                                                                                |
-| 8   | Routeur → passerelle  | Envoie ces identifiants **par le tunnel** (`http://<IP tunnel passerelle>`). L'émetteur est authentifié par WireGuard : seule la clé du routeur peut émettre depuis son IP tunnel. Accepté une seule fois, uniquement à l'état `PROVISIONING`.                                                       | utilisateur, mot de passe (chiffré au repos par chiffrement enveloppe, ADR 0014) |
-| 9   | Worker ECSI           | Lit identité, version, modèle, architecture, uptime, CPU, mémoire, interfaces via l'API REST **par l'IP tunnel**. Si tout répond : `ONLINE`.                                                                                                                                                         | —                                                                                |
+| #   | Où                    | Action                                                                                                                                                                                                                                                                                                                                                                                                                            | Données transmises                                                               |
+| --- | --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| 0   | ECSI CLOUD            | Création du routeur (`PROVISIONING`), réservation d'une IP tunnel unique dans le pool de la passerelle, jeton d'enrôlement (stocké haché SHA-256, 30 min, usage unique, lié au routeur et à l'entreprise). Événement d'audit.                                                                                                                                                                                                     | —                                                                                |
+| 1   | Dashboard → admin     | Affichage du script : commentaires FR, valeurs publiques (clé publique et adresse de la passerelle, IP tunnel attribuée) et le jeton. Le jeton n'est affiché qu'une fois.                                                                                                                                                                                                                                                         | —                                                                                |
+| 2   | Routeur               | Le script vérifie la version minimale, puis crée (ou réutilise, s'il existe déjà avec le commentaire `ecsi-cloud`) l'interface WireGuard : **la clé privée est générée par RouterOS**.                                                                                                                                                                                                                                            | —                                                                                |
+| 3   | Routeur               | Ajoute l'adresse tunnel, le pair « passerelle » avec `allowed-address` = adresse tunnel de la passerelle **/32 uniquement**, keepalive 25 s, puis les règles de firewall (voir plus bas), **avant** le démarrage du tunnel.                                                                                                                                                                                                       | —                                                                                |
+| 4   | Routeur → API (HTTPS) | Envoie le jeton et la **clé publique** du routeur à l'endpoint public d'enrôlement, certificat serveur vérifié.                                                                                                                                                                                                                                                                                                                   | jeton, clé publique                                                              |
+| 5   | API                   | Consommation atomique du jeton (`UPDATE … WHERE used_at IS NULL AND expires_at > now()`). Refus si déjà utilisé, expiré ou révoqué (410), avec audit et alerte « tentative de réutilisation ». Enregistre la clé publique, ajoute le pair à la passerelle (clé publique + `/32`, **sans endpoint**).                                                                                                                              | —                                                                                |
+| 6   | Routeur → passerelle  | Handshake WireGuard initié par le routeur (fonctionne derrière NAT, CGNAT, Starlink, 4G/5G).                                                                                                                                                                                                                                                                                                                                      | —                                                                                |
+| 7   | Routeur               | Crée le groupe et l'utilisateur de service avec les seules politiques nécessaires et un **mot de passe aléatoire généré sur le routeur**.                                                                                                                                                                                                                                                                                         | —                                                                                |
+| 8   | Routeur → passerelle  | Envoie ces identifiants et l'empreinte SHA-256 du certificat TLS de l'API **par le tunnel** (`http://<IP tunnel passerelle>:8081/activate`, seul port ouvert du tunnel vers la passerelle). En cas de refus, le script supprime le compte qu'il vient de créer. L'émetteur est authentifié par WireGuard : seule la clé du routeur peut émettre depuis son IP tunnel. Accepté une seule fois, uniquement à l'état `PROVISIONING`. | utilisateur, mot de passe (chiffré au repos par chiffrement enveloppe, ADR 0014) |
+| 9   | Worker ECSI           | Lit identité, version, modèle, architecture, uptime, CPU, mémoire, interfaces via l'API REST **par l'IP tunnel**. Si tout répond : `ONLINE`.                                                                                                                                                                                                                                                                                      | —                                                                                |
 
 ### Pourquoi deux canaux
 
@@ -73,6 +74,21 @@ Administrateur         ECSI CLOUD (API)                 Passerelle            Ro
 | Jeton rejoué depuis un autre routeur               | 410, audit `DENIED`, alerte ; aucune clé publique remplacée.                                  |
 | Jeton expiré                                       | 410 ; l'administrateur génère un nouveau script.                                              |
 | Identifiants envoyés hors `PROVISIONING` (étape 8) | Refusés et audités.                                                                           |
+
+### Constats RouterOS intégrés au script (CHR 7.24.5)
+
+- Une règle de firewall qui cite une interface inexistante est refusée : l'interface WireGuard
+  est créée (sans pair) avant les règles.
+- Les règles sont déplacées (`move`) devant la première règle `input` existante : elles
+  passent avant le « drop » de la configuration existante sans la modifier.
+- Une règle « established,related » propre au tunnel est nécessaire : sinon le « drop » du
+  tunnel bloquerait les réponses à l'activation (routeur sans configuration par défaut).
+- RouterOS 7.24 a renommé `address` en `available-from` dans `/ip/service` (changelog 7.24) :
+  le script choisit le nom selon la version.
+- Le compte REST exige les politiques `read,api,rest-api` (mesure, la documentation ne cite
+  pas `api`). Révocation : désactiver l'utilisateur (effet en moins d'une seconde), pas
+  modifier le groupe (effet retardé de plusieurs minutes).
+- L'empreinte `fingerprint` de RouterOS est le SHA-256 du certificat DER : le cloud l'épingle.
 
 ### Idempotence du script
 

@@ -44,12 +44,12 @@ Terminaux clients : au moins un Android récent, un iPhone récent, un ordinateu
 
 Renseignée lors des tests, jamais supposée. Une ligne par couple modèle × version RouterOS testée.
 
-| Modèle  | Architecture (relevée) | Version RouterOS | Canal  | Date | Fiche de résultats |
-| ------- | ---------------------- | ---------------- | ------ | ---- | ------------------ |
-| CHR     | à relever              | à relever        | stable |      |                    |
-| hAP ax3 | à relever              | à relever        | stable |      |                    |
-| L009    | à relever              | à relever        | stable |      |                    |
-| RB5009  | à relever              | à relever        | stable |      |                    |
+| Modèle  | Architecture (relevée) | Version RouterOS | Canal  | Date          | Fiche de résultats                                                                                                                                                                                                       |
+| ------- | ---------------------- | ---------------- | ------ | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| CHR     | x86_64                 | 7.24.5           | stable | 2026-10-03/04 | [sécurité](../lab/routeros/resultats/2026-10-03-S3A-chr-securite.md), [résilience](../lab/routeros/resultats/2026-10-03-S3A-chr-resilience.md), [enrôlement](../lab/routeros/resultats/2026-10-04-S3A-chr-enrolement.md) |
+| hAP ax3 | à relever              | à relever        | stable |               |                                                                                                                                                                                                                          |
+| L009    | à relever              | à relever        | stable |               |                                                                                                                                                                                                                          |
+| RB5009  | à relever              | à relever        | stable |               |                                                                                                                                                                                                                          |
 
 La **version minimale de RouterOS v7 supportée** par ECSI CLOUD sera fixée à partir de cette matrice, au Sprint 3.
 
@@ -63,34 +63,36 @@ La **version minimale de RouterOS v7 supportée** par ECSI CLOUD sera fixée à 
 
 ## Checklists de validation
 
-Chaque case est cochée deux fois : **CHR** puis **matériel** (en précisant le modèle).
+Chaque case est cochée deux fois : **CHR** puis **matériel** (en précisant le modèle). Une case
+reste vide tant que le matériel n'est pas validé ; l'état CHR est indiqué entre parenthèses.
+Sprint 3A : le matériel se teste avec [GUIDE-TEST-MATERIEL.md](../lab/routeros/GUIDE-TEST-MATERIEL.md).
 
 ### 1. WireGuard
 
-- [ ] Le routeur établit le tunnel sans IP publique (derrière NAT, puis derrière CGNAT 4G).
+- [ ] Le routeur établit le tunnel sans IP publique (derrière NAT, puis derrière CGNAT 4G). (CHR 7.24.5 : validé derrière box + CGNAT simulés)
 - [ ] Le handshake est visible côté passerelle ; le routeur passe ONLINE dans ECSI CLOUD.
-- [ ] La clé privée est générée sur le routeur ; seule la clé publique parvient au cloud (vérifié en base et dans les journaux).
-- [ ] Coupure du lien montant : le routeur passe OFFLINE dans le délai attendu, puis ONLINE automatiquement au retour.
-- [ ] Redémarrage du routeur : reconnexion automatique sans intervention.
-- [ ] Révocation : le peer est retiré, le routeur ne joint plus ni l'API ni RADIUS.
-- [ ] Renouvellement de clé sans coupure de service des clients WiFi.
-- [ ] Le routeur ne peut joindre que l'adresse de sa passerelle (pas les autres routeurs).
+- [ ] La clé privée est générée sur le routeur ; seule la clé publique parvient au cloud (vérifié en base et dans les journaux). (CHR : validé avec le serveur d'enrôlement de labo)
+- [ ] Coupure du lien montant : le routeur passe OFFLINE dans le délai attendu, puis ONLINE automatiquement au retour. (CHR : validé, OFFLINE à 180 s, retour en 3,3 s)
+- [ ] Redémarrage du routeur : reconnexion automatique sans intervention. (CHR : validé, 34 s en émulation)
+- [ ] Révocation : le peer est retiré, le routeur ne joint plus ni l'API ni RADIUS. (CHR : API validée ; RADIUS hors périmètre S3A)
+- [ ] Renouvellement de clé sans coupure de service des clients WiFi. (non testé)
+- [ ] Le routeur ne peut joindre que l'adresse de sa passerelle (pas les autres routeurs). (CHR : validé, y compris passerelle volontairement ouverte)
 
 ### 2. Enrôlement automatique
 
-- [ ] La commande générée s'exécute telle quelle dans le terminal RouterOS (copier-coller depuis le dashboard).
-- [ ] Le jeton est à usage unique : une seconde exécution est refusée et journalisée.
-- [ ] Un jeton expiré est refusé.
-- [ ] Rejouer le script sur un routeur déjà enrôlé ne crée pas de doublons.
-- [ ] Le routeur est détecté automatiquement (modèle, version, numéro de série remontés).
-- [ ] Le script de retrait supprime proprement la configuration ECSI.
+- [ ] La commande générée s'exécute telle quelle dans le terminal RouterOS (copier-coller depuis le dashboard). (CHR : validé par collage du script de labo ; dashboard au Sprint 3B)
+- [ ] Le jeton est à usage unique : une seconde exécution est refusée et journalisée. (CHR + serveur de labo : validé, y compris 8 requêtes simultanées)
+- [ ] Un jeton expiré est refusé. (serveur de labo : validé)
+- [ ] Rejouer le script sur un routeur déjà enrôlé ne crée pas de doublons. (CHR : validé)
+- [ ] Le routeur est détecté automatiquement (modèle, version, numéro de série remontés). (CHR : modèle et version lus par REST ; numéro de série absent sur CHR)
+- [ ] Le script de retrait supprime proprement la configuration ECSI. (non écrit)
 
 ### 3. RouterOS REST API
 
-- [ ] Accessible uniquement par l'adresse tunnel de la passerelle ; **inaccessible depuis le WAN et le LAN** (testé depuis l'extérieur et depuis un client WiFi).
-- [ ] Le compte ECSI n'a que les permissions nécessaires : une action hors périmètre est refusée par le routeur.
-- [ ] Lecture des ressources système, interfaces, compteurs : valeurs cohérentes avec WinBox/terminal.
-- [ ] Temps de réponse et comportement en cas de lien lent mesurés.
+- [ ] Accessible uniquement par l'adresse tunnel de la passerelle ; **inaccessible depuis le WAN et le LAN** (testé depuis l'extérieur et depuis un client WiFi). (CHR : validé, preuve par compteur de la règle de refus)
+- [ ] Le compte ECSI n'a que les permissions nécessaires : une action hors périmètre est refusée par le routeur. (CHR : validé avec read,api,rest-api)
+- [ ] Lecture des ressources système, interfaces, compteurs : valeurs cohérentes avec WinBox/terminal. (CHR : lu par REST ; comparaison WinBox à faire sur matériel)
+- [ ] Temps de réponse et comportement en cas de lien lent mesurés. (CHR : 12 à 44 ms par appel en labo ; lien lent non testé)
 - [ ] Chaque commande sensible apparaît dans l'audit ECSI CLOUD (qui, quoi, quand, résultat).
 
 ### 4. Hotspot

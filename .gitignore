@@ -31,3 +31,7 @@ secrets/
 
 # Laboratoire : clés WireGuard et disques de travail générés localement
 lab/sim/.state/
+
+# Caches Python
+__pycache__/
+lab/routeros/materiel/.state/
