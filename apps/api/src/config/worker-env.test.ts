@@ -60,3 +60,18 @@ describe('configuration du worker', () => {
     ).toThrow(/ROUTER_TUNNEL_CIDR/);
   });
 });
+
+describe('configuration de l’agent passerelle', () => {
+  it('connexion ecsi_worker, interface et binaire wg validés ; aucun secret d’API', async () => {
+    const { parseGatewayEnv } = await import('./gateway-env.js');
+    const env = parseGatewayEnv(base);
+    expect(env).toMatchObject({
+      WG_INTERFACE: 'wg0',
+      WG_COMMAND: 'wg',
+      ROUTER_ACTIVATION_PORT: 8081,
+    });
+    expect(Object.keys(env)).not.toContain('JWT_ACCESS_SECRET');
+    expect(() => parseGatewayEnv({ ...base, WG_INTERFACE: 'wg0; reboot' })).toThrow(/WG_INTERFACE/);
+    expect(() => parseGatewayEnv({ ...base, WG_COMMAND: 'wg && rm' })).toThrow(/WG_COMMAND/);
+  });
+});

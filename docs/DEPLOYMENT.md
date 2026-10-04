@@ -73,6 +73,24 @@ CREATE ROLE ecsi_worker LOGIN NOSUPERUSER NOCREATEROLE NOCREATEDB NOBYPASSRLS PA
 GRANT CONNECT ON DATABASE ecsi TO ecsi_worker;
 ```
 
+### Variables et agent ajoutés au Sprint 3B
+
+| Variable                                | Rôle                                                                                                   |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `WG_GATEWAY_PUBLIC_KEY`                 | Clé PUBLIQUE WireGuard de la passerelle, inscrite dans le script d'enrôlement                          |
+| `WG_GATEWAY_ENDPOINT`                   | Nom DNS ou IPv4 publique de la passerelle (UDP)                                                        |
+| `WG_GATEWAY_PORT`                       | Port UDP WireGuard (51820)                                                                             |
+| `ROUTER_ENROLL_PUBLIC_URL`              | URL HTTPS de `POST /api/v1/routers/enroll` (défaut : `WEB_PUBLIC_URL` + `/api/v1/routers/enroll`)      |
+| `ROUTER_ENROLL_TOKEN_TTL_MINUTES`       | Durée de validité d'un jeton d'enrôlement (30 min, de 5 à 1440)                                        |
+| `ROUTER_ACTIVATION_PORT`                | Port HTTP d'activation de l'agent passerelle (8081), sur l'adresse tunnel seulement                    |
+| `ROUTER_ENROLL_CA_URL` / `_FINGERPRINT` | Laboratoire seulement (AC privée) ; **refusées en production**, où l'API présente un certificat public |
+| `WG_INTERFACE`, `WG_COMMAND`            | Agent passerelle : interface WireGuard (`wg0`) et commande `wg`                                        |
+| `GATEWAY_SYNC_INTERVAL_SECONDS`         | Agent passerelle : intervalle de synchronisation des pairs (5 s)                                       |
+
+L'**agent passerelle** (`node dist/gateway.js`, `pnpm --filter @ecsi/api start:gateway`) tourne sur l'hôte WireGuard, avec `DATABASE_WORKER_URL`, les clés du SecretBox et les variables ci-dessus. Il a besoin de `CAP_NET_ADMIN` pour `wg set` (pas de root complet : service systemd avec `AmbientCapabilities=CAP_NET_ADMIN`, par exemple). Il écoute sur `ROUTER_TUNNEL_GATEWAY:ROUTER_ACTIVATION_PORT` uniquement ; le firewall de l'hôte doit en plus refuser ce port sur toute autre interface que WireGuard. La clé privée de la passerelle reste dans la configuration `wg` de l'hôte : ni l'API ni la base ne la reçoivent.
+
+La migration 0006 est additive : les routeurs du Sprint 3A (dont CHR-LAB) restent supervisés sans action. Elle retire à `ecsi_app` le `DELETE` sur `routers` (suppression douce uniquement).
+
 ## Images
 
 | Image               | Dockerfile                                                 | Contenu                                                                                       |

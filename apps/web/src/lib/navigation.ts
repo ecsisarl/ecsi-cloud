@@ -64,7 +64,7 @@ export const NAVIGATION: NavGroup[] = [
   {
     key: 'network',
     items: [
-      { key: 'mikrotik', href: '/reseau/mikrotik', icon: Router, plannedSprint: 'S3' },
+      { key: 'routers', href: '/reseau/routeurs', icon: Router, permission: 'routers.read' },
       { key: 'hotspots', href: '/reseau/hotspots', icon: Wifi, plannedSprint: 'S5' },
       { key: 'monitoring', href: '/reseau/monitoring', icon: Activity, plannedSprint: 'S4' },
     ],

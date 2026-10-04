@@ -2,6 +2,18 @@
 
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Versions par sprint.
 
+## [S3B] — 2026-10-04 — Gestion et enrôlement des routeurs MikroTik
+
+### Ajouté
+
+- API routeurs (`/api/v1/routers`) : liste par entreprise et site, détail, ajout manuel, renommage et déplacement de site, changement des identifiants RouterOS (chiffrés, audités sans valeur), suppression douce ; portée par site et RLS ; console plateforme `GET /platform/companies/:id/routers` (colonnes non sensibles).
+- Enrôlement réel depuis ECSI CLOUD : jeton à usage unique, expirant, stocké par empreinte SHA-256, anti-rejeu ; adresse tunnel attribuée par le cloud dans `10.200.0.0/24` (jamais réseau, diffusion, passerelle ni adresse occupée, quarantaine de 7 jours) ; script RouterOS généré à partir du modèle validé au Sprint 3A, valeurs validées contre l'injection ; aucune clé privée de routeur côté cloud.
+- Agent passerelle `src/gateway.ts` : synchronisation des pairs WireGuard (/32) et activation par le tunnel uniquement (mot de passe chiffré avant stockage, audit).
+- Migration 0006 (additive) : statut `PROVISIONING`, clé publique WireGuard, table `router_enrollment_tokens`, fonctions `SECURITY DEFINER` par rôle ; `ecsi_app` limité à la suppression douce.
+- Dashboard : Réseau → Routeurs (liste avec état, IP tunnel, version, CPU, RAM, uptime, dernière connexion ; détail ; « Ajouter un routeur » avec script affiché une seule fois).
+- Laboratoire `lab/routeros/s3b` : enrôlement d'un CHR 7.24.5 par l'API réelle, derrière NAT et CGNAT simulés.
+- Tests : intégration sur PostgreSQL réel (isolation entre entreprises, jetons, allocation, secrets, suppression douce, privilèges des rôles, audit, montée de version 0005 → 0006), unitaires (script, agent passerelle, schémas).
+
 ## [S3A] — 2026-10-04 — Laboratoire MikroTik et fondation applicative
 
 ### Ajouté

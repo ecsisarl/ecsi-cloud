@@ -28,6 +28,8 @@ export const RATE_LIMITS = {
   resetPerIp: { limit: 20, windowSeconds: 60 * 60 },
   invitationPerIp: { limit: 30, windowSeconds: 60 * 60 },
   refreshPerIp: { limit: 300, windowSeconds: 15 * 60 },
+  /** Enrôlement public des routeurs (POST /routers/enroll) ; plusieurs routeurs par CGNAT. */
+  routerEnrollPerIp: { limit: 30, windowSeconds: 15 * 60 },
 } as const satisfies Record<string, RateLimitRule>;
 
 /**

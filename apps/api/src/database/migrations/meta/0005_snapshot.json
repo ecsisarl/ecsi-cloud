@@ -121,12 +121,8 @@
           "name": "auth_sessions_user_id_users_id_fk",
           "tableFrom": "auth_sessions",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -134,12 +130,8 @@
           "name": "auth_sessions_platform_admin_id_platform_admins_id_fk",
           "tableFrom": "auth_sessions",
           "tableTo": "platform_admins",
-          "columnsFrom": [
-            "platform_admin_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["platform_admin_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -147,12 +139,8 @@
           "name": "auth_sessions_company_id_companies_id_fk",
           "tableFrom": "auth_sessions",
           "tableTo": "companies",
-          "columnsFrom": [
-            "company_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["company_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -260,12 +248,8 @@
           "name": "mfa_factors_user_id_users_id_fk",
           "tableFrom": "mfa_factors",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -273,12 +257,8 @@
           "name": "mfa_factors_platform_admin_id_platform_admins_id_fk",
           "tableFrom": "mfa_factors",
           "tableTo": "platform_admins",
-          "columnsFrom": [
-            "platform_admin_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["platform_admin_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -374,12 +354,8 @@
           "name": "mfa_recovery_codes_user_id_users_id_fk",
           "tableFrom": "mfa_recovery_codes",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -387,12 +363,8 @@
           "name": "mfa_recovery_codes_platform_admin_id_platform_admins_id_fk",
           "tableFrom": "mfa_recovery_codes",
           "tableTo": "platform_admins",
-          "columnsFrom": [
-            "platform_admin_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["platform_admin_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -473,12 +445,8 @@
           "name": "password_reset_tokens_user_id_users_id_fk",
           "tableFrom": "password_reset_tokens",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -488,9 +456,7 @@
         "password_reset_tokens_token_hash_unique": {
           "name": "password_reset_tokens_token_hash_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "token_hash"
-          ]
+          "columns": ["token_hash"]
         }
       },
       "policies": {},
@@ -561,9 +527,7 @@
         "platform_admins_email_unique": {
           "name": "platform_admins_email_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "email"
-          ]
+          "columns": ["email"]
         }
       },
       "policies": {},
@@ -640,12 +604,8 @@
           "name": "refresh_tokens_session_id_auth_sessions_id_fk",
           "tableFrom": "refresh_tokens",
           "tableTo": "auth_sessions",
-          "columnsFrom": [
-            "session_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["session_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -655,9 +615,7 @@
         "refresh_tokens_token_hash_unique": {
           "name": "refresh_tokens_token_hash_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "token_hash"
-          ]
+          "columns": ["token_hash"]
         }
       },
       "policies": {},
@@ -694,12 +652,8 @@
           "name": "user_credentials_user_id_users_id_fk",
           "tableFrom": "user_credentials",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -781,9 +735,7 @@
         "users_email_unique": {
           "name": "users_email_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "email"
-          ]
+          "columns": ["email"]
         }
       },
       "policies": {},
@@ -948,9 +900,7 @@
         "companies_slug_unique": {
           "name": "companies_slug_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "slug"
-          ]
+          "columns": ["slug"]
         }
       },
       "policies": {},
@@ -1017,14 +967,8 @@
           "name": "invitation_roles_invitation_fk",
           "tableFrom": "invitation_roles",
           "tableTo": "invitations",
-          "columnsFrom": [
-            "company_id",
-            "invitation_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "id"
-          ],
+          "columnsFrom": ["company_id", "invitation_id"],
+          "columnsTo": ["company_id", "id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -1032,14 +976,8 @@
           "name": "invitation_roles_role_fk",
           "tableFrom": "invitation_roles",
           "tableTo": "roles",
-          "columnsFrom": [
-            "company_id",
-            "role_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "id"
-          ],
+          "columnsFrom": ["company_id", "role_id"],
+          "columnsTo": ["company_id", "id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1047,10 +985,7 @@
       "compositePrimaryKeys": {
         "invitation_roles_invitation_id_role_id_pk": {
           "name": "invitation_roles_invitation_id_role_id_pk",
-          "columns": [
-            "invitation_id",
-            "role_id"
-          ]
+          "columns": ["invitation_id", "role_id"]
         }
       },
       "uniqueConstraints": {},
@@ -1160,12 +1095,8 @@
           "name": "invitations_company_id_companies_id_fk",
           "tableFrom": "invitations",
           "tableTo": "companies",
-          "columnsFrom": [
-            "company_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["company_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -1173,12 +1104,8 @@
           "name": "invitations_invited_by_user_id_users_id_fk",
           "tableFrom": "invitations",
           "tableTo": "users",
-          "columnsFrom": [
-            "invited_by_user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["invited_by_user_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         },
@@ -1186,12 +1113,8 @@
           "name": "invitations_accepted_user_id_users_id_fk",
           "tableFrom": "invitations",
           "tableTo": "users",
-          "columnsFrom": [
-            "accepted_user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["accepted_user_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -1201,17 +1124,12 @@
         "invitations_token_hash_unique": {
           "name": "invitations_token_hash_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "token_hash"
-          ]
+          "columns": ["token_hash"]
         },
         "invitations_company_id_key": {
           "name": "invitations_company_id_key",
           "nullsNotDistinct": false,
-          "columns": [
-            "company_id",
-            "id"
-          ]
+          "columns": ["company_id", "id"]
         }
       },
       "policies": {},
@@ -1274,14 +1192,8 @@
           "name": "membership_role_sites_membership_role_fk",
           "tableFrom": "membership_role_sites",
           "tableTo": "membership_roles",
-          "columnsFrom": [
-            "company_id",
-            "membership_role_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "id"
-          ],
+          "columnsFrom": ["company_id", "membership_role_id"],
+          "columnsTo": ["company_id", "id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -1289,14 +1201,8 @@
           "name": "membership_role_sites_site_fk",
           "tableFrom": "membership_role_sites",
           "tableTo": "sites",
-          "columnsFrom": [
-            "company_id",
-            "site_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "id"
-          ],
+          "columnsFrom": ["company_id", "site_id"],
+          "columnsTo": ["company_id", "id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1304,10 +1210,7 @@
       "compositePrimaryKeys": {
         "membership_role_sites_membership_role_id_site_id_pk": {
           "name": "membership_role_sites_membership_role_id_site_id_pk",
-          "columns": [
-            "membership_role_id",
-            "site_id"
-          ]
+          "columns": ["membership_role_id", "site_id"]
         }
       },
       "uniqueConstraints": {},
@@ -1365,14 +1268,8 @@
           "name": "membership_roles_membership_fk",
           "tableFrom": "membership_roles",
           "tableTo": "memberships",
-          "columnsFrom": [
-            "company_id",
-            "membership_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "id"
-          ],
+          "columnsFrom": ["company_id", "membership_id"],
+          "columnsTo": ["company_id", "id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -1380,14 +1277,8 @@
           "name": "membership_roles_role_fk",
           "tableFrom": "membership_roles",
           "tableTo": "roles",
-          "columnsFrom": [
-            "company_id",
-            "role_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "id"
-          ],
+          "columnsFrom": ["company_id", "role_id"],
+          "columnsTo": ["company_id", "id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1397,18 +1288,12 @@
         "membership_roles_membership_role_key": {
           "name": "membership_roles_membership_role_key",
           "nullsNotDistinct": false,
-          "columns": [
-            "membership_id",
-            "role_id"
-          ]
+          "columns": ["membership_id", "role_id"]
         },
         "membership_roles_company_id_key": {
           "name": "membership_roles_company_id_key",
           "nullsNotDistinct": false,
-          "columns": [
-            "company_id",
-            "id"
-          ]
+          "columns": ["company_id", "id"]
         }
       },
       "policies": {},
@@ -1487,12 +1372,8 @@
           "name": "memberships_company_id_companies_id_fk",
           "tableFrom": "memberships",
           "tableTo": "companies",
-          "columnsFrom": [
-            "company_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["company_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -1500,12 +1381,8 @@
           "name": "memberships_user_id_users_id_fk",
           "tableFrom": "memberships",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1515,18 +1392,12 @@
         "memberships_company_user_key": {
           "name": "memberships_company_user_key",
           "nullsNotDistinct": false,
-          "columns": [
-            "company_id",
-            "user_id"
-          ]
+          "columns": ["company_id", "user_id"]
         },
         "memberships_company_id_key": {
           "name": "memberships_company_id_key",
           "nullsNotDistinct": false,
-          "columns": [
-            "company_id",
-            "id"
-          ]
+          "columns": ["company_id", "id"]
         }
       },
       "policies": {},
@@ -1612,12 +1483,8 @@
           "name": "role_permissions_permission_code_permissions_code_fk",
           "tableFrom": "role_permissions",
           "tableTo": "permissions",
-          "columnsFrom": [
-            "permission_code"
-          ],
-          "columnsTo": [
-            "code"
-          ],
+          "columnsFrom": ["permission_code"],
+          "columnsTo": ["code"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -1625,14 +1492,8 @@
           "name": "role_permissions_role_fk",
           "tableFrom": "role_permissions",
           "tableTo": "roles",
-          "columnsFrom": [
-            "company_id",
-            "role_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "id"
-          ],
+          "columnsFrom": ["company_id", "role_id"],
+          "columnsTo": ["company_id", "id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1640,10 +1501,7 @@
       "compositePrimaryKeys": {
         "role_permissions_role_id_permission_code_pk": {
           "name": "role_permissions_role_id_permission_code_pk",
-          "columns": [
-            "role_id",
-            "permission_code"
-          ]
+          "columns": ["role_id", "permission_code"]
         }
       },
       "uniqueConstraints": {},
@@ -1708,12 +1566,8 @@
           "name": "roles_company_id_companies_id_fk",
           "tableFrom": "roles",
           "tableTo": "companies",
-          "columnsFrom": [
-            "company_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["company_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1723,18 +1577,12 @@
         "roles_company_code_key": {
           "name": "roles_company_code_key",
           "nullsNotDistinct": false,
-          "columns": [
-            "company_id",
-            "code"
-          ]
+          "columns": ["company_id", "code"]
         },
         "roles_company_id_key": {
           "name": "roles_company_id_key",
           "nullsNotDistinct": false,
-          "columns": [
-            "company_id",
-            "id"
-          ]
+          "columns": ["company_id", "id"]
         }
       },
       "policies": {},
@@ -2088,14 +1936,8 @@
           "name": "site_group_members_group_fk",
           "tableFrom": "site_group_members",
           "tableTo": "site_groups",
-          "columnsFrom": [
-            "company_id",
-            "group_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "id"
-          ],
+          "columnsFrom": ["company_id", "group_id"],
+          "columnsTo": ["company_id", "id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -2103,14 +1945,8 @@
           "name": "site_group_members_site_fk",
           "tableFrom": "site_group_members",
           "tableTo": "sites",
-          "columnsFrom": [
-            "company_id",
-            "site_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "id"
-          ],
+          "columnsFrom": ["company_id", "site_id"],
+          "columnsTo": ["company_id", "id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -2118,10 +1954,7 @@
       "compositePrimaryKeys": {
         "site_group_members_group_id_site_id_pk": {
           "name": "site_group_members_group_id_site_id_pk",
-          "columns": [
-            "group_id",
-            "site_id"
-          ]
+          "columns": ["group_id", "site_id"]
         }
       },
       "uniqueConstraints": {},
@@ -2185,12 +2018,8 @@
           "name": "site_groups_company_id_companies_id_fk",
           "tableFrom": "site_groups",
           "tableTo": "companies",
-          "columnsFrom": [
-            "company_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["company_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -2200,18 +2029,12 @@
         "site_groups_company_id_key": {
           "name": "site_groups_company_id_key",
           "nullsNotDistinct": false,
-          "columns": [
-            "company_id",
-            "id"
-          ]
+          "columns": ["company_id", "id"]
         },
         "site_groups_company_code_key": {
           "name": "site_groups_company_code_key",
           "nullsNotDistinct": false,
-          "columns": [
-            "company_id",
-            "code"
-          ]
+          "columns": ["company_id", "code"]
         }
       },
       "policies": {},
@@ -2386,12 +2209,8 @@
           "name": "sites_company_id_companies_id_fk",
           "tableFrom": "sites",
           "tableTo": "companies",
-          "columnsFrom": [
-            "company_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["company_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -2401,10 +2220,7 @@
         "sites_company_id_key": {
           "name": "sites_company_id_key",
           "nullsNotDistinct": false,
-          "columns": [
-            "company_id",
-            "id"
-          ]
+          "columns": ["company_id", "id"]
         }
       },
       "policies": {},
@@ -2670,12 +2486,8 @@
           "name": "routers_company_id_companies_id_fk",
           "tableFrom": "routers",
           "tableTo": "companies",
-          "columnsFrom": [
-            "company_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["company_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -2683,14 +2495,8 @@
           "name": "routers_site_fk",
           "tableFrom": "routers",
           "tableTo": "sites",
-          "columnsFrom": [
-            "company_id",
-            "site_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "id"
-          ],
+          "columnsFrom": ["company_id", "site_id"],
+          "columnsTo": ["company_id", "id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }

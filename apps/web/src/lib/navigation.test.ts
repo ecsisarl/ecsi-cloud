@@ -18,14 +18,14 @@ describe('navigation', () => {
 
   it('les fonctions techniques sont hors du groupe « Activité »', () => {
     const main = NAVIGATION.find((g) => g.key === 'main')!.items.map((i) => i.key);
-    expect(main).not.toContain('mikrotik');
+    expect(main).not.toContain('routers');
     expect(main).not.toContain('hotspots');
   });
 
   it('détecte l’entrée active', () => {
     expect(isActive('/', '/')).toBe(true);
     expect(isActive('/ventes', '/')).toBe(false);
-    expect(isActive('/reseau/mikrotik/abc', '/reseau/mikrotik')).toBe(true);
+    expect(isActive('/reseau/routeurs/abc', '/reseau/routeurs')).toBe(true);
     expect(findNavItem('/tickets')?.plannedSprint).toBe('S6');
   });
 });
@@ -41,6 +41,11 @@ describe('navigation selon les permissions', () => {
     expect(vendeur).not.toContain('audit');
     expect(vendeur).not.toContain('company');
     expect(vendeur).not.toContain('siteGroups');
+    expect(vendeur).not.toContain('routers');
+  });
+
+  it('affiche Réseau → Routeurs avec routers.read (Sprint 3B)', () => {
+    expect(keys(['routers.read'])).toContain('routers');
   });
 
   it('affiche les modules du Sprint 2 à un administrateur', () => {

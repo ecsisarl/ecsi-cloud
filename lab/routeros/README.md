@@ -12,6 +12,9 @@ Stratégie, matrice et checklists : [docs/MIKROTIK.md](../../docs/MIKROTIK.md).
   sécurité et de résilience) et journal des commandes passées (`chr/cmds/`).
 - `enrolement/` : prototype de laboratoire du protocole d'enrôlement (script RouterOS modèle,
   serveur, tests). En production, les scripts seront générés par l'API à partir de ce modèle.
+- `s3b/` : laboratoire du Sprint 3B, enrôlement d'un CHR par l'API ECSI CLOUD réelle, l'agent
+  passerelle et le worker (`labo-s3b.sh up|down`, `pilote.mjs` pour piloter l'API comme le
+  dashboard). Secrets générés dans `lab/sim/.state/s3b` (0600, ignoré par Git), jamais affichés.
 - Laboratoire réseau simulé (sans RouterOS) : [`../sim/`](../sim/README.md).
 
 ## Mise en place du CHR

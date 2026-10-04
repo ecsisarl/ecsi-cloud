@@ -78,4 +78,30 @@ describe('parseEnv', () => {
       /WEB_PUBLIC_URL/,
     );
   });
+
+  it('enrôlement des routeurs : valeurs publiques validées, AC de laboratoire interdite en production', () => {
+    const env = parseEnv(base);
+    expect(env.WG_GATEWAY_PORT).toBe(51820);
+    expect(env.ROUTER_ACTIVATION_PORT).toBe(8081);
+    expect(env.ROUTER_ENROLL_TOKEN_TTL_MINUTES).toBe(30);
+    expect(env.WG_GATEWAY_PUBLIC_KEY).toBeUndefined();
+    expect(() => parseEnv({ ...base, WG_GATEWAY_PUBLIC_KEY: 'pas-une-cle' })).toThrow(
+      /WG_GATEWAY_PUBLIC_KEY/,
+    );
+    expect(() => parseEnv({ ...base, WG_GATEWAY_ENDPOINT: 'vpn.ecsi.test"; :put x' })).toThrow(
+      /WG_GATEWAY_ENDPOINT/,
+    );
+    expect(() =>
+      parseEnv({ ...base, ROUTER_ENROLL_PUBLIC_URL: 'http://cloud.ecsi.test/enroll' }),
+    ).toThrow(/ROUTER_ENROLL_PUBLIC_URL/);
+    expect(() => parseEnv({ ...base, ROUTER_ENROLL_CA_URL: 'https://lab.test/ca.pem' })).toThrow(
+      /ROUTER_ENROLL_CA_URL/,
+    );
+    const lab = {
+      ROUTER_ENROLL_CA_URL: 'https://lab.test/ca.pem',
+      ROUTER_ENROLL_CA_FINGERPRINT: 'ab'.repeat(32),
+    };
+    expect(parseEnv({ ...base, ...lab }).ROUTER_ENROLL_CA_FINGERPRINT).toBe('ab'.repeat(32));
+    expect(() => parseEnv({ ...production, ...lab })).toThrow(/ROUTER_ENROLL_CA_URL/);
+  });
 });

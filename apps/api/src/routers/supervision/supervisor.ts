@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNull, lte, or, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNull, lte, ne, or, sql } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import type { SecretBox } from '../../auth/crypto/secret-box.js';
 import { routers, type RouterStatus } from '../../database/schema/index.js';
@@ -92,6 +92,8 @@ export class RouterSupervisor {
       .where(
         and(
           isNull(routers.deletedAt),
+          // En cours d'enrôlement : rien à collecter (aussi exclu par la RLS, migration 0006).
+          ne(routers.status, 'PROVISIONING'),
           or(
             isNull(routers.lastSyncAt),
             lte(
@@ -128,11 +130,15 @@ export class RouterSupervisor {
     let snapshot: RouterSnapshot | null = null;
     let failure: RouterOsError | null = null;
     try {
+      if (!router.secret || !router.username) {
+        throw new RouterOsError('CONFIG', 'Identifiants RouterOS absents');
+      }
+      const { secret, username } = router;
       try {
         password = decryptRouterPassword(
           this.box,
           { companyId: router.companyId, routerId: router.id },
-          router.secret,
+          secret,
         );
       } catch {
         throw new RouterOsError(
@@ -146,7 +152,7 @@ export class RouterSupervisor {
           tunnelIp: router.tunnelIp,
           tlsFingerprint: router.tlsFingerprint,
         },
-        { username: router.username, password },
+        { username, password },
       );
       try {
         snapshot = await collectSnapshot(transport);

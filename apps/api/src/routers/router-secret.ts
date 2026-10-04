@@ -59,7 +59,8 @@ export async function rotateRouterSecrets(
   let rewrapped = 0;
   let failed = 0;
   for (const row of rows) {
-    if (!box.needsRewrap(row.secret)) continue;
+    // Routeur en cours d'enrôlement : pas encore de mot de passe.
+    if (row.secret === null || !box.needsRewrap(row.secret)) continue;
     try {
       const next = box.rewrap(
         row.secret,

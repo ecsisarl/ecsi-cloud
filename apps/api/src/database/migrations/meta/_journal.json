@@ -43,6 +43,13 @@
       "when": 1791134665988,
       "tag": "0005_routers_supervision",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1791148782999,
+      "tag": "0006_routers_enrollment",
+      "breakpoints": true
     }
   ]
 }

@@ -65,6 +65,24 @@ Après les migrations, `pnpm db:migrate` synchronise le catalogue des permission
 - RLS : `tenant_isolation` pour `ecsi_app` (même politique que les sites) ; `ecsi_auth` sans accès ; `ecsi_worker` voit toutes les entreprises (il n'a pas de tenant) mais seulement les routeurs non supprimés, et n'écrit que par `GRANT UPDATE (…)` colonne par colonne.
 - Le rôle `ecsi_worker` doit exister avant la migration (voir [DEPLOYMENT.md](DEPLOYMENT.md#variables-ajoutées-au-sprint-3a)).
 
+### Migration 0006 : enrôlement des routeurs (générée par Drizzle, complétée à la main, additive)
+
+- `routers` : statut `PROVISIONING` ; identifiants RouterOS nullables tant que le routeur n'est pas activé (cohérence vérifiée par contrainte) ; `wg_public_key` (clé PUBLIQUE, unique parmi les routeurs non supprimés), `enrolled_at`, `activated_at`. Aucune ligne existante n'est modifiée (test `migration-0006-upgrade.int.test.ts` : CHR-LAB et son chiffré k2 conservés).
+- `router_enrollment_tokens` : empreinte SHA-256 du jeton (jamais le jeton), expiration, utilisation unique (`used_at`), révocation ; RLS `tenant_isolation` ; `ecsi_app` : `SELECT`, `INSERT`, `UPDATE (revoked_at)` ; aucun accès pour `ecsi_auth` et `ecsi_worker` hors fonctions.
+- `ecsi_app` perd `DELETE` et l'`UPDATE` global sur `routers` : suppression douce uniquement, `UPDATE` limité aux colonnes de gestion (nom, site, transport, identifiants, empreinte, `deleted_at`…). L'adresse tunnel, la clé publique et le statut d'enrôlement ne sont modifiables que par les fonctions ci-dessous.
+- `ecsi_worker` ne voit ni les routeurs supprimés ni les routeurs `PROVISIONING`.
+- Fonctions `SECURITY DEFINER` (schéma `app`, `search_path` fixé, `EXECUTE` retiré à `PUBLIC` puis accordé à un seul rôle) :
+
+| Fonction                                 | Rôle          | Usage                                                                         |
+| ---------------------------------------- | ------------- | ----------------------------------------------------------------------------- |
+| `router_allocate_tunnel_ip(cidr, inet)`  | `ecsi_app`    | Première adresse libre de la plage (quarantaine de 7 jours après suppression) |
+| `router_consume_enrollment(bytea, text)` | `ecsi_auth`   | Consommation atomique du jeton (anti-rejeu), enregistre la clé publique       |
+| `gateway_peers()`                        | `ecsi_worker` | Pairs attendus par la passerelle (clé publique, adresse, actif)               |
+| `router_activation_target(inet)`         | `ecsi_worker` | Routeur enrôlé non activé derrière une adresse tunnel                         |
+| `router_activate(…)`                     | `ecsi_worker` | Enregistre le compte de service chiffré et l'empreinte TLS, audit             |
+| `router_activation_denied(inet, text)`   | `ecsi_worker` | Audit d'une activation refusée                                                |
+| `platform_company_routers(uuid)`         | `ecsi_auth`   | Console plateforme : colonnes non sensibles des routeurs d'une entreprise     |
+
 ### Données de démonstration
 
 `SEED_PASSWORD=… pnpm db:seed` (refusé en production) crée ENTREPRISE_A (`admin.a`, `gerant.a`, `vendeur.a`, `gerant.site-a` limité à SITE-A, `vendeur.site-b` limité à SITE-B), ENTREPRISE_B (`admin.b`, `gerant.b`) et le super administrateur `superadmin@ecsi.test`, adresses `@ecsi.test`. Sites : SITE-A « Cocody Riviera » et SITE-B « Yopougon Selmer » (groupe GROUPE-ABIDJAN) pour A, SITE-A « Plateau Centre (B) » pour B (même code, autre entreprise). Chaque exécution réinitialise mots de passe, 2FA, sessions, rôles et statut de ces comptes et entreprises.

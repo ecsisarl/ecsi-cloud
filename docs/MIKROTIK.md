@@ -188,6 +188,21 @@ Code : `apps/api/src/routers` ; worker : `apps/api/src/worker.ts`.
 - **Secrets** : mot de passe RouterOS chiffré par le SecretBox, AAD `router:<company_id>:<router_id>:routeros-password` ; jamais journalisé ; messages d'erreur nettoyés et secrets masqués avant journalisation ou stockage dans `last_error`. Aucune clé privée WireGuard de routeur côté cloud.
 - **Base** : rôle `ecsi_worker` limité à la table `routers` (voir [DATABASE.md](DATABASE.md)).
 
+## Enrôlement depuis ECSI CLOUD (Sprint 3B)
+
+Code : `apps/api/src/routers` (API), `apps/api/src/routers/gateway` et `apps/api/src/gateway.ts` (agent passerelle), migration 0006. Protocole : [PROTOCOLE-PROVISIONNEMENT.md](../lab/routeros/PROTOCOLE-PROVISIONNEMENT.md), dont le script modèle validé au Sprint 3A est repris **sans modification** (`enrollment-script.ts`, test d'égalité avec le fichier du laboratoire).
+
+1. **Création** (`POST /api/v1/routers/enrollments`, permission `routers.create` sur le site) : entreprise et site obligatoires (le site doit appartenir à l'entreprise, RLS en dernière barrière). Le cloud attribue l'adresse tunnel (`app.router_allocate_tunnel_ip`, verrou consultatif, première adresse libre : jamais le réseau, la diffusion, la passerelle, ni une adresse active ou libérée depuis moins de 7 jours). Le routeur est créé en `PROVISIONING`, sans identifiants. Un jeton de 256 bits est émis : seule son empreinte SHA-256 est stockée, il expire après `ROUTER_ENROLL_TOKEN_TTL_MINUTES` (30 min) et n'apparaît qu'une fois, dans le script rendu.
+2. **Script** : collé par l'administrateur dans le terminal du routeur. Il crée l'interface WireGuard (la **clé privée reste sur le routeur**), le firewall du tunnel, le pair passerelle, puis envoie en HTTPS le jeton et la clé publique à `POST /api/v1/routers/enroll`. Aucune IP WAN fixe n'est nécessaire : le routeur initie tout (NAT, CGNAT, Starlink).
+3. **Enrôlement** (`app.router_consume_enrollment`, rôle `ecsi_auth`) : jeton à usage unique ; réponse uniforme 410 pour inconnu, expiré, déjà utilisé, révoqué ou clé déjà prise ; chaque tentative est auditée (`routers.enroll`, motif en cas de refus) ; limite de 30 tentatives par IP et 15 minutes.
+4. **Pairs** : l'agent passerelle synchronise toutes les `GATEWAY_SYNC_INTERVAL_SECONDS` les pairs WireGuard (`wg set … allowed-ips <ip>/32`) avec `app.gateway_peers()`. Il ne touche jamais un pair qu'il ne connaît pas et refuse une adresse déjà tenue par un tel pair ou hors plage. Un routeur supprimé perd son pair au cycle suivant.
+5. **Activation** : par le tunnel uniquement, le routeur poste son compte de service (`read,api,rest-api`) et l'empreinte de son certificat à `http://10.200.0.1:8081/activate`. L'agent n'écoute que sur l'adresse tunnel de la passerelle, identifie le routeur par l'adresse source (refus hors plage), chiffre le mot de passe avec le SecretBox avant tout stockage, et l'enregistre par `app.router_activate` (audit `router.activated`). Refus audités (`router.activation`).
+6. **Supervision** : le worker du Sprint 3A collecte en REST HTTPS avec épinglage ; il ne voit pas les routeurs `PROVISIONING` ni les routeurs supprimés.
+
+Gestion (`/api/v1/routers`) : liste, détail, renommage ou déplacement de site (portée vérifiée sur le site cible), changement des identifiants RouterOS (chiffrés, ré-épinglage optionnel, audités sans valeur), suppression douce (révoque les jetons, retire le pair, arrête la collecte), renouvellement d'un jeton non utilisé. Aucune réponse ne contient de mot de passe, de chiffré, de jeton (hors script de création) ni de clé privée. Interface : **Réseau → Routeurs** (`/reseau/routeurs`).
+
+Résultats sur CHR 7.24.5 : [`resultats/2026-10-04-S3B-chr-enrolement-ecsi-cloud.md`](../lab/routeros/resultats/2026-10-04-S3B-chr-enrolement-ecsi-cloud.md).
+
 ## Paliers de montée en charge
 
 | Palier       | Objectif                                       | Critère de passage                                                |

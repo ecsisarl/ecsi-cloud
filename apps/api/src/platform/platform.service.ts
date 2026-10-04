@@ -12,6 +12,7 @@ import {
   type ListPlatformCompaniesQuery,
   type PlatformCompanyDetail,
   type PlatformCompanyPage,
+  type PlatformRouter,
   type PlatformUser,
   type ResetMemberMfaRequest,
   type SetCompanyStatusRequest,
@@ -62,6 +63,63 @@ export class PlatformService {
     private readonly mfa: MfaService,
     private readonly sessions: SessionService,
   ) {}
+
+  /**
+   * Routeurs d'une entreprise (lecture seule). ecsi_auth n'a aucun droit sur la table routers :
+   * la fonction app.platform_company_routers (migration 0006) ne renvoie que des colonnes
+   * sans secret.
+   */
+  async listCompanyRouters(companyId: string): Promise<PlatformRouter[]> {
+    const [company] = await this.db
+      .select({ id: companies.id })
+      .from(companies)
+      .where(eq(companies.id, companyId));
+    if (!company) throw new NotFoundException('Entreprise introuvable');
+    const result = await this.db.execute<{
+      id: string;
+      site_id: string;
+      site_name: string;
+      site_code: string;
+      name: string;
+      status: PlatformRouter['status'];
+      transport: PlatformRouter['transport'];
+      tunnel_ip: string;
+      routeros_version: string | null;
+      board_name: string | null;
+      identity: string | null;
+      uptime_seconds: string | null;
+      cpu_load: number | null;
+      total_memory: string | null;
+      free_memory: string | null;
+      last_seen_at: Date | null;
+      last_error: string | null;
+      enrolled_at: Date | null;
+      activated_at: Date | null;
+      created_at: Date;
+    }>(sql`select * from app.platform_company_routers(${companyId})`);
+    const num = (value: string | null) => (value === null ? null : Number(value));
+    const iso = (value: Date | null) => (value ? new Date(value).toISOString() : null);
+    return result.rows.map((row) => ({
+      id: row.id,
+      site: { id: row.site_id, name: row.site_name, code: row.site_code },
+      name: row.name,
+      status: row.status,
+      transport: row.transport,
+      tunnelIp: row.tunnel_ip.split('/')[0] ?? row.tunnel_ip,
+      routerosVersion: row.routeros_version,
+      boardName: row.board_name,
+      identity: row.identity,
+      uptimeSeconds: num(row.uptime_seconds),
+      cpuLoad: row.cpu_load,
+      totalMemory: num(row.total_memory),
+      freeMemory: num(row.free_memory),
+      lastSeenAt: iso(row.last_seen_at),
+      lastError: row.last_error,
+      enrolledAt: iso(row.enrolled_at),
+      activatedAt: iso(row.activated_at),
+      createdAt: new Date(row.created_at).toISOString(),
+    }));
+  }
 
   async listCompanies(query: ListPlatformCompaniesQuery): Promise<PlatformCompanyPage> {
     const filters: (SQL | undefined)[] = [

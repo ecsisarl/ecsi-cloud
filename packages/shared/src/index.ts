@@ -9,3 +9,4 @@ export * from './company.js';
 export * from './members.js';
 export * from './sites.js';
 export * from './platform.js';
+export * from './routers.js';

@@ -8,6 +8,7 @@ import { randomBytes } from 'node:crypto';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import type { AuditService } from '../src/audit/audit.service.js';
 import { SecretBox } from '../src/auth/crypto/secret-box.js';
 import type { Env } from '../src/config/env.js';
 import { runMigrations } from '../src/database/migrate.js';
@@ -85,6 +86,9 @@ beforeAll(async () => {
     new TenantDatabase(drizzle(appPool, { schema, casing: 'snake_case' })),
     box,
     { ROUTER_TUNNEL_CIDR: '10.200.0.0/24', ROUTER_TUNNEL_GATEWAY: '10.200.0.1' } as Env,
+    // register / setCredentials (outils internes) n'écrivent pas d'audit utilisateur ; les
+    // routes HTTP auditées sont couvertes par test/routers-api.int.test.ts (Sprint 3B).
+    {} as AuditService,
   );
 }, 180_000);
 
@@ -286,8 +290,15 @@ describe('enregistrement et chiffrement (RoutersService, rôle ecsi_app)', () =>
       expect(
         (await c.query("update routers set name = 'pirate' where id = $1", [routerB])).rowCount,
       ).toBe(0);
-      expect((await c.query('delete from routers where id = $1', [routerB])).rowCount).toBe(0);
     });
+    // Sprint 3B : suppression logique seulement, ecsi_app n'a plus le droit DELETE.
+    expect(
+      await sqlError(
+        as(infra.urls.app, seed.companies.A, (c) =>
+          c.query('delete from routers where id = $1', [routerB]),
+        ),
+      ),
+    ).toBe('42501');
     await as(infra.urls.app, null, async (c) => {
       expect((await c.query('select id from routers')).rowCount).toBe(0); // sans contexte : rien
     });

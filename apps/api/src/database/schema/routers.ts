@@ -11,14 +11,16 @@ import {
   smallint,
   text,
   timestamp,
+  unique,
   uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core';
-import { createdAt, deletedAt, id, updatedAt } from './columns.js';
+import { bytea, createdAt, deletedAt, id, updatedAt } from './columns.js';
 import { sites } from './sites.js';
 import { companies } from './tenancy.js';
 
-export const ROUTER_STATUSES = ['ONLINE', 'DEGRADED', 'OFFLINE'] as const;
+/** PROVISIONING : créé par l'enrôlement, en attente du routeur (Sprint 3B). */
+export const ROUTER_STATUSES = ['PROVISIONING', 'ONLINE', 'DEGRADED', 'OFFLINE'] as const;
 export type RouterStatus = (typeof ROUTER_STATUSES)[number];
 
 /** Accès RouterOS, toujours par l'adresse tunnel WireGuard (docs/MIKROTIK.md). */
@@ -66,8 +68,9 @@ export const routers = pgTable(
     status: text('status').$type<RouterStatus>().notNull().default('OFFLINE'),
     transport: text('transport').$type<RouterTransportKind>().notNull().default('REST_HTTPS'),
     tunnelIp: inet('tunnel_ip').notNull(),
-    routerosUsername: text('routeros_username').notNull(),
-    routerosPasswordEncrypted: text('routeros_password_encrypted').notNull(),
+    /** Absents tant qu'un routeur en cours d'enrôlement (PROVISIONING) n'est pas activé. */
+    routerosUsername: text('routeros_username'),
+    routerosPasswordEncrypted: text('routeros_password_encrypted'),
     tlsFingerprint: text('tls_fingerprint'),
     identity: text('identity'),
     routerosVersion: text('routeros_version'),
@@ -85,16 +88,24 @@ export const routers = pgTable(
     lastSyncAt: timestamp('last_sync_at', { withTimezone: true }),
     lastError: text('last_error'),
     metadata: jsonb('metadata').$type<Record<string, string>>().notNull().default({}),
+    /** Clé PUBLIQUE WireGuard reçue à l'enrôlement (la clé privée ne quitte pas le routeur). */
+    wgPublicKey: text('wg_public_key'),
+    enrolledAt: timestamp('enrolled_at', { withTimezone: true }),
+    activatedAt: timestamp('activated_at', { withTimezone: true }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
     deletedAt: deletedAt(),
   },
   (t) => [
+    unique('routers_company_id_key').on(t.companyId, t.id),
     foreignKey({
       name: 'routers_site_fk',
       columns: [t.companyId, t.siteId],
       foreignColumns: [sites.companyId, sites.id],
     }).onDelete('cascade'),
+    uniqueIndex('routers_wg_public_key_key')
+      .on(t.wgPublicKey)
+      .where(sql`${t.deletedAt} is null`),
     uniqueIndex('routers_tunnel_ip_key')
       .on(t.tunnelIp)
       .where(sql`${t.deletedAt} is null`),
@@ -102,7 +113,10 @@ export const routers = pgTable(
     index('routers_poll_idx')
       .on(t.lastSyncAt)
       .where(sql`${t.deletedAt} is null`),
-    check('routers_status_check', sql`${t.status} in ('ONLINE', 'DEGRADED', 'OFFLINE')`),
+    check(
+      'routers_status_check',
+      sql`${t.status} in ('PROVISIONING', 'ONLINE', 'DEGRADED', 'OFFLINE')`,
+    ),
     check('routers_transport_check', sql`${t.transport} in ('REST_HTTPS', 'API')`),
     check(
       'routers_tunnel_ip_check',
@@ -115,10 +129,52 @@ export const routers = pgTable(
     // Le REST n'est jamais utilisé sans épinglage du certificat.
     check(
       'routers_rest_pinned_check',
-      sql`${t.transport} <> 'REST_HTTPS' or ${t.tlsFingerprint} is not null`,
+      sql`${t.transport} <> 'REST_HTTPS' or ${t.tlsFingerprint} is not null or ${t.status} = 'PROVISIONING'`,
     ),
-    check('routers_password_format_check', sql`${t.routerosPasswordEncrypted} like 'v2:%'`),
+    check(
+      'routers_password_format_check',
+      sql`${t.routerosPasswordEncrypted} is null or ${t.routerosPasswordEncrypted} like 'v2:%'`,
+    ),
+    // Hors enrôlement en cours, un routeur a toujours ses identifiants (chiffrés).
+    check(
+      'routers_credentials_check',
+      sql`${t.status} = 'PROVISIONING' or (${t.routerosUsername} is not null and ${t.routerosPasswordEncrypted} is not null)`,
+    ),
+    check(
+      'routers_wg_public_key_check',
+      sql`${t.wgPublicKey} is null or ${t.wgPublicKey} ~ '^[A-Za-z0-9+/]{42}[AEIMQUYcgkosw480]=$'`,
+    ),
     check('routers_cpu_load_check', sql`${t.cpuLoad} is null or ${t.cpuLoad} between 0 and 100`),
     check('routers_failures_check', sql`${t.consecutiveFailures} >= 0`),
+  ],
+);
+
+/**
+ * Jetons d'enrôlement (Sprint 3B) : 32 octets aléatoires, stockés HACHÉS (SHA-256), usage
+ * unique, expirants, liés à un routeur et à son entreprise. La valeur du jeton n'existe que
+ * dans le script affiché une fois à l'administrateur.
+ */
+export const routerEnrollmentTokens = pgTable(
+  'router_enrollment_tokens',
+  {
+    id: id(),
+    companyId: uuid('company_id').notNull(),
+    routerId: uuid('router_id').notNull(),
+    tokenHash: bytea('token_hash').notNull(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    usedAt: timestamp('used_at', { withTimezone: true }),
+    revokedAt: timestamp('revoked_at', { withTimezone: true }),
+    createdBy: uuid('created_by'),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    foreignKey({
+      name: 'router_enrollment_tokens_router_fk',
+      columns: [t.companyId, t.routerId],
+      foreignColumns: [routers.companyId, routers.id],
+    }).onDelete('cascade'),
+    uniqueIndex('router_enrollment_tokens_hash_key').on(t.tokenHash),
+    index('router_enrollment_tokens_router_idx').on(t.companyId, t.routerId),
+    check('router_enrollment_tokens_hash_check', sql`octet_length(${t.tokenHash}) = 32`),
   ],
 );

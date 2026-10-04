@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { refineRouterEnrollment, routerEnrollmentShape } from './router-enrollment.js';
 import { refineRouterNetwork, routerNetworkShape } from './router-network.js';
 
 /**
@@ -97,6 +98,8 @@ export const envSchema = z.object({
   SMTP_FROM: z.string().min(3).default('ECSI CLOUD <no-reply@ecsi.local>'),
   /** Réseau tunnel WireGuard des routeurs MikroTik (Sprint 3A, routers/tunnel-ip.ts). */
   ...routerNetworkShape,
+  /** Enrôlement des routeurs (Sprint 3B, config/router-enrollment.ts) : valeurs publiques. */
+  ...routerEnrollmentShape,
 });
 
 export type Env = z.infer<typeof envSchema>;
@@ -110,7 +113,10 @@ export class InvalidEnvironmentError extends Error {
 
 /** Valide les variables d'environnement. Les valeurs des secrets ne sont jamais incluses dans les erreurs. */
 export function parseEnv(source: Record<string, string | undefined>): Env {
-  const result = envSchema.superRefine(refineRouterNetwork).safeParse(source);
+  const result = envSchema
+    .superRefine(refineRouterNetwork)
+    .superRefine(refineRouterEnrollment)
+    .safeParse(source);
   if (!result.success) {
     throw new InvalidEnvironmentError(
       result.error.issues.map((issue) => `${issue.path.join('.')} : ${issue.message}`),
@@ -136,6 +142,11 @@ export function parseEnv(source: Record<string, string | undefined>): Env {
     }
     if (!env.WEB_PUBLIC_URL.startsWith('https://')) {
       issues.push('WEB_PUBLIC_URL : HTTPS obligatoire en production');
+    }
+    if (env.ROUTER_ENROLL_CA_URL) {
+      issues.push(
+        'ROUTER_ENROLL_CA_URL : AC de laboratoire interdite en production (certificat d’AC publique)',
+      );
     }
     if (env.CORS_ORIGINS.some((origin) => origin === '*')) {
       issues.push('CORS_ORIGINS : le joker « * » est interdit en production');

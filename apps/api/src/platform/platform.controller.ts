@@ -59,6 +59,12 @@ export class PlatformController {
     return this.platform.getCompany(id);
   }
 
+  /** Routeurs MikroTik d'une entreprise : lecture seule, sans secret (Sprint 3B). */
+  @Get('companies/:id/routers')
+  listCompanyRouters(@Param('id', new ParseUUIDPipe()) id: string) {
+    return this.platform.listCompanyRouters(id);
+  }
+
   @Audited({ action: 'platform.companies.create', resourceType: 'company' })
   @Post('companies')
   @HttpCode(HttpStatus.CREATED)
