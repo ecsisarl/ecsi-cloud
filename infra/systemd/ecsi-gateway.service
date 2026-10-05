@@ -1,0 +1,52 @@
+# ECSI CLOUD - agent passerelle WireGuard (Sprint 3B), installation SANS conteneur.
+# Alternative au service « gateway » de docker-compose.yml (profil gateway). Voir
+# docs/DEPLOYMENT.md, section « Agent passerelle ».
+#
+# Installation (en root) :
+#   1. utilisateur système : useradd --system --home /opt/ecsi-gateway --shell /usr/sbin/nologin ecsi-gateway
+#   2. code compilé : /opt/ecsi-gateway (contenu de `pnpm --filter @ecsi/api deploy --prod`),
+#      Node.js 22 dans /usr/bin/node, wireguard-tools (wg) dans /usr/bin/wg ;
+#   3. configuration : /etc/ecsi-gateway/gateway.env (root:ecsi-gateway, 0640), voir
+#      gateway.env.example ; JAMAIS la clé privée WireGuard (elle reste dans /etc/wireguard) ;
+#   4. cp ecsi-gateway.service /etc/systemd/system/ && systemctl daemon-reload
+#      && systemctl enable --now ecsi-gateway
+#   5. contrôle : systemctl status ecsi-gateway ; sudo -u ecsi-gateway node /opt/ecsi-gateway/dist/healthcheck.js gateway
+[Unit]
+Description=ECSI CLOUD - agent passerelle WireGuard (pairs des routeurs, activation)
+# L'interface WireGuard (wg-quick@wg0) doit exister avant l'agent.
+After=network-online.target wg-quick@wg0.service
+Wants=network-online.target
+Requires=wg-quick@wg0.service
+
+[Service]
+Type=simple
+User=ecsi-gateway
+Group=ecsi-gateway
+WorkingDirectory=/opt/ecsi-gateway
+EnvironmentFile=/etc/ecsi-gateway/gateway.env
+ExecStart=/usr/bin/node dist/gateway.js
+Restart=on-failure
+RestartSec=5
+
+# Seule capacité accordée : CAP_NET_ADMIN, pour `wg set` (pairs de l'interface).
+AmbientCapabilities=CAP_NET_ADMIN
+CapabilityBoundingSet=CAP_NET_ADMIN
+NoNewPrivileges=yes
+
+# Durcissement : système de fichiers en lecture seule, /tmp privé (battement de cœur du
+# healthcheck), aucun accès aux répertoires personnels ni aux périphériques.
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
+RestrictNamespaces=yes
+LockPersonality=yes
+SystemCallArchitectures=native
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

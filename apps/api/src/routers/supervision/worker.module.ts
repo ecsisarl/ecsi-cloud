@@ -11,6 +11,7 @@ import { drizzle } from 'drizzle-orm/node-postgres';
 import { LoggerModule } from 'nestjs-pino';
 import pg from 'pg';
 import { createSecretBox } from '../../auth/secret-box.provider.js';
+import { beat, heartbeatPath } from '../../health/heartbeat.js';
 import type { WorkerEnv } from '../../config/worker-env.js';
 import * as schema from '../../database/schema/index.js';
 import { tunnelTransportFactory } from '../routeros/factory.js';
@@ -26,13 +27,15 @@ const TICK_MS = 5_000;
 
 /**
  * Boucle de supervision : un cycle toutes les 5 s, jamais deux cycles en parallèle dans un
- * même processus ; arrêt propre (SIGTERM) en attendant la fin du cycle en cours.
+ * même processus ; arrêt propre (SIGTERM) en attendant la fin du cycle en cours. Chaque cycle
+ * réussi écrit le battement de cœur lu par le healthcheck Docker (health/heartbeat.ts).
  */
 @Injectable()
 export class SupervisionScheduler implements OnApplicationBootstrap, OnApplicationShutdown {
   private readonly logger = new Logger('Supervision');
   private timer: NodeJS.Timeout | null = null;
   private running: Promise<void> | null = null;
+  private readonly heartbeat = heartbeatPath('worker');
 
   constructor(
     @Inject(ROUTER_SUPERVISOR) private readonly supervisor: RouterSupervisor,
@@ -60,6 +63,7 @@ export class SupervisionScheduler implements OnApplicationBootstrap, OnApplicati
     this.running = this.supervisor
       .runCycle()
       .then((results) => {
+        beat(this.heartbeat, this.logger);
         if (results.length > 0) {
           const online = results.filter((r) => r.status === 'ONLINE').length;
           this.logger.debug(`Cycle : ${results.length} routeur(s) collecté(s), ${online} ONLINE`);

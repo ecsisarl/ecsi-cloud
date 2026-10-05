@@ -20,7 +20,7 @@ import {
 import { usePermissions } from '@/components/me-context';
 import { PageHeader } from '@/components/page-header';
 import { api } from '@/lib/client-api';
-import { EnrollmentScript } from './enrollment-panel';
+import { EnrollmentScript, RemovalScript } from './enrollment-panel';
 import { formatBytes, formatMemory, formatUptime, ROUTER_STATUS_TONE } from './format';
 
 function Row({ label, value }: { label: string; value: string | null | undefined }) {
@@ -202,6 +202,7 @@ export function RouterDetail({ id }: { id: string }) {
           title={t('deleteTitle', { name: router.name })}
           description={t('deleteDescription')}
         >
+          <RemovalScript />
           <div className="flex gap-2">
             <Button variant="danger" onClick={() => void remove()}>
               {t('deleteConfirm')}

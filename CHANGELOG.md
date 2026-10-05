@@ -2,6 +2,20 @@
 
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Versions par sprint.
 
+## [S3B-RC2] — 2026-10-05 — Corrections de la validation indépendante S3B
+
+### Corrigé
+
+- `docker-compose.yml` : l'API reçoit les variables d'enrôlement (`ROUTER_ENROLL_PUBLIC_URL`, `ROUTER_ENROLL_CA_URL`, `ROUTER_ENROLL_CA_FINGERPRINT`, `ROUTER_ENROLL_TOKEN_TTL_MINUTES`, `WG_GATEWAY_PUBLIC_KEY`, `WG_GATEWAY_ENDPOINT`, `WG_GATEWAY_PORT`, `ROUTER_ACTIVATION_PORT`) et la plage tunnel ; une variable vide vaut « non configurée ». Test de régression du Compose.
+- Worker : healthcheck propre (battement de cœur du dernier cycle réussi) au lieu du healthcheck HTTP de l'API, qui le marquait `unhealthy`.
+- `lab/routeros/s3b/pilote.mjs` : statuts HTTP vérifiés avant tout traitement, erreurs API affichées proprement (404 d'un routeur supprimé), code de sortie 1 ; tests `node --test`.
+- `WG_GATEWAY_ENDPOINT` : message explicite si la valeur contient `:port` (le port est `WG_GATEWAY_PORT`).
+
+### Ajouté
+
+- Ré-enrôlement : le script d'enrôlement s'arrête avant toute modification si le routeur porte une ancienne configuration ECSI CLOUD ; script de retrait (`ecsi-retrait.rsc`) fourni par l'interface (fiche du routeur, « Ajouter un routeur ») avec la procédure envoi de fichier + `/import`.
+- Agent passerelle : image `--target gateway` (non root, `wg` avec la seule capacité `cap_net_admin`), service Compose `gateway` (profil `gateway`, réseau de l'hôte, `NET_ADMIN` seul), unité systemd `infra/systemd/ecsi-gateway.service`, healthcheck ; la CI le démarre sur une interface WireGuard réelle du noyau.
+
 ## [S3B] — 2026-10-04 — Gestion et enrôlement des routeurs MikroTik
 
 ### Ajouté

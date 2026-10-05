@@ -195,13 +195,28 @@ Code : `apps/api/src/routers` (API), `apps/api/src/routers/gateway` et `apps/api
 1. **Création** (`POST /api/v1/routers/enrollments`, permission `routers.create` sur le site) : entreprise et site obligatoires (le site doit appartenir à l'entreprise, RLS en dernière barrière). Le cloud attribue l'adresse tunnel (`app.router_allocate_tunnel_ip`, verrou consultatif, première adresse libre : jamais le réseau, la diffusion, la passerelle, ni une adresse active ou libérée depuis moins de 7 jours). Le routeur est créé en `PROVISIONING`, sans identifiants. Un jeton de 256 bits est émis : seule son empreinte SHA-256 est stockée, il expire après `ROUTER_ENROLL_TOKEN_TTL_MINUTES` (30 min) et n'apparaît qu'une fois, dans le script rendu.
 2. **Script** : collé par l'administrateur dans le terminal du routeur. Il crée l'interface WireGuard (la **clé privée reste sur le routeur**), le firewall du tunnel, le pair passerelle, puis envoie en HTTPS le jeton et la clé publique à `POST /api/v1/routers/enroll`. Aucune IP WAN fixe n'est nécessaire : le routeur initie tout (NAT, CGNAT, Starlink).
 3. **Enrôlement** (`app.router_consume_enrollment`, rôle `ecsi_auth`) : jeton à usage unique ; réponse uniforme 410 pour inconnu, expiré, déjà utilisé, révoqué ou clé déjà prise ; chaque tentative est auditée (`routers.enroll`, motif en cas de refus) ; limite de 30 tentatives par IP et 15 minutes.
-4. **Pairs** : l'agent passerelle synchronise toutes les `GATEWAY_SYNC_INTERVAL_SECONDS` les pairs WireGuard (`wg set … allowed-ips <ip>/32`) avec `app.gateway_peers()`. Il ne touche jamais un pair qu'il ne connaît pas et refuse une adresse déjà tenue par un tel pair ou hors plage. Un routeur supprimé perd son pair au cycle suivant.
+4. **Pairs** : l'agent passerelle synchronise toutes les `GATEWAY_SYNC_INTERVAL_SECONDS` les pairs WireGuard (`wg set … allowed-ips <ip>/32`) avec `app.gateway_peers()`. Il ne touche jamais un pair qu'il ne connaît pas et refuse une adresse déjà tenue par un tel pair ou hors plage : tout pair configuré à la main sur la passerelle doit donc être enregistré dans ECSI CLOUD (voir [DEPLOYMENT.md](DEPLOYMENT.md#agent-passerelle)). Un routeur supprimé perd son pair au cycle suivant.
 5. **Activation** : par le tunnel uniquement, le routeur poste son compte de service (`read,api,rest-api`) et l'empreinte de son certificat à `http://10.200.0.1:8081/activate`. L'agent n'écoute que sur l'adresse tunnel de la passerelle, identifie le routeur par l'adresse source (refus hors plage), chiffre le mot de passe avec le SecretBox avant tout stockage, et l'enregistre par `app.router_activate` (audit `router.activated`). Refus audités (`router.activation`).
 6. **Supervision** : le worker du Sprint 3A collecte en REST HTTPS avec épinglage ; il ne voit pas les routeurs `PROVISIONING` ni les routeurs supprimés.
 
 Gestion (`/api/v1/routers`) : liste, détail, renommage ou déplacement de site (portée vérifiée sur le site cible), changement des identifiants RouterOS (chiffrés, ré-épinglage optionnel, audités sans valeur), suppression douce (révoque les jetons, retire le pair, arrête la collecte), renouvellement d'un jeton non utilisé. Aucune réponse ne contient de mot de passe, de chiffré, de jeton (hors script de création) ni de clé privée. Interface : **Réseau → Routeurs** (`/reseau/routeurs`).
 
-Résultats sur CHR 7.24.5 : [`resultats/2026-10-04-S3B-chr-enrolement-ecsi-cloud.md`](../lab/routeros/resultats/2026-10-04-S3B-chr-enrolement-ecsi-cloud.md).
+### Retrait et ré-enrôlement d'un MikroTik déjà configuré (S3B-RC2)
+
+Supprimer un routeur dans ECSI CLOUD retire son pair de la passerelle (plus aucun trafic ne passe), mais **ne modifie pas le routeur** : son interface `ecsi-wg`, son ancienne adresse tunnel, son pair passerelle, ses règles `ecsi-cloud` et son compte `ecsi-svc` restent en place. Le script d'enrôlement réutilise ces objets s'ils existent ; avant S3B-RC2, un ré-enrôlement gardait donc l'ancienne adresse alors que le cloud en attribuait une nouvelle. Procédure officielle :
+
+1. supprimer le routeur dans ECSI CLOUD (Réseau → Routeurs → Désactiver) ;
+2. appliquer sur le routeur le **script de retrait** (`ecsi-retrait.rsc`, affiché et téléchargeable dans la fiche du routeur et dans « Ajouter un routeur ») : il ne retire que les objets `ecsi-*` et les règles commentées `ecsi-cloud` ; le reste de la configuration et du firewall n'est pas modifié ;
+   - méthode recommandée : envoyer le fichier sur le routeur (WinBox > Files, ou SFTP), puis `/import file-name=ecsi-retrait.rsc` ;
+   - le coller dans un terminal interactif (WinBox > New Terminal) fonctionne aussi ;
+   - **ne pas** l'envoyer brut sur l'entrée standard d'une session SSH non interactive : RouterOS l'analyse ligne par ligne et produit des erreurs (constaté lors de la validation indépendante) ;
+3. créer un nouvel enrôlement et coller le nouveau script.
+
+Garde-fou : si le routeur porte encore une configuration ECSI CLOUD dont l'adresse tunnel ou la clé de passerelle diffère du nouveau script, celui-ci s'arrête après l'étape 1, **avant toute modification et avant d'utiliser le jeton** : « ECSI: ancienne configuration ECSI CLOUD detectee (ecsi-wg 10.200.0.x/24) : appliquer d'abord le script de retrait… ». Recoller le même script sur un routeur déjà enrôlé avec ce script reste sans effet de bord.
+
+`WG_GATEWAY_ENDPOINT` contient le nom DNS ou l'IPv4 publique de la passerelle **sans `:port`** ; le port est `WG_GATEWAY_PORT`. Une valeur avec `:port` est refusée au démarrage avec un message explicite.
+
+Résultats sur CHR 7.24.5 : [`resultats/2026-10-04-S3B-chr-enrolement-ecsi-cloud.md`](../lab/routeros/resultats/2026-10-04-S3B-chr-enrolement-ecsi-cloud.md), régression S3B-RC2 : [`resultats/2026-10-05-S3B-RC2-chr-regression.md`](../lab/routeros/resultats/2026-10-05-S3B-RC2-chr-regression.md).
 
 ## Paliers de montée en charge
 

@@ -104,4 +104,34 @@ describe('parseEnv', () => {
     expect(parseEnv({ ...base, ...lab }).ROUTER_ENROLL_CA_FINGERPRINT).toBe('ab'.repeat(32));
     expect(() => parseEnv({ ...production, ...lab })).toThrow(/ROUTER_ENROLL_CA_URL/);
   });
+
+  it('enrôlement : une variable vide (Compose « ${X:-} ») vaut « non configurée »', () => {
+    const env = parseEnv({
+      ...base,
+      ROUTER_ENROLL_PUBLIC_URL: '',
+      ROUTER_ENROLL_CA_URL: '',
+      ROUTER_ENROLL_CA_FINGERPRINT: '',
+      WG_GATEWAY_PUBLIC_KEY: '',
+      WG_GATEWAY_ENDPOINT: '',
+    });
+    expect(env.ROUTER_ENROLL_PUBLIC_URL).toBeUndefined();
+    expect(env.ROUTER_ENROLL_CA_URL).toBeUndefined();
+    expect(env.ROUTER_ENROLL_CA_FINGERPRINT).toBeUndefined();
+    expect(env.WG_GATEWAY_PUBLIC_KEY).toBeUndefined();
+    expect(env.WG_GATEWAY_ENDPOINT).toBeUndefined();
+  });
+
+  it('WG_GATEWAY_ENDPOINT : hôte ou IPv4 seul, le port va dans WG_GATEWAY_PORT', () => {
+    expect(parseEnv({ ...base, WG_GATEWAY_ENDPOINT: '203.0.113.10' }).WG_GATEWAY_ENDPOINT).toBe(
+      '203.0.113.10',
+    );
+    expect(parseEnv({ ...base, WG_GATEWAY_ENDPOINT: 'vpn.ecsi.test' }).WG_GATEWAY_ENDPOINT).toBe(
+      'vpn.ecsi.test',
+    );
+    for (const endpoint of ['203.0.113.10:51820', 'vpn.ecsi.test:51820']) {
+      expect(() => parseEnv({ ...base, WG_GATEWAY_ENDPOINT: endpoint })).toThrow(
+        /WG_GATEWAY_ENDPOINT : .*sans « :port »/,
+      );
+    }
+  });
 });

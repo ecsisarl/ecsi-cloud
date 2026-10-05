@@ -5,6 +5,7 @@ import {
   buildEnrollmentScript,
   ENROLLMENT_SCRIPT_BODY,
   EnrollmentScriptError,
+  REENROLL_GUARD,
   type EnrollmentScriptInput,
 } from './enrollment-script.js';
 
@@ -31,7 +32,9 @@ describe('script d’enrôlement RouterOS', () => {
     expect(ENROLLMENT_SCRIPT_BODY).toBe(lab.slice(lab.indexOf('\n{\n') + 1));
     const ca = { url: 'https://203.0.113.30:8443/ca.pem', fingerprint: 'ab'.repeat(32) };
     const script = buildEnrollmentScript({ ...base, ca });
-    const expected = ENROLLMENT_SCRIPT_BODY.replaceAll('__TOKEN__', base.token)
+    const step1 = ':put "ECSI 1/9: RouterOS $ver"\n';
+    const expected = ENROLLMENT_SCRIPT_BODY.replace(step1, step1 + REENROLL_GUARD)
+      .replaceAll('__TOKEN__', base.token)
       .replaceAll('__ENROLL_URL__', base.enrollUrl)
       .replaceAll('__ACTIVATE_URL__', 'http://10.200.0.1:8081/activate')
       .replaceAll('__CA_URL__', ca.url)
@@ -55,6 +58,20 @@ describe('script d’enrôlement RouterOS', () => {
     // Les étapes 1 et 3 à 9 restent présentes.
     for (const step of [1, 3, 4, 5, 6, 7, 8, 9]) expect(script).toContain(`ECSI ${step}/9`);
     expect(script).toContain('check-certificate=yes');
+  });
+
+  it('ré-enrôlement : arrêt AVANT toute modification si une ancienne configuration est présente', () => {
+    const script = buildEnrollmentScript(base);
+    const guard = script.indexOf('# 1b. Ancienne configuration ECSI CLOUD');
+    expect(guard).toBeGreaterThan(script.indexOf('ECSI 1/9'));
+    // Aucune commande de modification (add, set, remove, fetch, import) avant ni dans le contrôle.
+    const before = script.slice(0, script.indexOf('# 2.', guard));
+    expect(before).not.toMatch(/\/(add|set|remove|import)\b|\/tool\/fetch/);
+    expect(before).toContain('($current != $tunnelAddress)');
+    expect(before).toContain('!= $gwPublicKey');
+    expect(before).toContain('ecsi-retrait.rsc');
+    // Une seule insertion : le reste du modèle est inchangé (voir le premier test).
+    expect(script.split('# 1b.').length).toBe(2);
   });
 
   it('ne contient ni mot de passe, ni clé privée, ni empreinte de jeton', () => {

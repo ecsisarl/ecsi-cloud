@@ -47,6 +47,21 @@ x-api-env: &api-env
   SMTP_HOST: mailpit
   SMTP_PORT: 1025
   SMTP_FROM: ${SMTP_FROM:-ECSI CLOUD <no-reply@ecsi.local>}
+  # Routeurs MikroTik : même plage tunnel que le worker et la passerelle (attribution des IP).
+  ROUTER_TUNNEL_CIDR: ${ROUTER_TUNNEL_CIDR:-10.200.0.0/24}
+  ROUTER_TUNNEL_GATEWAY: ${ROUTER_TUNNEL_GATEWAY:-10.200.0.1}
+  # Enrôlement des routeurs (Sprint 3B) : valeurs PUBLIQUES inscrites dans le script collé dans
+  # le routeur. Vides = « Ajouter un routeur » répond 503 (le reste de l'API fonctionne).
+  # WG_GATEWAY_ENDPOINT : nom DNS ou IPv4 publique SEUL, sans « :port » (port : WG_GATEWAY_PORT).
+  # ROUTER_ENROLL_CA_URL / _FINGERPRINT : AC privée de laboratoire seulement (refusées en production).
+  ROUTER_ENROLL_PUBLIC_URL: ${ROUTER_ENROLL_PUBLIC_URL:-}
+  ROUTER_ENROLL_CA_URL: ${ROUTER_ENROLL_CA_URL:-}
+  ROUTER_ENROLL_CA_FINGERPRINT: ${ROUTER_ENROLL_CA_FINGERPRINT:-}
+  ROUTER_ENROLL_TOKEN_TTL_MINUTES: ${ROUTER_ENROLL_TOKEN_TTL_MINUTES:-30}
+  WG_GATEWAY_PUBLIC_KEY: ${WG_GATEWAY_PUBLIC_KEY:-}
+  WG_GATEWAY_ENDPOINT: ${WG_GATEWAY_ENDPOINT:-}
+  WG_GATEWAY_PORT: ${WG_GATEWAY_PORT:-51820}
+  ROUTER_ACTIVATION_PORT: ${ROUTER_ACTIVATION_PORT:-8081}
 
 services:
   postgres:
@@ -174,6 +189,51 @@ services:
       ENCRYPTION_PREVIOUS_KEYS: ${ENCRYPTION_PREVIOUS_KEYS:-}
       ROUTER_TUNNEL_CIDR: ${ROUTER_TUNNEL_CIDR:-10.200.0.0/24}
       ROUTER_TUNNEL_GATEWAY: ${ROUTER_TUNNEL_GATEWAY:-10.200.0.1}
+    # Pas de serveur HTTP : healthcheck propre au worker (dernier cycle de supervision réussi,
+    # health/heartbeat.ts) à la place de celui de l'API, hérité de l'image.
+    healthcheck:
+      test: ['CMD', 'node', 'dist/healthcheck.js', 'worker']
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  # Agent passerelle WireGuard (Sprint 3B), SUR L'HÔTE de la passerelle seulement :
+  #   docker compose --profile gateway up -d gateway
+  # Prérequis : interface WireGuard ${WG_INTERFACE:-wg0} configurée sur l'hôte (adresse
+  # ROUTER_TUNNEL_GATEWAY, clé privée dans la configuration wg de l'hôte, jamais ici) et le
+  # firewall de l'hôte limitant ROUTER_ACTIVATION_PORT à l'interface WireGuard. Réseau de
+  # l'hôte (pilotage de l'interface, écoute sur l'adresse tunnel), seule capacité NET_ADMIN.
+  # PostgreSQL est joint par son port publié sur 127.0.0.1. Voir docs/DEPLOYMENT.md.
+  gateway:
+    profiles: ['gateway']
+    build:
+      context: .
+      dockerfile: infra/docker/api.Dockerfile
+      target: gateway
+    image: ecsi-cloud/gateway:dev
+    restart: unless-stopped
+    network_mode: host
+    cap_drop: ['ALL']
+    cap_add: ['NET_ADMIN']
+    read_only: true
+    tmpfs: ['/tmp']
+    environment:
+      NODE_ENV: development
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      APP_VERSION: ${APP_VERSION:-0.1.0-dev}
+      DATABASE_WORKER_URL: postgres://ecsi_worker:${ECSI_DB_WORKER_PASSWORD:-devonly-worker-password}@127.0.0.1:5432/${POSTGRES_DB:-ecsi}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-devonlydevonlydevonlydevonlydevonlydevonlyA=}
+      ENCRYPTION_KEY_ID: ${ENCRYPTION_KEY_ID:-k1}
+      ENCRYPTION_PREVIOUS_KEYS: ${ENCRYPTION_PREVIOUS_KEYS:-}
+      ROUTER_TUNNEL_CIDR: ${ROUTER_TUNNEL_CIDR:-10.200.0.0/24}
+      ROUTER_TUNNEL_GATEWAY: ${ROUTER_TUNNEL_GATEWAY:-10.200.0.1}
+      ROUTER_ACTIVATION_PORT: ${ROUTER_ACTIVATION_PORT:-8081}
+      WG_INTERFACE: ${WG_INTERFACE:-wg0}
+      GATEWAY_SYNC_INTERVAL_SECONDS: ${GATEWAY_SYNC_INTERVAL_SECONDS:-5}
     depends_on:
       migrate:
         condition: service_completed_successfully

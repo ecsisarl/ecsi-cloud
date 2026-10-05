@@ -30,6 +30,8 @@ jobs:
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test
+      - name: Tests des outils de laboratoire (pilote S3B)
+        run: node --test 'lab/**/*.test.mjs'
       - run: pnpm build
         env:
           NEXT_TELEMETRY_DISABLED: '1'
@@ -70,6 +72,41 @@ jobs:
           grep -q '"status":"ok"' health.json
           curl -fsS -o /dev/null http://localhost:8080/
           curl -fsS http://localhost:8081/ | grep -q '<html'
+      - name: Worker de supervision sain (healthcheck propre, sans HTTP)
+        run: |
+          for i in $(seq 1 40); do
+            state=$(docker inspect -f '{{.State.Health.Status}}' "$(docker compose ps -q worker)")
+            [ "$state" = healthy ] && break
+            sleep 3
+          done
+          echo "worker : $state"
+          [ "$state" = healthy ]
+      - name: Agent passerelle conteneurisé sur une interface WireGuard réelle (module noyau)
+        env:
+          WG_INTERFACE: wgci
+        run: |
+          sudo modprobe wireguard
+          sudo ip link add wgci type wireguard
+          wg genkey | sudo tee /tmp/wgci.key >/dev/null
+          sudo wg set wgci private-key /tmp/wgci.key listen-port 51820
+          sudo rm -f /tmp/wgci.key
+          sudo ip address add 10.200.0.1/24 dev wgci
+          sudo ip link set wgci up
+          docker compose --profile gateway up -d --build gateway
+          for i in $(seq 1 40); do
+            state=$(docker inspect -f '{{.State.Health.Status}}' "$(docker compose ps -q gateway)")
+            [ "$state" = healthy ] && break
+            sleep 3
+          done
+          echo "passerelle : $state"
+          docker compose logs gateway | tail -n 20
+          [ "$state" = healthy ]
+          # Utilisateur non root ; activation à l'écoute sur l'adresse tunnel SEULEMENT.
+          [ "$(docker compose exec -T gateway id -u)" != 0 ]
+          sudo ss -ltnH 'sport = :8081' | tee listen.txt
+          grep -q '10.200.0.1:8081' listen.txt
+          [ "$(grep -cv '10.200.0.1:8081' listen.txt)" = 0 ]
+          docker compose --profile gateway stop gateway
       - name: Comptes de démonstration ENTREPRISE_A / ENTREPRISE_B
         run: docker compose run --rm -e SEED_PASSWORD migrate node dist/database/seed.js
       - uses: pnpm/action-setup@v4

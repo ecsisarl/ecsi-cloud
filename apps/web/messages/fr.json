@@ -260,7 +260,7 @@
     "back": "Retour aux routeurs",
     "delete": "Désactiver",
     "deleteTitle": "Désactiver le routeur « {name} » ?",
-    "deleteDescription": "Le routeur disparaît de la liste et n’est plus supervisé ; son tunnel est retiré de la passerelle. L’opération est tracée dans le journal d’audit.",
+    "deleteDescription": "Le routeur disparaît de la liste et n’est plus supervisé ; son tunnel est retiré de la passerelle. L’opération est tracée dans le journal d’audit. Pour réutiliser ce MikroTik, appliquez-lui le script de retrait avant de le ré-enrôler.",
     "deleteConfirm": "Désactiver le routeur",
     "emptyTitle": "Aucun routeur",
     "emptyDescription": "Ajoutez un routeur : ECSI CLOUD génère un script à coller dans son terminal, sans IP publique ni redirection de port.",
@@ -345,6 +345,16 @@
       "running": "Active",
       "down": "Inactive",
       "disabled": "Désactivée"
+    },
+    "removal": {
+      "title": "Ce MikroTik a déjà été enrôlé ? Script de retrait",
+      "intro": "Avant de ré-enrôler un routeur supprimé d’ECSI CLOUD, retirez son ancienne configuration ECSI CLOUD (interface ecsi-wg, pair, règles « ecsi-cloud », compte de service). Le reste de sa configuration n’est pas modifié. Sans cela, le script d’enrôlement s’arrête sans rien changer.",
+      "step1": "Téléchargez le script et envoyez le fichier {file} sur le routeur (WinBox > Files, ou SFTP).",
+      "step2": "Dans le terminal du routeur, exécutez :",
+      "step3": "Collez ensuite le nouveau script d’enrôlement. Évitez d’envoyer le script brut par une session SSH non interactive.",
+      "download": "Télécharger le script de retrait",
+      "copy": "Copier",
+      "copied": "Copié"
     }
   },
   "siteGroups": {

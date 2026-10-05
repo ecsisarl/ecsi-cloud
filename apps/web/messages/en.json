@@ -260,7 +260,7 @@
     "back": "Back to routers",
     "delete": "Disable",
     "deleteTitle": "Disable router “{name}”?",
-    "deleteDescription": "The router leaves the list and is no longer monitored; its tunnel is removed from the gateway. The operation is recorded in the audit log.",
+    "deleteDescription": "The router leaves the list and is no longer monitored; its tunnel is removed from the gateway. The operation is recorded in the audit log. To reuse this MikroTik, apply the removal script to it before re-enrolling it.",
     "deleteConfirm": "Disable router",
     "emptyTitle": "No routers",
     "emptyDescription": "Add a router: ECSI CLOUD generates a script to paste in its terminal, with no public IP or port forwarding.",
@@ -345,6 +345,16 @@
       "running": "Running",
       "down": "Down",
       "disabled": "Disabled"
+    },
+    "removal": {
+      "title": "Was this MikroTik enrolled before? Removal script",
+      "intro": "Before re-enrolling a router deleted from ECSI CLOUD, remove its previous ECSI CLOUD configuration (ecsi-wg interface, peer, “ecsi-cloud” rules, service account). The rest of its configuration is left untouched. Otherwise the enrollment script stops without changing anything.",
+      "step1": "Download the script and upload the file {file} to the router (WinBox > Files, or SFTP).",
+      "step2": "In the router terminal, run:",
+      "step3": "Then paste the new enrollment script. Avoid piping the raw script into a non-interactive SSH session.",
+      "download": "Download the removal script",
+      "copy": "Copy",
+      "copied": "Copied"
     }
   },
   "siteGroups": {

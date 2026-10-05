@@ -2,8 +2,9 @@
  * Script d'enrôlement RouterOS v7 (Sprint 3B), collé par l'administrateur dans le terminal du
  * routeur. Le corps est REPRIS À L'IDENTIQUE du modèle validé sur CHR 7.24.5 au laboratoire
  * (lab/routeros/enrolement/ecsi-enrolement.rsc.modele, résultats
- * lab/routeros/resultats/2026-10-04-S3A-chr-enrolement.md) : aucune commande RouterOS n'est
- * ajoutée ici. Un test unitaire vérifie l'égalité avec le modèle du laboratoire.
+ * lab/routeros/resultats/2026-10-04-S3A-chr-enrolement.md). Seule addition : le contrôle de
+ * ré-enrôlement REENROLL_GUARD (S3B-RC2), inséré après l'étape 1 et validé sur CHR 7.24.5.
+ * Un test unitaire vérifie l'égalité avec le modèle du laboratoire plus ce contrôle.
  *
  * Sans AC de laboratoire configurée, l'étape 2 (import de l'AC) est retirée : le certificat de
  * l'API est alors vérifié par le magasin intégré de RouterOS (AC publique). Cette variante
@@ -193,6 +194,35 @@ function integer(field: string, value: number, min: number, max: number): string
   return String(value);
 }
 
+/** Fin de l'étape 1 du modèle : le contrôle de ré-enrôlement est inséré juste après. */
+const STEP1_END = ':put "ECSI 1/9: RouterOS $ver"\n';
+
+/**
+ * Contrôle ajouté au modèle S3A (Sprint 3B-RC2, rapport de validation §6.4) : un routeur
+ * déjà enrôlé puis supprimé dans ECSI CLOUD garde son interface ecsi-wg, son adresse tunnel et
+ * son pair passerelle ; le modèle les réutilise sans les remplacer, et le ré-enrôlement
+ * échouait (nouvelle adresse attribuée par le cloud, ancienne adresse sur le routeur). Le
+ * script s'arrête désormais AVANT toute modification et demande d'appliquer le script de
+ * retrait (ROUTER_REMOVAL_SCRIPT). Un recollage du MÊME script (même adresse, même passerelle)
+ * reste sans effet de bord, comme validé au S3A. Commandes vérifiées sur CHR 7.24.5
+ * (lab/routeros/resultats/2026-10-05-S3B-RC2-chr-regression.md).
+ */
+export const REENROLL_GUARD = String.raw`
+# 1b. Ancienne configuration ECSI CLOUD (routeur supprime puis re-enrole) : arret AVANT toute
+#     modification si l'adresse tunnel ou la passerelle configurees different de ce script.
+:foreach a in=[/ip/address/find where interface=$wgName] do={
+  :local current [/ip/address/get $a address]
+  :if ($current != $tunnelAddress) do={
+    :error "ECSI: ancienne configuration ECSI CLOUD detectee ($wgName $current) : appliquer d'abord le script de retrait ecsi-retrait.rsc, puis recoller ce script"
+  }
+}
+:foreach p in=[/interface/wireguard/peers/find where interface=$wgName] do={
+  :if ([/interface/wireguard/peers/get $p public-key] != $gwPublicKey) do={
+    :error "ECSI: ancienne passerelle ECSI CLOUD sur $wgName : appliquer d'abord le script de retrait ecsi-retrait.rsc, puis recoller ce script"
+  }
+}
+`;
+
 export function buildEnrollmentScript(input: EnrollmentScriptInput): string {
   const gatewayTunnelIp = ipv4('gatewayTunnelIp', input.gatewayTunnelIp);
   const values: Record<string, string> = {
@@ -205,7 +235,10 @@ export function buildEnrollmentScript(input: EnrollmentScriptInput): string {
     __GW_TUNNEL_IP__: gatewayTunnelIp,
     __TUNNEL_ADDRESS__: `${ipv4('tunnelIp', input.tunnelIp)}/${integer('tunnelPrefix', input.tunnelPrefix, 16, 30)}`,
   };
-  let body = ENROLLMENT_SCRIPT_BODY;
+  if (!ENROLLMENT_SCRIPT_BODY.includes(STEP1_END)) {
+    throw new Error("Modèle d'enrôlement inattendu (étape 1)");
+  }
+  let body = ENROLLMENT_SCRIPT_BODY.replace(STEP1_END, STEP1_END + REENROLL_GUARD);
   if (input.ca) {
     values.__CA_URL__ = check('ca.url', input.ca.url, HTTPS_URL);
     values.__CA_FINGERPRINT__ = check('ca.fingerprint', input.ca.fingerprint, SHA256);
@@ -249,6 +282,9 @@ function header(ttlMinutes: string, labCa: boolean): string {
     `# Aucun mot de passe ni cle privee dans ce script. Le jeton est a usage unique (${ttlMinutes} min).`,
     "# Relancer le script : rien n'est cree en double, la cle WireGuard n'est jamais regeneree,",
     "# un compte de service existant n'est pas modifie.",
+    '#',
+    "# Routeur deja enrole puis supprime dans ECSI CLOUD : appliquer d'abord le script de retrait",
+    "# (ecsi-retrait.rsc, fourni par ECSI CLOUD) ; sinon ce script s'arrete sans rien modifier.",
     '',
   ].join('\n');
 }

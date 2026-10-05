@@ -1,13 +1,78 @@
 'use client';
 
-import type { EnrollmentCreated, Site } from '@ecsi/shared';
+import {
+  type EnrollmentCreated,
+  ROUTER_REMOVAL_SCRIPT,
+  ROUTER_REMOVAL_SCRIPT_FILE,
+  type Site,
+} from '@ecsi/shared';
 import { Button, Card, CardContent, CardHeader, CardTitle } from '@ecsi/ui';
-import { Check, Copy } from 'lucide-react';
+import { Check, Copy, Download } from 'lucide-react';
 import { useFormatter, useTranslations } from 'next-intl';
 import { type SubmitEvent, useEffect, useState } from 'react';
 import { Field, FormMessage, fieldValue } from '@/components/auth/form';
 import { FieldShell, Select, useProblemMessage } from '@/components/admin/controls';
 import { api } from '@/lib/client-api';
+
+/**
+ * Script de retrait RouterOS (aucun secret) : à appliquer sur un MikroTik déjà enrôlé avant de
+ * le ré-enrôler. Recommandé : téléchargement puis envoi du fichier sur le routeur et
+ * `/import`, plutôt qu'un envoi brut par une session SSH non interactive.
+ */
+export function RemovalScript() {
+  const t = useTranslations('routers.removal');
+  const [copied, setCopied] = useState(false);
+
+  async function copy() {
+    await navigator.clipboard.writeText(ROUTER_REMOVAL_SCRIPT);
+    setCopied(true);
+  }
+
+  function download() {
+    const url = URL.createObjectURL(new Blob([ROUTER_REMOVAL_SCRIPT], { type: 'text/plain' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = ROUTER_REMOVAL_SCRIPT_FILE;
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
+  return (
+    <details className="rounded-md border border-border p-3 text-sm" data-testid="removal-script">
+      <summary className="cursor-pointer font-medium text-foreground">{t('title')}</summary>
+      <div className="mt-3 flex flex-col gap-3">
+        <p className="text-muted">{t('intro')}</p>
+        <ol className="list-decimal space-y-1 pl-5 text-foreground">
+          <li>{t('step1', { file: ROUTER_REMOVAL_SCRIPT_FILE })}</li>
+          <li>
+            {t('step2')}{' '}
+            <code className="font-mono text-xs">
+              /import file-name={ROUTER_REMOVAL_SCRIPT_FILE}
+            </code>
+          </li>
+          <li>{t('step3')}</li>
+        </ol>
+        <pre className="max-h-60 overflow-auto rounded-md border border-border bg-surface-muted p-3 font-mono text-xs">
+          {ROUTER_REMOVAL_SCRIPT}
+        </pre>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="secondary" onClick={download}>
+            <Download className="size-4" aria-hidden />
+            {t('download')}
+          </Button>
+          <Button variant="secondary" onClick={() => void copy()}>
+            {copied ? (
+              <Check className="size-4" aria-hidden />
+            ) : (
+              <Copy className="size-4" aria-hidden />
+            )}
+            {copied ? t('copied') : t('copy')}
+          </Button>
+        </div>
+      </div>
+    </details>
+  );
+}
 
 /**
  * Script d'enrôlement affiché UNE seule fois : il contient le jeton à usage unique. Il n'est
@@ -67,6 +132,7 @@ export function EnrollmentScript({
           </Button>
           <Button onClick={onDone}>{t('done')}</Button>
         </div>
+        <RemovalScript />
       </CardContent>
     </Card>
   );

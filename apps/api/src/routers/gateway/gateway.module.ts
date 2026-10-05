@@ -11,6 +11,7 @@ import { LoggerModule } from 'nestjs-pino';
 import pg from 'pg';
 import { createSecretBox } from '../../auth/secret-box.provider.js';
 import type { GatewayEnv } from '../../config/gateway-env.js';
+import { beat, heartbeatPath } from '../../health/heartbeat.js';
 import { formatIpv4, parseTunnelNetwork } from '../tunnel-ip.js';
 import { ActivationServer, type ActivationStore } from './activation-server.js';
 import { GatewayPeerSync, type GatewayPeerRow } from './peer-sync.js';
@@ -62,7 +63,8 @@ export async function pgGatewayPeers(pool: pg.Pool): Promise<GatewayPeerRow[]> {
 
 /**
  * Agent passerelle : synchronisation des pairs toutes les N s (jamais deux en parallèle) et
- * serveur d'activation sur l'adresse tunnel de la passerelle.
+ * serveur d'activation sur l'adresse tunnel de la passerelle. Chaque synchronisation réussie
+ * écrit le battement de cœur lu par le healthcheck (`node dist/healthcheck.js gateway`).
  */
 @Injectable()
 export class GatewayAgent implements OnApplicationBootstrap, OnApplicationShutdown {
@@ -71,6 +73,7 @@ export class GatewayAgent implements OnApplicationBootstrap, OnApplicationShutdo
   private running: Promise<void> | null = null;
   private readonly sync: GatewayPeerSync;
   private readonly activation: ActivationServer;
+  private readonly heartbeat = heartbeatPath('gateway');
 
   constructor(
     @Inject(GATEWAY_ENV) private readonly env: GatewayEnv,
@@ -125,6 +128,8 @@ export class GatewayAgent implements OnApplicationBootstrap, OnApplicationShutdo
     this.running = this.sync
       .run()
       .then((report) => {
+        // Pairs synchronisés et serveur d'activation à l'écoute : agent sain (healthcheck).
+        beat(this.heartbeat, this.logger);
         if (report.added + report.updated + report.removed > 0) {
           this.logger.log(
             `Pairs WireGuard : ${report.added} ajouté(s), ${report.updated} mis à jour, ${report.removed} retiré(s)`,

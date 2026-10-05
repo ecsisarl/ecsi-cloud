@@ -10,3 +10,4 @@ export * from './members.js';
 export * from './sites.js';
 export * from './platform.js';
 export * from './routers.js';
+export * from './routeros-removal.js';

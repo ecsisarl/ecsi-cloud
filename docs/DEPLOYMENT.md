@@ -75,19 +75,36 @@ GRANT CONNECT ON DATABASE ecsi TO ecsi_worker;
 
 ### Variables et agent ajoutés au Sprint 3B
 
-| Variable                                | Rôle                                                                                                   |
-| --------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| `WG_GATEWAY_PUBLIC_KEY`                 | Clé PUBLIQUE WireGuard de la passerelle, inscrite dans le script d'enrôlement                          |
-| `WG_GATEWAY_ENDPOINT`                   | Nom DNS ou IPv4 publique de la passerelle (UDP)                                                        |
-| `WG_GATEWAY_PORT`                       | Port UDP WireGuard (51820)                                                                             |
-| `ROUTER_ENROLL_PUBLIC_URL`              | URL HTTPS de `POST /api/v1/routers/enroll` (défaut : `WEB_PUBLIC_URL` + `/api/v1/routers/enroll`)      |
-| `ROUTER_ENROLL_TOKEN_TTL_MINUTES`       | Durée de validité d'un jeton d'enrôlement (30 min, de 5 à 1440)                                        |
-| `ROUTER_ACTIVATION_PORT`                | Port HTTP d'activation de l'agent passerelle (8081), sur l'adresse tunnel seulement                    |
-| `ROUTER_ENROLL_CA_URL` / `_FINGERPRINT` | Laboratoire seulement (AC privée) ; **refusées en production**, où l'API présente un certificat public |
-| `WG_INTERFACE`, `WG_COMMAND`            | Agent passerelle : interface WireGuard (`wg0`) et commande `wg`                                        |
-| `GATEWAY_SYNC_INTERVAL_SECONDS`         | Agent passerelle : intervalle de synchronisation des pairs (5 s)                                       |
+| Variable                                | Rôle                                                                                                                   |
+| --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `WG_GATEWAY_PUBLIC_KEY`                 | Clé PUBLIQUE WireGuard de la passerelle, inscrite dans le script d'enrôlement                                          |
+| `WG_GATEWAY_ENDPOINT`                   | Nom DNS ou IPv4 publique de la passerelle (UDP), **sans `:port`** (ex. `vpn.exemple.com`, pas `vpn.exemple.com:51820`) |
+| `WG_GATEWAY_PORT`                       | Port UDP WireGuard de la passerelle (51820), séparé de `WG_GATEWAY_ENDPOINT`                                           |
+| `ROUTER_ENROLL_PUBLIC_URL`              | URL HTTPS de `POST /api/v1/routers/enroll` (défaut : `WEB_PUBLIC_URL` + `/api/v1/routers/enroll`)                      |
+| `ROUTER_ENROLL_TOKEN_TTL_MINUTES`       | Durée de validité d'un jeton d'enrôlement (30 min, de 5 à 1440)                                                        |
+| `ROUTER_ACTIVATION_PORT`                | Port HTTP d'activation de l'agent passerelle (8081), sur l'adresse tunnel seulement                                    |
+| `ROUTER_ENROLL_CA_URL` / `_FINGERPRINT` | Laboratoire seulement (AC privée) ; **refusées en production**, où l'API présente un certificat public                 |
+| `WG_INTERFACE`, `WG_COMMAND`            | Agent passerelle : interface WireGuard (`wg0`) et commande `wg`                                                        |
+| `GATEWAY_SYNC_INTERVAL_SECONDS`         | Agent passerelle : intervalle de synchronisation des pairs (5 s)                                                       |
 
-L'**agent passerelle** (`node dist/gateway.js`, `pnpm --filter @ecsi/api start:gateway`) tourne sur l'hôte WireGuard, avec `DATABASE_WORKER_URL`, les clés du SecretBox et les variables ci-dessus. Il a besoin de `CAP_NET_ADMIN` pour `wg set` (pas de root complet : service systemd avec `AmbientCapabilities=CAP_NET_ADMIN`, par exemple). Il écoute sur `ROUTER_TUNNEL_GATEWAY:ROUTER_ACTIVATION_PORT` uniquement ; le firewall de l'hôte doit en plus refuser ce port sur toute autre interface que WireGuard. La clé privée de la passerelle reste dans la configuration `wg` de l'hôte : ni l'API ni la base ne la reçoivent.
+Depuis S3B-RC2, `docker-compose.yml` transmet toutes ces variables à l'API (`x-api-env`) avec `ROUTER_TUNNEL_CIDR` / `ROUTER_TUNNEL_GATEWAY` : il suffit de les renseigner dans `.env`. Une variable laissée vide vaut « non configurée » (l'enrôlement répond alors 503, le reste de l'API fonctionne). Un test unitaire (`apps/api/src/config/compose.test.ts`) vérifie que le Compose transmet chaque variable lue par l'API, le worker et la passerelle, et que les valeurs par défaut sont acceptées.
+
+#### Agent passerelle
+
+L'agent (`node dist/gateway.js`) tourne **sur l'hôte WireGuard**, avec `DATABASE_WORKER_URL`, les clés du SecretBox et les variables `ROUTER_TUNNEL_*`, `ROUTER_ACTIVATION_PORT`, `WG_INTERFACE`, `GATEWAY_SYNC_INTERVAL_SECONDS`. Il pilote l'interface par `wg set` (capacité `CAP_NET_ADMIN`) et écoute sur `ROUTER_TUNNEL_GATEWAY:ROUTER_ACTIVATION_PORT` uniquement. La clé privée de la passerelle reste dans la configuration `wg` de l'hôte : ni l'API, ni la base, ni l'agent ne la reçoivent. Prérequis communs :
+
+- interface WireGuard configurée sur l'hôte (`wg-quick@wg0` : adresse `ROUTER_TUNNEL_GATEWAY`, port `WG_GATEWAY_PORT`) ;
+- firewall de l'hôte : `ROUTER_ACTIVATION_PORT` accepté **uniquement** sur l'interface WireGuard ;
+- **tout pair déjà présent sur l'interface** (routeur configuré à la main, comme CHR-LAB) doit être enregistré dans ECSI CLOUD avant d'activer l'enrôlement : l'agent ne touche jamais un pair inconnu de la base et refuse d'attribuer son adresse à un autre routeur (« Pair ignoré : … tenue par un pair inconnu de la base ») ; le routeur concerné resterait sans tunnel.
+
+Deux installations, au choix :
+
+1. **Conteneur** (recommandé quand l'hôte de la passerelle fait aussi tourner le Compose, cas du VPS de validation) : `docker compose --profile gateway up -d gateway`. Image `infra/docker/api.Dockerfile`, cible `gateway` : utilisateur non root, `wg` (wireguard-tools) avec la seule capacité de fichier `cap_net_admin` ; le service tourne dans le réseau de l'hôte (`network_mode: host`), `cap_drop: ALL` + `cap_add: NET_ADMIN`, système de fichiers en lecture seule, et joint PostgreSQL par son port publié sur `127.0.0.1`. La CI démarre ce conteneur sur une vraie interface WireGuard du noyau et vérifie qu'il devient sain, non root, à l'écoute sur l'adresse tunnel seulement.
+2. **systemd** (hôte de passerelle dédié, sans Docker) : `infra/systemd/ecsi-gateway.service` et `infra/systemd/gateway.env.example` (procédure en tête du fichier) : utilisateur système dédié, `AmbientCapabilities=CAP_NET_ADMIN`, `CapabilityBoundingSet=CAP_NET_ADMIN`, `NoNewPrivileges`, `ProtectSystem=strict`. Ce mode n'a pas encore été testé sur un hôte réel.
+
+#### Healthchecks des processus sans HTTP
+
+Le worker et l'agent passerelle n'ont pas de serveur HTTP : chaque cycle réussi (collecte, synchronisation des pairs) écrit un battement de cœur dans `/tmp`, et `node dist/healthcheck.js worker|gateway` vérifie qu'il date de moins de 5 min (worker) ou 90 s (passerelle). Un processus bloqué ou privé de PostgreSQL devient `unhealthy` ; il redevient `healthy` au premier cycle réussi. Avant S3B-RC2, le worker héritait du healthcheck HTTP de l'API et était marqué `unhealthy` alors qu'il fonctionnait.
 
 La migration 0006 est additive : les routeurs du Sprint 3A (dont CHR-LAB) restent supervisés sans action. Elle retire à `ecsi_app` le `DELETE` sur `routers` (suppression douce uniquement).
 
@@ -95,7 +112,8 @@ La migration 0006 est additive : les routeurs du Sprint 3A (dont CHR-LAB) resten
 
 | Image               | Dockerfile                                                 | Contenu                                                                                       |
 | ------------------- | ---------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| API                 | `infra/docker/api.Dockerfile`                              | `turbo prune`, build, `pnpm deploy --prod`, Node 22 Alpine, utilisateur non root, healthcheck |
+| API, worker         | `infra/docker/api.Dockerfile`                              | `turbo prune`, build, `pnpm deploy --prod`, Node 22 Alpine, utilisateur non root, healthcheck |
+| Agent passerelle    | `infra/docker/api.Dockerfile` (`--target gateway`)         | Même base, `wg` avec la seule capacité `cap_net_admin`, utilisateur non root                  |
 | Dashboard / portail | `infra/docker/next.Dockerfile` (`APP=web` ou `APP=portal`) | Build Next.js `standalone`, utilisateur non root                                              |
 
 Derrière un proxy d'entreprise qui intercepte TLS, `pnpm install` dans `docker build` peut échouer faute de certificat : fournir le certificat du proxy à la construction (non nécessaire sur un réseau standard).
