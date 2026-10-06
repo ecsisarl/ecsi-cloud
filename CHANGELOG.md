@@ -2,6 +2,18 @@
 
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Versions par sprint.
 
+## [S3H-H0] — 2026-10-06 — Préparation du durcissement
+
+### Ajouté
+
+- `docker-compose.prod.yml` : surcouche de production. API, migrations, worker et passerelle en `NODE_ENV=production`, ce qui active les garde-fous existants du code. Secrets et URL publiques obligatoires (`${VAR:?…}`). Mailpit retiré. Seul Nginx :80 est publié, PostgreSQL restant sur 127.0.0.1. Le Compose de développement est inchangé.
+- `scripts/generate-prod-test-env.sh` : environnement de test pour la surcouche, avec secrets aléatoires et sans affichage.
+- Tests : `apps/api/src/config/compose-prod.test.ts`. Étape CI « Pile de production » : refus sans variables, santé, `/api/docs` fermé, ports publiés, refus d'une valeur `devonly` sans afficher la valeur.
+
+### Modifié
+
+- `docs/ROADMAP.md` à jour (S2, S3A, S3B validés ; S3H en cours) ; `docs/DEPLOYMENT.md` (section production).
+
 ## [S3B-RC2] — 2026-10-05 — Corrections de la validation indépendante S3B
 
 ### Corrigé

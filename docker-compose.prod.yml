@@ -1,0 +1,115 @@
+# ECSI CLOUD — surcouche de PRODUCTION (Sprint S3H, étape H0).
+#
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+#
+# Le Compose de développement (docker-compose.yml) reste inchangé. Cette surcouche :
+#   - passe l'API, les migrations, le worker et la passerelle en NODE_ENV=production : les
+#     garde-fous de production du code s'appliquent (valeurs de développement refusées, cookies
+#     Secure, journaux JSON, création automatique du bucket S3 interdite) ;
+#   - rend OBLIGATOIRE chaque secret et chaque URL publique (${VAR:?…}) : la pile refuse de
+#     démarrer si l'un d'eux manque, sans jamais afficher de valeur ;
+#   - retire Mailpit (profil « dev-mail ») : SMTP réel obligatoire ;
+#   - ne publie plus que Nginx sur le port 80 (443 et TLS : étape H4). PostgreSQL reste publié
+#     sur 127.0.0.1 seulement, pour l'agent passerelle qui tourne sur le réseau de l'hôte.
+#
+# Le bucket S3 n'est jamais créé automatiquement en production : il doit exister (voir
+# docs/DEPLOYMENT.md). Les variables obligatoires sont listées dans docs/DEPLOYMENT.md.
+
+x-prod-env: &prod-env
+  NODE_ENV: production
+  CORS_ORIGINS: ${CORS_ORIGINS:?CORS_ORIGINS obligatoire en production}
+  DATABASE_URL: postgres://ecsi_app:${ECSI_DB_APP_PASSWORD:?ECSI_DB_APP_PASSWORD obligatoire}@postgres:5432/${POSTGRES_DB:-ecsi}
+  DATABASE_MIGRATOR_URL: postgres://ecsi_migrator:${ECSI_DB_MIGRATOR_PASSWORD:?ECSI_DB_MIGRATOR_PASSWORD obligatoire}@postgres:5432/${POSTGRES_DB:-ecsi}
+  DATABASE_AUTH_URL: postgres://ecsi_auth:${ECSI_DB_AUTH_PASSWORD:?ECSI_DB_AUTH_PASSWORD obligatoire}@postgres:5432/${POSTGRES_DB:-ecsi}
+  DATABASE_WORKER_URL: postgres://ecsi_worker:${ECSI_DB_WORKER_PASSWORD:?ECSI_DB_WORKER_PASSWORD obligatoire}@postgres:5432/${POSTGRES_DB:-ecsi}
+  REDIS_URL: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD obligatoire}@redis:6379
+  S3_BUCKET: ${S3_BUCKET:?S3_BUCKET obligatoire}
+  S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:?S3_ACCESS_KEY_ID obligatoire}
+  S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:?S3_SECRET_ACCESS_KEY obligatoire}
+  S3_AUTO_CREATE_BUCKET: 'false'
+  JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?JWT_ACCESS_SECRET obligatoire}
+  ENCRYPTION_KEY: ${ENCRYPTION_KEY:?ENCRYPTION_KEY obligatoire}
+  # Explicite en production : un identifiant erroné rendrait la rotation des clés incohérente.
+  ENCRYPTION_KEY_ID: ${ENCRYPTION_KEY_ID:?ENCRYPTION_KEY_ID obligatoire}
+  COOKIE_SECURE: 'true'
+  WEB_PUBLIC_URL: ${WEB_PUBLIC_URL:?WEB_PUBLIC_URL obligatoire}
+  SMTP_HOST: ${SMTP_HOST:?SMTP_HOST obligatoire (Mailpit est retiré en production)}
+  SMTP_PORT: ${SMTP_PORT:?SMTP_PORT obligatoire}
+  SMTP_SECURE: ${SMTP_SECURE:-true}
+  SMTP_USER: ${SMTP_USER:-}
+  SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+  SMTP_FROM: ${SMTP_FROM:?SMTP_FROM obligatoire}
+
+services:
+  postgres:
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD obligatoire}
+      ECSI_DB_MIGRATOR_PASSWORD: ${ECSI_DB_MIGRATOR_PASSWORD:?ECSI_DB_MIGRATOR_PASSWORD obligatoire}
+      ECSI_DB_APP_PASSWORD: ${ECSI_DB_APP_PASSWORD:?ECSI_DB_APP_PASSWORD obligatoire}
+      ECSI_DB_AUTH_PASSWORD: ${ECSI_DB_AUTH_PASSWORD:?ECSI_DB_AUTH_PASSWORD obligatoire}
+      ECSI_DB_WORKER_PASSWORD: ${ECSI_DB_WORKER_PASSWORD:?ECSI_DB_WORKER_PASSWORD obligatoire}
+
+  redis:
+    command:
+      [
+        'redis-server',
+        '--requirepass',
+        '${REDIS_PASSWORD:?REDIS_PASSWORD obligatoire}',
+        '--appendonly',
+        'yes',
+      ]
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD obligatoire}
+    ports: !reset []
+
+  s3:
+    environment:
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:?S3_ACCESS_KEY_ID obligatoire}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:?S3_SECRET_ACCESS_KEY obligatoire}
+    ports: !reset []
+
+  mailpit:
+    profiles: ['dev-mail']
+    ports: !reset []
+
+  migrate:
+    environment:
+      <<: *prod-env
+
+  api:
+    environment:
+      <<: *prod-env
+    depends_on: !override
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      s3:
+        condition: service_healthy
+    ports: !reset []
+
+  worker:
+    environment:
+      NODE_ENV: production
+      DATABASE_WORKER_URL: postgres://ecsi_worker:${ECSI_DB_WORKER_PASSWORD:?ECSI_DB_WORKER_PASSWORD obligatoire}@postgres:5432/${POSTGRES_DB:-ecsi}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?ENCRYPTION_KEY obligatoire}
+      ENCRYPTION_KEY_ID: ${ENCRYPTION_KEY_ID:?ENCRYPTION_KEY_ID obligatoire}
+
+  gateway:
+    environment:
+      NODE_ENV: production
+      DATABASE_WORKER_URL: postgres://ecsi_worker:${ECSI_DB_WORKER_PASSWORD:?ECSI_DB_WORKER_PASSWORD obligatoire}@127.0.0.1:5432/${POSTGRES_DB:-ecsi}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?ENCRYPTION_KEY obligatoire}
+      ENCRYPTION_KEY_ID: ${ENCRYPTION_KEY_ID:?ENCRYPTION_KEY_ID obligatoire}
+
+  web:
+    ports: !reset []
+
+  portal:
+    ports: !reset []
+
+  nginx:
+    # Port 80 seulement (tableau de bord et API, bloc 8080 de nginx.conf). Le portail captif
+    # n'est pas publié en production à ce stade (Sprint 7) ; TLS et 443 : étape H4.
+    ports: !override
+      - '80:8080'

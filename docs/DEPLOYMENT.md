@@ -129,6 +129,30 @@ Derrière un proxy d'entreprise qui intercepte TLS, `pnpm install` dans `docker 
 3. Construction des images, démarrage de l'environnement complet et vérification de la santé via Nginx.
 4. Scan de secrets gitleaks sur tout l'historique.
 
+## Production : surcouche `docker-compose.prod.yml` (Sprint S3H)
+
+Le Compose de développement fixe `NODE_ENV=development` : les garde-fous de production du code y sont inactifs. En production, on lance toujours les deux fichiers :
+
+```
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+```
+
+La surcouche :
+
+- passe l'API, les migrations, le worker et la passerelle en `NODE_ENV=production`. Le code refuse alors les valeurs contenant `devonly`, impose `COOKIE_SECURE`, des journaux JSON, une `WEB_PUBLIC_URL` en HTTPS, et interdit `S3_AUTO_CREATE_BUCKET` ;
+- rend **obligatoires** les variables ci-dessous. Si l'une manque, Compose s'arrête avec « required variable X is missing a value », sans afficher de valeur ;
+- retire Mailpit (profil `dev-mail`) : un SMTP réel est nécessaire ;
+- ne publie que Nginx sur le port **80**. 443 et TLS arrivent à l'étape H4. Redis, S3, l'API, le web et le portail ne sont plus publiés ; PostgreSQL reste publié sur `127.0.0.1` uniquement, pour l'agent passerelle, qui tourne sur le réseau de l'hôte.
+
+Variables obligatoires : `POSTGRES_PASSWORD`, `ECSI_DB_MIGRATOR_PASSWORD`, `ECSI_DB_APP_PASSWORD`, `ECSI_DB_AUTH_PASSWORD`, `ECSI_DB_WORKER_PASSWORD`, `REDIS_PASSWORD`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `JWT_ACCESS_SECRET`, `ENCRYPTION_KEY`, `ENCRYPTION_KEY_ID` (explicite en production, pour que la rotation des clés reste cohérente), `WEB_PUBLIC_URL` (HTTPS), `CORS_ORIGINS`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_FROM`. Facultatives : `SMTP_SECURE` (`true` par défaut), `SMTP_USER`, `SMTP_PASSWORD`.
+
+**Bucket S3** : il n'est jamais créé par l'API en production. Avec le SeaweedFS du Compose, créez-le une seule fois :
+`docker compose -f docker-compose.yml -f docker-compose.prod.yml exec s3 sh -c "echo 's3.bucket.create -name <S3_BUCKET>' | weed shell -master=localhost:9333"`.
+
+**Essai local ou CI** : `./scripts/generate-prod-test-env.sh <fichier>` génère des secrets de test aléatoires (droits 600, rien n'est affiché), puis `docker compose --env-file <fichier> -f docker-compose.yml -f docker-compose.prod.yml up -d`. Ce fichier ne convient pas à un vrai déploiement : ses URL et son SMTP sont fictifs.
+
+**Retour arrière** : relancer sans la surcouche, avec le seul `docker-compose.yml`. Les volumes et les données ne changent pas.
+
 ## Production (à partir du Sprint 10)
 
 Phase pilote : un serveur applicatif (Compose), PostgreSQL managé avec PITR, Redis managé, S3 managé, **une passerelle** (WireGuard + FreeRADIUS) au départ, une seconde lorsque les paliers de [MIKROTIK.md](MIKROTIK.md) le justifient. Images publiées sur GHCR, déploiement de production approuvé manuellement, migrations exécutées avant la bascule.
@@ -136,3 +160,5 @@ Phase pilote : un serveur applicatif (Compose), PostgreSQL managé avec PITR, Re
 ## Points de restauration
 
 Chaque sprint validé est marqué par un tag Git `sN-done` (ex. `s0-done`, `s1-done`). Revenir à un point de restauration : `git checkout s0-done`.
+
+Depuis S3B, la référence validée est l'étiquette **`s3b-rc2`** (commit `7496075`). La branche **`main`**, protégée (pull request obligatoire et 4 contrôles CI verts), reçoit chaque sprint après sa validation indépendante. Le développement se fait sur une branche de travail.

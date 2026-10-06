@@ -126,6 +126,45 @@ jobs:
       - run: pnpm --filter @ecsi/e2e exec playwright install --with-deps chromium
       - name: E2E Sprint 1 et 2 (navigateur réel, pile réelle)
         run: pnpm --filter @ecsi/e2e test:e2e
+      # S3H-H0 : surcouche de production. Variables obligatoires, garde-fous de production du
+      # code actifs (NODE_ENV=production), seuls Nginx :80 et PostgreSQL 127.0.0.1 publiés.
+      - name: Pile de production (docker-compose.prod.yml, secrets de test générés)
+        run: |
+          docker compose down -v
+          PROD="docker compose -f docker-compose.yml -f docker-compose.prod.yml"
+          # Sans variables : refus explicite, sans démarrer.
+          if $PROD config >/dev/null 2>config.err; then echo "variables manquantes acceptées"; exit 1; fi
+          grep -q 'obligatoire' config.err
+          ./scripts/generate-prod-test-env.sh "$RUNNER_TEMP/prod.env"
+          PROD="docker compose --env-file $RUNNER_TEMP/prod.env -f docker-compose.yml -f docker-compose.prod.yml"
+          $PROD up -d postgres redis s3
+          for i in $(seq 1 40); do
+            [ "$(docker inspect -f '{{.State.Health.Status}}' "$($PROD ps -q s3)")" = healthy ] && break
+            sleep 3
+          done
+          # Production : le bucket n'est jamais créé par l'API (S3_AUTO_CREATE_BUCKET interdit).
+          $PROD exec -T s3 sh -c "echo 's3.bucket.create -name ecsi-prod-test' | weed shell -master=localhost:9333"
+          $PROD up -d
+          for i in $(seq 1 40); do
+            state=$(docker inspect -f '{{.State.Health.Status}}' "$($PROD ps -q api)")
+            [ "$state" = healthy ] && break
+            sleep 3
+          done
+          echo "api (production) : $state"
+          [ "$state" = healthy ]
+          curl -fsS http://localhost/api/v1/health | grep -q '"status":"ok"'
+          [ "$(curl -s -o /dev/null -w '%{http_code}' http://localhost/api/docs)" = 404 ]
+          [ "$(docker inspect -f '{{.State.Health.Status}}' "$($PROD ps -q worker)")" != unhealthy ]
+          # Ports publiés : Nginx 80 sur l'hôte et PostgreSQL sur 127.0.0.1 seulement.
+          docker ps --format '{{.Ports}}' | tr ',' '\n' | grep -o '[^ ]*->' | sort -u | tee published.txt
+          [ "$(grep -cvE '^(0\.0\.0\.0:80|\[::\]:80|127\.0\.0\.1:5432)->$' published.txt)" = 0 ]
+          # Valeur « devonly » : refus par l'API, nom de la variable sans sa valeur.
+          if $PROD run --rm --no-deps -e JWT_ACCESS_SECRET=devonly-ci-secret-000000000000000000000000 api >devonly.log 2>&1; then
+            echo "valeur devonly acceptée"; exit 1
+          fi
+          grep -q 'JWT_ACCESS_SECRET : valeur de développement interdite en production' devonly.log
+          [ "$(grep -c 'devonly-ci-secret' devonly.log)" = 0 ]
+          $PROD down -v
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
