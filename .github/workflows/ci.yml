@@ -85,6 +85,7 @@ jobs:
         env:
           WG_INTERFACE: wgci
         run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq wireguard-tools >/dev/null
           sudo modprobe wireguard
           sudo ip link add wgci type wireguard
           wg genkey | sudo tee /tmp/wgci.key >/dev/null
