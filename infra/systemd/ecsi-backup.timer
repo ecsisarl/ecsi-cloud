@@ -1,0 +1,13 @@
+# ECSI CLOUD - sauvegarde quotidienne (Sprint S3H, étape H1). Voir ecsi-backup.service.
+# Rollback : systemctl disable --now ecsi-backup.timer (aucun effet sur l'application).
+[Unit]
+Description=ECSI CLOUD - sauvegarde PostgreSQL quotidienne
+
+[Timer]
+OnCalendar=*-*-* 02:30:00 UTC
+RandomizedDelaySec=15min
+# Rattrape une sauvegarde manquée (serveur arrêté à l'heure prévue).
+Persistent=true
+
+[Install]
+WantedBy=timers.target

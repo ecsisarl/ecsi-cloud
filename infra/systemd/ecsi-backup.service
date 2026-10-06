@@ -1,0 +1,25 @@
+# ECSI CLOUD - sauvegarde PostgreSQL chiffrée et vérifiée (Sprint S3H, étape H1).
+# Déclenché par ecsi-backup.timer. Voir docs/SAUVEGARDE.md.
+#
+# Installation (en root), dépôt ECSI CLOUD dans /opt/ecsi-cloud (adapter ExecStart sinon) :
+#   1. clé publique age du destinataire : /etc/ecsi/backup-recipients.txt (0644, « age1… » ;
+#      JAMAIS la clé privée sur le serveur) ;
+#   2. configuration facultative : /etc/ecsi/backup.conf (0600), voir docs/SAUVEGARDE.md ;
+#   3. cp ecsi-backup.service ecsi-backup.timer /etc/systemd/system/ && systemctl daemon-reload
+#      && systemctl enable --now ecsi-backup.timer
+#   4. essai immédiat : systemctl start ecsi-backup.service ; journalctl -u ecsi-backup.service
+[Unit]
+Description=ECSI CLOUD - sauvegarde PostgreSQL chiffrée et vérifiée
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/ecsi-cloud/ops/backup/pg-backup.sh
+# root : accès au démon Docker (docker exec dans le conteneur PostgreSQL, pile jetable).
+UMask=0077
+NoNewPrivileges=yes
+PrivateTmp=yes
+Nice=10
+IOSchedulingClass=idle
+TimeoutStartSec=1h

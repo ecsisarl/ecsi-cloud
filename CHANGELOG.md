@@ -2,6 +2,20 @@
 
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Versions par sprint.
 
+## [S3H-H1] — 2026-10-06 — Sauvegarde PostgreSQL chiffrée et restauration testée
+
+### Ajouté
+
+- `ops/backup/pg-backup.sh` : sauvegarde en lecture seule (`pg_dump -Fc`, rôles sans mot de passe), restaurée et contrôlée à chaque exécution dans une pile jetable isolée, manifeste écrit depuis la copie restaurée, archive chiffrée avec age (clé publique seule sur le serveur), empreinte SHA-256, rétention 7/4/3 appliquée seulement après une sauvegarde vérifiée.
+- `ops/backup/pg-restore-test.sh` : restauration de test dans une pile jetable (jamais la production) : empreinte, déchiffrement, comparaison complète au manifeste (lignes, RLS, rôles, droits, migrations, audit, déchiffrement de chaque mot de passe RouterOS et secret 2FA), API saine sur la base restaurée ; mode `--reprise` pour l'exercice de reprise.
+- Commande `dist/cli/verify-restore.js` et module `apps/api/src/database/restore-check.ts` (compteurs seulement, aucune valeur affichée).
+- `infra/systemd/ecsi-backup.service` et `.timer` (quotidien) ; `docs/SAUVEGARDE.md`.
+- Tests : intégration `test/backup-restore.int.test.ts` (pg_dump / pg_restore entre deux PostgreSQL 18 réels) ; `ops/backup/tests/retention.test.sh` ; essai Docker complet `ops/backup/tests/backup-restore-e2e.sh` en CI avec cas négatifs (clé privée age sur le serveur, fichier corrompu, mauvaise clé age, mauvaise `ENCRYPTION_KEY`, projet de production, projet existant).
+
+### Modifié
+
+- `apps/api/test/helpers/infra.ts` : `startPostgres()` extrait de `startInfra()` (même conteneur, réutilisé comme cible de restauration).
+
 ## [S3H-H0] — 2026-10-06 — Préparation du durcissement
 
 ### Ajouté

@@ -32,6 +32,10 @@ jobs:
       - run: pnpm test
       - name: Tests des outils de laboratoire (pilote S3B)
         run: node --test 'lab/**/*.test.mjs'
+      - name: Scripts de sauvegarde (shellcheck, rétention)
+        run: |
+          shellcheck -x -e SC1091 ops/backup/*.sh ops/backup/tests/*.sh
+          ops/backup/tests/retention.test.sh
       - run: pnpm build
         env:
           NEXT_TELEMETRY_DISABLED: '1'
@@ -165,6 +169,12 @@ jobs:
           grep -q 'JWT_ACCESS_SECRET : valeur de développement interdite en production' devonly.log
           [ "$(grep -c 'devonly-ci-secret' devonly.log)" = 0 ]
           $PROD down -v
+      # S3H-H1 : sauvegarde chiffrée (age) vérifiée, restauration de test réelle et cas négatifs
+      # (fichier corrompu, mauvaise clé age, mauvaise ENCRYPTION_KEY, cible de production).
+      - name: Sauvegarde PostgreSQL chiffrée et restauration de test
+        run: |
+          sudo apt-get install -y -qq age >/dev/null
+          ops/backup/tests/backup-restore-e2e.sh "$RUNNER_TEMP/sauvegarde"
       - uses: actions/upload-artifact@v4
         if: failure()
         with:

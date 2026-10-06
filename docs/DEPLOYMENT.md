@@ -153,6 +153,10 @@ Variables obligatoires : `POSTGRES_PASSWORD`, `ECSI_DB_MIGRATOR_PASSWORD`, `ECSI
 
 **Retour arrière** : relancer sans la surcouche, avec le seul `docker-compose.yml`. Les volumes et les données ne changent pas.
 
+## Sauvegarde et restauration (Sprint S3H)
+
+Sauvegarde PostgreSQL chiffrée (age), vérifiée par une restauration jetable à chaque exécution, timer systemd quotidien, restauration de test et exercice de reprise : voir [SAUVEGARDE.md](SAUVEGARDE.md).
+
 ## Production (à partir du Sprint 10)
 
 Phase pilote : un serveur applicatif (Compose), PostgreSQL managé avec PITR, Redis managé, S3 managé, **une passerelle** (WireGuard + FreeRADIUS) au départ, une seconde lorsque les paliers de [MIKROTIK.md](MIKROTIK.md) le justifient. Images publiées sur GHCR, déploiement de production approuvé manuellement, migrations exécutées avant la bascule.

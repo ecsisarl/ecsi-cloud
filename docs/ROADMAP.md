@@ -30,7 +30,7 @@ Pour les fonctions MikroTik : checklist de [MIKROTIK.md](MIKROTIK.md) cochée su
 | **S2**  | Entreprises, utilisateurs, sites, groupes de sites, audit                                                                           | ✅ Validé (commit `8984de6`)                |
 | **S3A** | Laboratoire CHR (RouterOS v7, WireGuard, API par le tunnel) et fondation applicative                                                | ✅ Validé (commit `7a89b61`)                |
 | **S3B** | Gestion et enrôlement des routeurs depuis ECSI CLOUD (RC2)                                                                          | ✅ Validé (commit `7496075`, tag `s3b-rc2`) |
-| **S3H** | Durcissement et préproduction : sauvegarde/restauration, rotation des secrets, TLS public, gateway systemd, E2E Routeurs, guide VPS | 🔄 En cours (H0)                            |
+| **S3H** | Durcissement et préproduction : sauvegarde/restauration, rotation des secrets, TLS public, gateway systemd, E2E Routeurs, guide VPS | 🔄 En cours (H0 validé, H1 livré)           |
 | S4      | Monitoring, statut ONLINE/OFFLINE, alertes in-app                                                                                   | ○                                           |
 | S5      | RADIUS central (portée LOCAL), accounting, CoA, configuration Hotspot                                                               | ○                                           |
 | S6      | Forfaits et tickets                                                                                                                 | ○                                           |
