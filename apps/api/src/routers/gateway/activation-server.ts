@@ -62,7 +62,9 @@ export class ActivationServer {
       });
       server.requestTimeout = 10_000;
       server.headersTimeout = 5_000;
-      server.once('error', reject);
+      server.once('error', (err: NodeJS.ErrnoException) => {
+        reject(err.code === 'EADDRINUSE' ? new Error(addressInUseMessage(host, port)) : err);
+      });
       server.listen(port, host, () => {
         this.server = server;
         resolve(server);
@@ -209,4 +211,16 @@ function send(res: ServerResponse, status: number, message: string): void {
   if (res.headersSent) return;
   res.writeHead(status, { 'content-type': 'application/json', connection: 'close' });
   res.end(JSON.stringify({ status, message }));
+}
+
+/**
+ * Un port publié par Docker sur 0.0.0.0 (Nginx du Compose : 8080, 8081) occupe aussi l'adresse
+ * tunnel de l'hôte : l'agent ne peut alors pas écouter dessus (constaté en CI, S3B-RC2).
+ */
+export function addressInUseMessage(host: string, port: number): string {
+  return (
+    `Port d'activation ${host}:${port} déjà utilisé. Un service de la même machine écoute sur ` +
+    `toutes les adresses (0.0.0.0:${port}), par exemple Nginx du Compose publié sans adresse : ` +
+    `fixez NGINX_BIND_ADDRESS (127.0.0.1 ou l'adresse publique) ou changez ROUTER_ACTIVATION_PORT.`
+  );
 }

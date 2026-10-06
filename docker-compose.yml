@@ -275,9 +275,12 @@ services:
       - api
       - web
       - portal
+    # Toutes les interfaces par défaut (portail testable depuis un téléphone du réseau local).
+    # Sur une machine qui héberge aussi l'agent passerelle, 0.0.0.0:8081 occuperait l'adresse
+    # tunnel (port d'activation) : fixer NGINX_BIND_ADDRESS (127.0.0.1 ou l'adresse publique).
     ports:
-      - '8080:8080'
-      - '8081:8081'
+      - '${NGINX_BIND_ADDRESS:-0.0.0.0}:8080:8080'
+      - '${NGINX_BIND_ADDRESS:-0.0.0.0}:8081:8081'
 
 volumes:
   postgres-data:

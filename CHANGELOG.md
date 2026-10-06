@@ -10,6 +10,7 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Ver
 - Worker : healthcheck propre (battement de cœur du dernier cycle réussi) au lieu du healthcheck HTTP de l'API, qui le marquait `unhealthy`.
 - `lab/routeros/s3b/pilote.mjs` : statuts HTTP vérifiés avant tout traitement, erreurs API affichées proprement (404 d'un routeur supprimé), code de sortie 1 ; tests `node --test`.
 - `WG_GATEWAY_ENDPOINT` : message explicite si la valeur contient `:port` (le port est `WG_GATEWAY_PORT`).
+- Agent passerelle sur la même machine que le Compose : Nginx publié sur `0.0.0.0:8081` occupait le port d'activation de l'adresse tunnel (constaté par la CI). Adresse de publication de Nginx réglable (`NGINX_BIND_ADDRESS`, défaut inchangé `0.0.0.0`) et message d'erreur explicite de l'agent.
 
 ### Ajouté
 

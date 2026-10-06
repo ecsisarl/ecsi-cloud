@@ -20,6 +20,7 @@ interface ComposeService {
   cap_add?: string[];
   cap_drop?: string[];
   profiles?: string[];
+  ports?: string[];
 }
 const compose = parse(
   readFileSync(new URL('../../../../docker-compose.yml', import.meta.url), 'utf8'),
@@ -114,5 +115,17 @@ describe('docker-compose.yml', () => {
     for (const key of ['JWT_ACCESS_SECRET', 'DATABASE_URL', 'DATABASE_AUTH_URL', 'REDIS_URL']) {
       expect(gateway.environment, key).not.toHaveProperty(key);
     }
+  });
+
+  it('Nginx : toutes les interfaces par défaut, adresse fixable pour libérer l’adresse tunnel', () => {
+    const ports = service('nginx').ports ?? [];
+    expect(ports).toEqual([
+      '${NGINX_BIND_ADDRESS:-0.0.0.0}:8080:8080',
+      '${NGINX_BIND_ADDRESS:-0.0.0.0}:8081:8081',
+    ]);
+    expect(Object.values(interpolate(Object.fromEntries(ports.entries())))).toEqual([
+      '0.0.0.0:8080:8080',
+      '0.0.0.0:8081:8081',
+    ]);
   });
 });

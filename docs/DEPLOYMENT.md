@@ -22,6 +22,8 @@ docker compose up --build
 
 Nginx écoute sur toutes les interfaces afin de pouvoir tester le portail depuis un téléphone du réseau local ; les autres services ne sont joignables que depuis la machine.
 
+`NGINX_BIND_ADDRESS` (défaut `0.0.0.0`) fixe l'adresse de publication de Nginx. Sur une machine qui exécute aussi l'agent passerelle, une publication sur `0.0.0.0:8081` occupe le port 8081 de **toutes** les adresses, y compris l'adresse tunnel `10.200.0.1` où l'agent doit écouter l'activation : l'agent s'arrête alors avec « Port d'activation … déjà utilisé ». Fixez `NGINX_BIND_ADDRESS` (`127.0.0.1` ou l'adresse publique du serveur) ou choisissez un autre `ROUTER_ACTIVATION_PORT` (les scripts d'enrôlement générés suivent cette valeur). Constaté par la CI S3B-RC2.
+
 Ordre de démarrage : PostgreSQL sain → migrations réussies → API (avec Redis et S3 sains) → web, portail → Nginx.
 
 Réinitialiser complètement l'environnement local (efface les données) : `docker compose down -v`.

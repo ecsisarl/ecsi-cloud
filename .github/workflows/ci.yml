@@ -58,6 +58,8 @@ jobs:
       SEED_PASSWORD: ci-demo-password-${{ github.run_id }}
       # Tous les scénarios E2E se connectent depuis la même IP : limite relevée pour ce job.
       RATE_LIMIT_LOGIN_PER_IP: '200'
+      # L'agent passerelle tourne sur le même runner : Nginx ne doit pas occuper 0.0.0.0:8081.
+      NGINX_BIND_ADDRESS: 127.0.0.1
     steps:
       - uses: actions/checkout@v5
       - run: docker compose build

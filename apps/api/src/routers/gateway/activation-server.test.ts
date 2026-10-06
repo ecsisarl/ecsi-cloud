@@ -1,5 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { randomBytes } from 'node:crypto';
+import { createServer, type Server } from 'node:http';
 import { PassThrough } from 'node:stream';
 import { describe, expect, it } from 'vitest';
 import { SecretBox } from '../../auth/crypto/secret-box.js';
@@ -147,5 +148,24 @@ describe('activation par le tunnel (agent passerelle)', () => {
     });
     expect(parseActivation({ ...valid, password: `${PASSWORD}\n` })).toBeNull();
     expect(parseActivation([valid])).toBeNull();
+  });
+
+  it('port déjà occupé sur toutes les adresses : erreur explicite, sans écoute partielle', async () => {
+    const squatter: Server = createServer();
+    await new Promise<void>((resolve) => squatter.listen(0, '0.0.0.0', resolve));
+    const address = squatter.address();
+    if (address === null || typeof address === 'string') throw new Error('adresse inattendue');
+    const server = new ActivationServer(fakeStore({}).store, box, network, logger);
+    try {
+      await expect(server.listen('127.0.0.1', address.port)).rejects.toThrow(
+        `Port d'activation 127.0.0.1:${address.port} déjà utilisé`,
+      );
+      await expect(server.listen('127.0.0.1', address.port)).rejects.toThrow(
+        /NGINX_BIND_ADDRESS.*ROUTER_ACTIVATION_PORT/,
+      );
+    } finally {
+      await server.close();
+      await new Promise((resolve) => squatter.close(resolve));
+    }
   });
 });
