@@ -106,9 +106,14 @@ jobs:
           [ "$state" = healthy ]
           # Utilisateur non root ; activation à l'écoute sur l'adresse tunnel SEULEMENT.
           [ "$(docker compose exec -T gateway id -u)" != 0 ]
-          sudo ss -ltnH 'sport = :8081' | tee listen.txt
+          # Nginx du Compose publie aussi 127.0.0.1:8081 (portail) : on contrôle les sockets du
+          # processus de l'agent, et l'absence de toute écoute 8081 sur toutes les adresses.
+          pid=$(docker inspect -f '{{.State.Pid}}' "$(docker compose ps -q gateway)")
+          sudo ss -ltnpH 'sport = :8081' | tee all.txt
+          grep "pid=$pid," all.txt | tee listen.txt
           grep -q '10.200.0.1:8081' listen.txt
           [ "$(grep -cv '10.200.0.1:8081' listen.txt)" = 0 ]
+          [ "$(grep -cE '(0\.0\.0\.0|\*|\[::\]):8081' all.txt)" = 0 ]
           docker compose --profile gateway stop gateway
       - name: Comptes de démonstration ENTREPRISE_A / ENTREPRISE_B
         run: docker compose run --rm -e SEED_PASSWORD migrate node dist/database/seed.js
