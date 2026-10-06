@@ -50,21 +50,21 @@ Un volume PostgreSQL créé avant le Sprint 1 ne contient pas le rôle `ecsi_aut
 | `ENCRYPTION_PREVIOUS_KEYS` | Anciennes clés encore lisibles pendant une rotation : `id:base64,…` (vide hors rotation)                                |
 | `RATE_LIMIT_LOGIN_PER_IP`  | Connexions par IP et par 15 min (20 par défaut) ; relevé à 200 uniquement pour les tests E2E (toutes depuis la même IP) |
 
-**Changer de clé de chiffrement** : ne jamais remplacer `ENCRYPTION_KEY` seule. Suivre la procédure de rotation de [SECURITY.md](SECURITY.md#rotation-de-la-clé-de-chiffrement) : nouvelle clé active avec un nouvel identifiant, ancienne clé dans `ENCRYPTION_PREVIOUS_KEYS`, puis `docker compose run --rm migrate node dist/cli/rotate-encryption-keys.js --dry-run` et sans `--dry-run` ([ADR 0014](adr/0014-chiffrement-enveloppe-rotation.md)).
+**Changer de clé de chiffrement** : ne jamais remplacer `ENCRYPTION_KEY` seule. Suivre la procédure en 9 temps de [SECURITY.md](SECURITY.md#rotation-de-la-clé-de-chiffrement) : nouvelle clé active avec un nouvel identifiant, ancienne clé dans `ENCRYPTION_PREVIOUS_KEYS`, puis le service d'exploitation `keys-rotate` (`docker compose --profile ops run --rm --no-deps keys-rotate --verify | --dry-run`, puis sans option) ([ADR 0014](adr/0014-chiffrement-enveloppe-rotation.md)). L'ancienne commande `docker compose run --rm migrate node dist/cli/rotate-encryption-keys.js` ne recevait pas les connexions nécessaires aux mots de passe RouterOS : ne plus l'utiliser.
 
 ### Variables ajoutées au Sprint 3A
 
-| Variable                       | Rôle                                                                                                   |
-| ------------------------------ | ------------------------------------------------------------------------------------------------------ |
-| `ECSI_DB_WORKER_PASSWORD`      | Mot de passe du rôle PostgreSQL `ecsi_worker` (créé par `infra/postgres/init/01-roles.sh`)             |
-| `DATABASE_WORKER_URL`          | Connexion du worker de supervision (rôle `ecsi_worker`) ; aussi utilisée par `keys:rotate` si présente |
-| `ROUTER_TUNNEL_CIDR`           | Plage des adresses tunnel WireGuard des routeurs (`10.200.0.0/24`) : seule plage jamais contactée      |
-| `ROUTER_TUNNEL_GATEWAY`        | Adresse de la passerelle WireGuard (`10.200.0.1`), jamais une cible                                    |
-| `ROUTER_POLL_INTERVAL_SECONDS` | Intervalle de collecte par routeur (60 s)                                                              |
-| `ROUTER_POLL_CONCURRENCY`      | Collectes simultanées (10)                                                                             |
-| `ROUTER_POLL_BATCH_SIZE`       | Routeurs réservés par cycle (100)                                                                      |
-| `ROUTER_OFFLINE_AFTER_SECONDS` | Silence minimal avant OFFLINE (180 s, seuil du laboratoire)                                            |
-| `ROUTER_OFFLINE_MIN_FAILURES`  | Échecs consécutifs minimaux avant OFFLINE (3)                                                          |
+| Variable                       | Rôle                                                                                                          |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------- |
+| `ECSI_DB_WORKER_PASSWORD`      | Mot de passe du rôle PostgreSQL `ecsi_worker` (créé par `infra/postgres/init/01-roles.sh`)                    |
+| `DATABASE_WORKER_URL`          | Connexion du worker de supervision (rôle `ecsi_worker`) ; repli de `keys-rotate` sans `DATABASE_MIGRATOR_URL` |
+| `ROUTER_TUNNEL_CIDR`           | Plage des adresses tunnel WireGuard des routeurs (`10.200.0.0/24`) : seule plage jamais contactée             |
+| `ROUTER_TUNNEL_GATEWAY`        | Adresse de la passerelle WireGuard (`10.200.0.1`), jamais une cible                                           |
+| `ROUTER_POLL_INTERVAL_SECONDS` | Intervalle de collecte par routeur (60 s)                                                                     |
+| `ROUTER_POLL_CONCURRENCY`      | Collectes simultanées (10)                                                                                    |
+| `ROUTER_POLL_BATCH_SIZE`       | Routeurs réservés par cycle (100)                                                                             |
+| `ROUTER_OFFLINE_AFTER_SECONDS` | Silence minimal avant OFFLINE (180 s, seuil du laboratoire)                                                   |
+| `ROUTER_OFFLINE_MIN_FAILURES`  | Échecs consécutifs minimaux avant OFFLINE (3)                                                                 |
 
 Le worker (`node dist/worker.js`, service `worker` de Docker Compose) ne reçoit que `DATABASE_WORKER_URL`, les clés du SecretBox et les variables `ROUTER_*` : ni les connexions `ecsi_app`/`ecsi_auth`, ni le secret JWT, ni Redis/S3. Il doit tourner sur un hôte qui route la plage tunnel vers la passerelle WireGuard ; en développement, sans passerelle, aucun routeur n'est joignable (état `OFFLINE`).
 

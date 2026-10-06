@@ -102,6 +102,15 @@ services:
       ENCRYPTION_KEY: ${ENCRYPTION_KEY:?ENCRYPTION_KEY obligatoire}
       ENCRYPTION_KEY_ID: ${ENCRYPTION_KEY_ID:?ENCRYPTION_KEY_ID obligatoire}
 
+  keys-rotate:
+    environment:
+      NODE_ENV: production
+      DATABASE_MIGRATOR_URL: postgres://ecsi_migrator:${ECSI_DB_MIGRATOR_PASSWORD:?ECSI_DB_MIGRATOR_PASSWORD obligatoire}@postgres:5432/${POSTGRES_DB:-ecsi}
+      DATABASE_AUTH_URL: postgres://ecsi_auth:${ECSI_DB_AUTH_PASSWORD:?ECSI_DB_AUTH_PASSWORD obligatoire}@postgres:5432/${POSTGRES_DB:-ecsi}
+      DATABASE_WORKER_URL: postgres://ecsi_worker:${ECSI_DB_WORKER_PASSWORD:?ECSI_DB_WORKER_PASSWORD obligatoire}@postgres:5432/${POSTGRES_DB:-ecsi}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?ENCRYPTION_KEY obligatoire}
+      ENCRYPTION_KEY_ID: ${ENCRYPTION_KEY_ID:?ENCRYPTION_KEY_ID obligatoire}
+
   web:
     ports: !reset []
 

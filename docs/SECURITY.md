@@ -70,10 +70,86 @@ Décisions détaillées : [ADR 0013](adr/0013-console-plateforme-role-auth.md) (
 
 ### Rotation de la clé de chiffrement
 
-1. Générer une nouvelle clé : `openssl rand -base64 32`.
-2. Déployer avec `ENCRYPTION_KEY=<nouvelle>`, `ENCRYPTION_KEY_ID=<nouvel id>` (ex. `k2`) et `ENCRYPTION_PREVIOUS_KEYS=k1:<ancienne clé>`. Les secrets existants restent lisibles.
-3. Simuler puis exécuter la rotation : `docker compose run --rm migrate node dist/cli/rotate-encryption-keys.js --dry-run`, puis sans `--dry-run` (ou `pnpm --filter @ecsi/api keys:rotate` hors Docker, après build). La commande est idempotente et n'affiche ni valeur ni clé.
-4. Retirer l'ancienne clé de `ENCRYPTION_PREVIOUS_KEYS` **uniquement** quand la commande indique qu'aucune donnée n'en dépend. Les codes de récupération encore liés à l'ancienne clé deviennent sinon inutilisables (l'utilisateur peut les régénérer).
+Procédure validée en S3H-H2. Exemple : `k2` active aujourd'hui, `k3` nouvelle clé.
+
+**Ce que la clé protège.**
+
+- Les mots de passe RouterOS des routeurs, tous, y compris les routeurs supprimés.
+- Les secrets 2FA.
+- Les codes de récupération 2FA. Ce sont des empreintes HMAC : ils ne peuvent pas être ré-enveloppés et doivent être régénérés par les utilisateurs.
+- Les empreintes d'e-mail des limites de débit (remises à zéro, sans conséquence).
+
+**Principes.**
+
+- L'ancienne clé reste dans `ENCRYPTION_PREVIOUS_KEYS` jusqu'à ce que le contrôle `--verify` déclare qu'aucune donnée n'en dépend.
+- Elle est ensuite conservée **hors ligne** tant qu'il existe des sauvegardes antérieures à la rotation : elles ne se restaurent qu'avec elle.
+- La commande ne retire jamais une clé.
+- **Ré-enveloppe contrôlée** :
+  - chaque secret doit se déchiffrer avant et après, à l'identique, sinon rien n'est écrit ;
+  - l'écriture est conditionnelle : un identifiant modifié pendant la rotation (activation d'un routeur, nouvelle 2FA), déjà sous la clé active, n'est pas écrasé ;
+  - seule la clé de données change d'enveloppe.
+- **Commande d'exploitation** : service Compose `keys-rotate`, profil `ops`, sans port ni dépendance. Ses sorties ne contiennent que des compteurs et des identifiants de clé.
+
+```
+docker build -f infra/docker/api.Dockerfile -t ecsi-cloud/api:s3h-h2 .   # image de la commande
+export ECSI_OPS_IMAGE=ecsi-cloud/api:s3h-h2
+OPS="docker compose --profile ops run --rm --no-deps keys-rotate"        # + -f docker-compose.prod.yml si la surcouche est utilisée
+$OPS --verify      # contrôle, lecture seule
+$OPS --dry-run     # simulation : chaque secret est contrôlé, rien n'est écrit
+$OPS               # rotation, puis contrôle
+```
+
+`--verify` donne, pour les mots de passe RouterOS et les secrets 2FA :
+
+- le nombre de secrets par identifiant de clé ;
+- le nombre de secrets sous la clé active, déchiffrés **avec elle seule** ;
+- le nombre de secrets encore sous une ancienne clé ;
+- le nombre de secrets illisibles.
+
+Il compte aussi les codes de récupération par clé. Code de sortie non nul s'il existe un illisible.
+
+**Procédure** (l'ancienne clé reste disponible jusqu'au point 8) :
+
+1. **Sauvegarde H1 vérifiée** : `ops/backup/pg-backup.sh`, puis restauration de test (docs/SAUVEGARDE.md).
+2. **Nouvelle clé.**
+   - `openssl rand -base64 32`, rangée d'abord dans le coffre hors ligne.
+   - Dans `.env` :
+     - `ENCRYPTION_KEY=<k3>` ;
+     - `ENCRYPTION_KEY_ID=k3` ;
+     - `ENCRYPTION_PREVIOUS_KEYS=k2:<k2>`, en conservant toute autre ancienne clé déjà présente.
+   - Avant tout redémarrage, `$OPS --verify` : attendu `0 illisible(s)`. Cela prouve que `k2` a été recopiée correctement.
+   - Puis redémarrer **tous** les processus qui déchiffrent, avec les deux clés : `docker compose --profile gateway up -d --no-build`.
+3. **Contrôle.**
+   - Services `healthy`.
+   - Routeurs ONLINE, aucun `last_error` « indéchiffrable ».
+   - Connexion 2FA OK.
+   - `$OPS --verify` : `0 illisible(s)`, « NE PAS retirer ».
+4. **Simulation** : `$OPS --dry-run`, avec 0 en échec.
+5. **Rotation** : `$OPS`, avec 0 en échec. Elle est idempotente : une deuxième exécution ré-enveloppe 0.
+6. **Contrôle** : « 0 encore sous une ancienne clé, 0 illisible(s) ». Si des codes de récupération dépendent encore de `k2`, les utilisateurs concernés les régénèrent, puis on relance `--verify`.
+7. **Observation.**
+   - Plusieurs cycles du worker (au moins 3 min), routeurs ONLINE, connexion 2FA OK.
+   - Nouvelle sauvegarde H1 vérifiée, désormais sous `k3`.
+8. **Retrait de `k2` de l'environnement**, seulement si `--verify` déclare « aucune donnée ne dépend plus des anciennes clés ».
+   - Vider `ENCRYPTION_PREVIOUS_KEYS`, puis `docker compose --profile gateway up -d --no-build`.
+   - `$OPS --verify` : `clés fournies : k3`, `0 illisible(s)`.
+   - Routeurs ONLINE, 2FA OK.
+9. **`k2` conservée hors ligne, sous scellé**, tant qu'une sauvegarde antérieure à la rotation existe (rétention : 3 mois). Pour restaurer une telle sauvegarde : `ENCRYPTION_PREVIOUS_KEYS=k2:<k2>` dans le fichier passé à `pg-restore-test.sh --env`.
+
+**Retour arrière.**
+
+- **Avant le point 8** :
+  - `ENCRYPTION_KEY=<k2>`, `ENCRYPTION_KEY_ID=k2`, `ENCRYPTION_PREVIOUS_KEYS=k3:<k3>` ;
+  - `docker compose --profile gateway up -d --no-build` ;
+  - `$OPS` ré-enveloppe tout sous `k2`, puis `$OPS --verify`.
+- **Après le point 8** : remettre `k2` dans `ENCRYPTION_PREVIOUS_KEYS` depuis le scellé, puis redémarrer.
+- **En dernier recours** : la sauvegarde H1 et `k2`.
+
+**Rôles utilisés par `keys-rotate`.**
+
+- **Propriétaire des tables** (`DATABASE_MIGRATOR_URL`) : contrôle et mots de passe RouterOS. Lui seul voit les routeurs supprimés et en cours d'enrôlement, car la RLS de `ecsi_worker` les masque.
+- **`ecsi_auth`** : secrets 2FA.
+- **Repli sans `DATABASE_MIGRATOR_URL`** : `ecsi_worker`, routeurs actifs seulement. La commande l'indique, et l'ancienne clé n'est alors jamais déclarée retirable.
 
 ### Limites de débit
 

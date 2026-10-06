@@ -2,6 +2,19 @@
 
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Versions par sprint.
 
+## [S3H-H2] — 2026-10-07 — Rotation de la clé de chiffrement
+
+### Corrigé
+
+- Rotation : la commande documentée (`docker compose run --rm migrate …`) ne recevait pas de connexion permettant de ré-envelopper les mots de passe RouterOS, et les routeurs supprimés (invisibles pour `ecsi_worker`) n'étaient jamais traités. Service d'exploitation `keys-rotate` (profil `ops`, sans port ni dépendance) avec les seules connexions nécessaires ; mots de passe RouterOS traités par le propriétaire des tables (tous les routeurs).
+
+### Ajouté
+
+- Ré-enveloppe contrôlée (`SecretBox.rewrapVerified`) : chaque secret doit se déchiffrer avant et après, à l'identique, sinon rien n'est écrit ; écriture conditionnelle (un identifiant modifié pendant la rotation n'est pas écrasé).
+- `rotate-encryption-keys --verify` (lecture seule) : déchiffrement de chaque mot de passe RouterOS et secret 2FA avec la seule clé active, compteurs par clé, codes de récupération par clé ; l'ancienne clé n'est déclarée retirable qu'avec 0 restant et 0 illisible. Contrôle exécuté automatiquement après chaque rotation.
+- Procédure en 9 temps et retour arrière : `docs/SECURITY.md`.
+- Tests : intégration `test/key-rotation.int.test.ts` (11 tests) ; essai Docker complet `ops/keys/tests/key-rotation-e2e.sh` en CI ; tests du service Compose.
+
 ## [S3H-H1] — 2026-10-06 — Sauvegarde PostgreSQL chiffrée et restauration testée
 
 ### Ajouté

@@ -238,6 +238,29 @@ services:
       migrate:
         condition: service_completed_successfully
 
+  # Exploitation (Sprint S3H-H2) : contrôle et rotation de la clé de chiffrement, à la demande
+  # (docs/SECURITY.md, « Rotation de la clé de chiffrement »). Aucun port, aucun démarrage
+  # automatique, aucune dépendance (ne relance jamais PostgreSQL) :
+  #   docker compose --profile ops run --rm --no-deps keys-rotate --verify | --dry-run | (rotation)
+  # Image : ECSI_OPS_IMAGE (une image contenant la commande S3H-H2), jamais construite ici.
+  keys-rotate:
+    profiles: ['ops']
+    image: ${ECSI_OPS_IMAGE:-ecsi-cloud/api:dev}
+    pull_policy: never
+    entrypoint: ['node', 'dist/cli/rotate-encryption-keys.js']
+    command: []
+    restart: 'no'
+    healthcheck:
+      disable: true
+    environment:
+      NODE_ENV: development
+      DATABASE_MIGRATOR_URL: postgres://ecsi_migrator:${ECSI_DB_MIGRATOR_PASSWORD:-devonly-migrator-password}@postgres:5432/${POSTGRES_DB:-ecsi}
+      DATABASE_AUTH_URL: postgres://ecsi_auth:${ECSI_DB_AUTH_PASSWORD:-devonly-auth-password}@postgres:5432/${POSTGRES_DB:-ecsi}
+      DATABASE_WORKER_URL: postgres://ecsi_worker:${ECSI_DB_WORKER_PASSWORD:-devonly-worker-password}@postgres:5432/${POSTGRES_DB:-ecsi}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-devonlydevonlydevonlydevonlydevonlydevonlyA=}
+      ENCRYPTION_KEY_ID: ${ENCRYPTION_KEY_ID:-k1}
+      ENCRYPTION_PREVIOUS_KEYS: ${ENCRYPTION_PREVIOUS_KEYS:-}
+
   web:
     build:
       context: .

@@ -34,7 +34,7 @@ jobs:
         run: node --test 'lab/**/*.test.mjs'
       - name: Scripts de sauvegarde (shellcheck, rétention)
         run: |
-          shellcheck -x -e SC1091 ops/backup/*.sh ops/backup/tests/*.sh
+          shellcheck -x -e SC1091 ops/backup/*.sh ops/backup/tests/*.sh ops/keys/tests/*.sh
           ops/backup/tests/retention.test.sh
       - run: pnpm build
         env:
@@ -175,6 +175,10 @@ jobs:
         run: |
           sudo apt-get install -y -qq age >/dev/null
           ops/backup/tests/backup-restore-e2e.sh "$RUNNER_TEMP/sauvegarde"
+      # S3H-H2 : rotation k2 -> k3 rejouée selon la procédure de docs/SECURITY.md (sauvegarde
+      # vérifiée, contrôle, simulation, rotation contrôlée, retour arrière, retrait de k2).
+      - name: Rotation de la clé de chiffrement (procédure complète)
+        run: ops/keys/tests/key-rotation-e2e.sh "$RUNNER_TEMP/rotation"
       - uses: actions/upload-artifact@v4
         if: failure()
         with:

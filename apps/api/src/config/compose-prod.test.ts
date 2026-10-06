@@ -14,6 +14,8 @@ import { parseWorkerEnv } from './worker-env.js';
 type Env = Record<string, string | number>;
 interface Service {
   environment?: Env;
+  entrypoint?: string[];
+  pull_policy?: string;
   ports?: string[];
   profiles?: string[];
   command?: string[];
@@ -112,7 +114,16 @@ describe('docker-compose.prod.yml (surcouche de production)', () => {
   });
 
   it('chaque secret « devonly » du Compose de base est rendu obligatoire (${X:?…})', () => {
-    for (const name of ['api', 'migrate', 'worker', 'gateway', 'postgres', 'redis', 's3']) {
+    for (const name of [
+      'api',
+      'migrate',
+      'worker',
+      'gateway',
+      'keys-rotate',
+      'postgres',
+      'redis',
+      's3',
+    ]) {
       const overlay = service(prod, name).environment ?? {};
       for (const key of devOnlyKeys(service(base, name).environment)) {
         expect(overlay, `${name}.${key}`).toHaveProperty(key);
@@ -123,7 +134,7 @@ describe('docker-compose.prod.yml (surcouche de production)', () => {
   });
 
   it('API, migrations, worker et passerelle en production', () => {
-    for (const name of ['api', 'migrate', 'worker', 'gateway']) {
+    for (const name of ['api', 'migrate', 'worker', 'gateway', 'keys-rotate']) {
       expect(merged(name).NODE_ENV, name).toBe('production');
     }
     expect(merged('api').COOKIE_SECURE).toBe('true');
@@ -158,6 +169,41 @@ describe('docker-compose.prod.yml (surcouche de production)', () => {
     expect(service(prod, 'mailpit').profiles).toEqual(['dev-mail']);
     expect(overrides.has('api.depends_on')).toBe(true);
     expect(Object.keys(service(prod, 'api').depends_on ?? {})).not.toContain('mailpit');
+  });
+
+  it('service d’exploitation keys-rotate (S3H-H2) : profil ops, sans port ni dépendance', () => {
+    const ops = service(base, 'keys-rotate');
+    expect(ops.profiles).toEqual(['ops']);
+    expect(ops.ports).toBeUndefined();
+    expect(ops.depends_on).toBeUndefined();
+    expect(ops.pull_policy).toBe('never');
+    expect(ops.entrypoint).toEqual(['node', 'dist/cli/rotate-encryption-keys.js']);
+    const env = merged('keys-rotate');
+    for (const key of ['DATABASE_MIGRATOR_URL', 'DATABASE_AUTH_URL', 'DATABASE_WORKER_URL']) {
+      expect(env[key], key).toMatch(/^postgres:\/\/ecsi_\w+:[0-9a-f]{48}@postgres:5432\/ecsi$/);
+    }
+    // Aucun autre secret applicatif que ceux nécessaires à la rotation.
+    expect(Object.keys(env).sort()).toEqual(
+      [
+        'DATABASE_AUTH_URL',
+        'DATABASE_MIGRATOR_URL',
+        'DATABASE_WORKER_URL',
+        'ENCRYPTION_KEY',
+        'ENCRYPTION_KEY_ID',
+        'ENCRYPTION_PREVIOUS_KEYS',
+        'NODE_ENV',
+      ].sort(),
+    );
+  });
+
+  it('ancienne clé (ENCRYPTION_PREVIOUS_KEYS) transmise à tous les processus qui déchiffrent', () => {
+    const previous = `k2:${randomBytes(32).toString('base64')}`;
+    for (const name of ['api', 'migrate', 'worker', 'gateway', 'keys-rotate']) {
+      expect(
+        merged(name, { ...VALUES, ENCRYPTION_PREVIOUS_KEYS: previous }).ENCRYPTION_PREVIOUS_KEYS,
+        name,
+      ).toBe(previous);
+    }
   });
 
   it('le Compose de développement garde ses valeurs (NODE_ENV=development)', () => {
