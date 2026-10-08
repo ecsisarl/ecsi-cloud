@@ -20,7 +20,9 @@
 #  PostgreSQL complet, ni dans la commande d'aucun conteneur.
 #
 #   ops/rotation/tests/secrets-tools-e2e.sh <dossier de travail vide>
-# Nécessite : docker (Compose v2), openssl, l'image ecsi-cloud/api:dev.
+# Nécessite : docker (Compose v2), openssl, une image applicative : ECSI_API_IMAGE (défaut
+# ecsi-cloud/api:dev), jamais construite ni retaguée par l'essai. Projet Compose distinct
+# (ecsi-secretstest), aucun port publié : peut tourner à côté d'une pile en service.
 # shellcheck disable=SC2086
 set -eu
 umask 077

@@ -1,6 +1,8 @@
 # ECSI CLOUD — TEST uniquement (ops/rotation/tests/secrets-tools-e2e.sh) : PostgreSQL journalise
 # TOUTES les requêtes, les connexions et les erreurs avec leur requête, pour prouver que
 # pg-role-password.sh n'y laisse jamais un mot de passe. Jamais utilisé en production.
+# Utilisable à côté d'une pile en service : aucun port publié, image applicative choisie par
+# ECSI_API_IMAGE (jamais construite ni retaguée ici), projet Compose distinct.
 services:
   postgres:
     command:
@@ -13,3 +15,13 @@ services:
         '-c',
         'log_connections=on',
       ]
+    ports: !reset []
+  migrate:
+    image: ${ECSI_API_IMAGE:-ecsi-cloud/api:dev}
+    pull_policy: never
+  api:
+    image: ${ECSI_API_IMAGE:-ecsi-cloud/api:dev}
+    pull_policy: never
+  worker:
+    image: ${ECSI_API_IMAGE:-ecsi-cloud/api:dev}
+    pull_policy: never
