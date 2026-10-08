@@ -14,6 +14,9 @@ import { parseWorkerEnv } from './worker-env.js';
 
 interface ComposeService {
   environment?: Record<string, string | number>;
+  entrypoint?: string[];
+  command?: string[];
+  tmpfs?: string[];
   healthcheck?: { test: string[] };
   build?: { target?: string };
   network_mode?: string;
@@ -115,6 +118,24 @@ describe('docker-compose.yml', () => {
     for (const key of ['JWT_ACCESS_SECRET', 'DATABASE_URL', 'DATABASE_AUTH_URL', 'REDIS_URL']) {
       expect(gateway.environment, key).not.toHaveProperty(key);
     }
+  });
+
+  it('Redis : mot de passe jamais dans les arguments (commande, healthcheck), config sur tmpfs', () => {
+    const redis = service('redis');
+    const argv = [...(redis.entrypoint ?? []), ...(redis.command ?? [])].join(' ');
+    const health = (redis.healthcheck?.test ?? []).join(' ');
+    // Aucune interpolation Compose (« ${REDIS_PASSWORD…} ») : elle inscrirait la valeur dans
+    // la commande du conteneur. Seule la variable du shell du conteneur (« $$ ») est permise.
+    for (const text of [argv, health]) {
+      expect(text).not.toMatch(/(^|[^$])\$\{?REDIS_PASSWORD/);
+      expect(text).not.toContain('--requirepass');
+      expect(text).not.toMatch(/redis-cli[^|]* -a /);
+    }
+    expect(argv).toContain('$$REDIS_PASSWORD');
+    expect(argv).toContain('redis-server /run/ecsi-redis/redis.conf');
+    expect(health).toContain('REDISCLI_AUTH=');
+    expect(redis.tmpfs).toEqual(['/run/ecsi-redis:mode=0700']);
+    expect(redis.environment).toHaveProperty('REDIS_PASSWORD');
   });
 
   it('Nginx : toutes les interfaces par défaut, adresse fixable pour libérer l’adresse tunnel', () => {

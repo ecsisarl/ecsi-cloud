@@ -1,104 +1,174 @@
 /**
- * Rotation de la clé maîtresse de chiffrement (commande d'exploitation, ADR 0014).
+ * Rotation de la clé maîtresse de chiffrement (commande d'exploitation, ADR 0014 ; procédure
+ * complète : docs/SECURITY.md, « Rotation de la clé de chiffrement », Sprint S3H-H2).
  *
- *   1. générer une nouvelle clé : openssl rand -base64 32
- *   2. déployer avec ENCRYPTION_KEY=<nouvelle>, ENCRYPTION_KEY_ID=<nouvel id>
- *      et ENCRYPTION_PREVIOUS_KEYS=<ancien id>:<ancienne clé>
- *   3. exécuter : DATABASE_AUTH_URL=… ENCRYPTION_KEY=… ENCRYPTION_KEY_ID=… \
- *        ENCRYPTION_PREVIOUS_KEYS=… node dist/cli/rotate-encryption-keys.js [--dry-run]
- *   4. quand la commande indique que plus rien ne dépend de l'ancienne clé, la retirer de
- *      ENCRYPTION_PREVIOUS_KEYS.
+ *   node dist/cli/rotate-encryption-keys.js --verify     contrôle en lecture seule
+ *   node dist/cli/rotate-encryption-keys.js --verify --retirable k3
+ *                                                        idem, et code de sortie 3 si k3 n'est
+ *                                                        pas retirable (S3H-H3)
+ *   node dist/cli/rotate-encryption-keys.js --dry-run    simulation (ré-enveloppe contrôlée, rien n'est écrit)
+ *   node dist/cli/rotate-encryption-keys.js              rotation, puis contrôle
  *
- * Chaque secret TOTP est ré-enveloppé avec la clé active (sa clé de données change de clé
- * d'enveloppe ; le secret lui-même n'est jamais réécrit en clair). Idempotente : un secret
- * déjà sous la clé active est ignoré. Les codes de récupération (empreintes HMAC, valeurs
- * inconnues du serveur) ne peuvent pas être recalculés : ils restent vérifiables tant que
- * leur clé est conservée ; la commande compte ceux qui en dépendent encore.
+ * En Compose : docker compose --profile ops run --rm keys-rotate [--verify | --dry-run].
  *
- * Mots de passe RouterOS (Sprint 3A) : avec DATABASE_WORKER_URL (rôle ecsi_worker), ils sont
- * ré-enveloppés de la même façon. Sans cette variable, ils ne sont pas traités et la commande
- * ne déclare jamais les anciennes clés retirables.
+ * Variables : ENCRYPTION_KEY / ENCRYPTION_KEY_ID (clé ACTIVE, la nouvelle) et
+ * ENCRYPTION_PREVIOUS_KEYS (anciennes clés, id:base64,…) ; DATABASE_MIGRATOR_URL (propriétaire
+ * des tables : voit tous les routeurs, y compris supprimés ; contrôle et mots de passe
+ * RouterOS) ; DATABASE_AUTH_URL (secrets 2FA, rôle ecsi_auth) ; DATABASE_WORKER_URL (repli
+ * pour les mots de passe RouterOS sans DATABASE_MIGRATOR_URL : routeurs actifs seulement).
+ *
+ * Chaque secret est ré-enveloppé avec la clé active seulement s'il se déchiffre avant ET
+ * après, à l'identique (SecretBox.rewrapVerified) ; l'écriture est conditionnelle (un secret
+ * modifié entre-temps n'est pas écrasé). Idempotente. Aucune clé n'est jamais retirée par la
+ * commande : elle indique seulement si plus rien ne dépend des anciennes clés (contrôle
+ * --verify : tout sous la clé active, déchiffré avec elle seule, 0 illisible), et donne un
+ * verdict PAR CLÉ (k3 retirable, k2 encore nécessaire, par exemple). Les codes de
+ * récupération 2FA (empreintes HMAC) ne peuvent pas être ré-enveloppés : ils sont comptés par
+ * clé et bloquent le retrait tant qu'ils dépendent d'une ancienne clé.
+ *
+ * Sorties : compteurs et identifiants de clé uniquement, jamais une clé ni un secret.
+ * Codes de sortie : 0 succès ; 1 échec ou secret illisible ; 2 usage ou clés invalides ;
+ * 3 (--retirable) la clé demandée n'est pas retirable.
  */
 import { parseArgs } from 'node:util';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import pg from 'pg';
 import { z } from 'zod';
 import { rotateEncryptionKeys } from '../auth/key-rotation.js';
-import { parseKeyList, SecretBox } from '../auth/crypto/secret-box.js';
+import {
+  formatKeyStatus,
+  formatKeyVerification,
+  keyStatus,
+  verifyEncryptionKeys,
+} from '../auth/key-verification.js';
+import { KEY_ID_PATTERN, parseKeyList, SecretBox } from '../auth/crypto/secret-box.js';
 import { type RouterRotationReport, rotateRouterSecrets } from '../routers/router-secret.js';
 
-const { values } = parseArgs({ options: { 'dry-run': { type: 'boolean', default: false } } });
+const { values } = parseArgs({
+  options: {
+    'dry-run': { type: 'boolean', default: false },
+    verify: { type: 'boolean', default: false },
+    retirable: { type: 'string' },
+  },
+});
 const dryRun = values['dry-run'];
+const verifyOnly = values.verify;
+const retirable = values.retirable;
+if (
+  (dryRun && verifyOnly) ||
+  (retirable !== undefined && (!verifyOnly || !KEY_ID_PATTERN.test(retirable)))
+) {
+  process.stderr.write(
+    'Usage : rotate-encryption-keys [--verify [--retirable <identifiant de clé>] | --dry-run]\n',
+  );
+  process.exit(2);
+}
 
 const env = z
   .object({
-    DATABASE_AUTH_URL: z.string().min(1),
+    DATABASE_AUTH_URL: z.string().min(1).optional(),
     DATABASE_WORKER_URL: z.string().min(1).optional(),
+    DATABASE_MIGRATOR_URL: z.string().min(1).optional(),
     ENCRYPTION_KEY: z.string().min(1),
     ENCRYPTION_KEY_ID: z.string().default('k1'),
     ENCRYPTION_PREVIOUS_KEYS: z.string().optional(),
   })
   .safeParse(process.env);
-if (!env.success) {
+function missing(names: string[]): never {
+  process.stderr.write(`Variables manquantes ou invalides : ${names.join(', ')}\n`);
+  process.exit(2);
+}
+if (!env.success) missing([...new Set(env.error.issues.map((issue) => issue.path.join('.')))]);
+const config = env.data;
+const migratorUrl = config.DATABASE_MIGRATOR_URL;
+const authUrl = config.DATABASE_AUTH_URL;
+if (verifyOnly && !migratorUrl) missing(['DATABASE_MIGRATOR_URL']);
+if (!verifyOnly && !authUrl) missing(['DATABASE_AUTH_URL']);
+
+const keys = {
+  active: { id: config.ENCRYPTION_KEY_ID, base64: config.ENCRYPTION_KEY },
+  previous: parseKeyList(config.ENCRYPTION_PREVIOUS_KEYS),
+};
+let box: SecretBox;
+try {
+  box = new SecretBox(keys.active.base64, { id: keys.active.id, previous: keys.previous });
+} catch (error) {
+  // Message de validation (format, longueur, doublon) : jamais la valeur.
   process.stderr.write(
-    'Usage : DATABASE_AUTH_URL=… ENCRYPTION_KEY=… ENCRYPTION_KEY_ID=… [ENCRYPTION_PREVIOUS_KEYS=id:clé,…] rotate-encryption-keys [--dry-run]\n',
+    `Clés de chiffrement invalides : ${error instanceof Error ? error.message : String(error)}\n`,
   );
-  process.exit(1);
+  process.exit(2);
 }
 
-const box = new SecretBox(env.data.ENCRYPTION_KEY, {
-  id: env.data.ENCRYPTION_KEY_ID,
-  previous: parseKeyList(env.data.ENCRYPTION_PREVIOUS_KEYS),
-});
+const out = (lines: string[]) => process.stdout.write(`${lines.join('\n')}\n`);
+const pool = (url: string) =>
+  new pg.Pool({ connectionString: url, max: 1, application_name: 'ecsi-cli-rotate' });
 
-const pool = new pg.Pool({
-  connectionString: env.data.DATABASE_AUTH_URL,
-  max: 1,
-  application_name: 'ecsi-cli-rotate',
-});
-
-let routerReport: RouterRotationReport | null = null;
-if (env.data.DATABASE_WORKER_URL) {
-  const workerPool = new pg.Pool({
-    connectionString: env.data.DATABASE_WORKER_URL,
-    max: 1,
-    application_name: 'ecsi-cli-rotate',
-  });
+async function verify(url: string): Promise<boolean> {
+  const migrator = pool(url);
   try {
-    routerReport = await rotateRouterSecrets(drizzle(workerPool, { casing: 'snake_case' }), box, {
-      dryRun,
-      onError: (id, error) => process.stderr.write(`Routeur ${id} : ${error.message}\n`),
-    });
+    const report = await verifyEncryptionKeys(migrator, keys);
+    out(['Contrôle (lecture seule) :', ...formatKeyVerification(report)]);
+    if (retirable !== undefined) {
+      const status = keyStatus(report, retirable);
+      out([`Verdict demandé (--retirable ${retirable}) :`, formatKeyStatus(report, status)]);
+      if (!status.retirable) process.exitCode = 3;
+    }
+    return report.routers.unreadable === 0 && report.mfa.unreadable === 0;
   } finally {
-    await workerPool.end();
+    await migrator.end();
+  }
+}
+
+async function rotate(url: string): Promise<boolean> {
+  out([
+    `Clé active : ${box.activeKeyId} (clés connues : ${box.keyIds.join(', ')})${dryRun ? ' — SIMULATION, rien n’est écrit' : ''}`,
+  ]);
+  let routerReport: RouterRotationReport | null = null;
+  const routersUrl = migratorUrl ?? config.DATABASE_WORKER_URL;
+  if (routersUrl) {
+    const routersPool = pool(routersUrl);
+    try {
+      routerReport = await rotateRouterSecrets(
+        drizzle(routersPool, { casing: 'snake_case' }),
+        box,
+        {
+          dryRun,
+          onError: (id, error) => process.stderr.write(`Routeur ${id} : ${error.message}\n`),
+        },
+      );
+    } finally {
+      await routersPool.end();
+    }
+  }
+  const authPool = pool(url);
+  try {
+    const report = await rotateEncryptionKeys(drizzle(authPool, { casing: 'snake_case' }), box, {
+      dryRun,
+      // Jamais la valeur chiffrée ni la clé : uniquement l'identifiant de ligne.
+      onError: (id, error) => process.stderr.write(`Facteur ${id} : ${error.message}\n`),
+    });
+    const verb = dryRun ? 'à ré-envelopper (contrôlés)' : 'ré-enveloppés (contrôlés)';
+    out([
+      `Secrets 2FA : ${report.total} au total, ${report.rewrapped} ${verb}, ${report.skipped} modifiés pendant la rotation, ${report.failed} en échec.`,
+      routerReport
+        ? `Mots de passe RouterOS : ${routerReport.total} au total, ${routerReport.rewrapped} ${verb}, ${routerReport.skipped} modifiés pendant la rotation, ${routerReport.failed} en échec${migratorUrl ? '' : ' (routeurs actifs seulement : DATABASE_MIGRATOR_URL absent)'}.`
+        : 'Mots de passe RouterOS : non traités (DATABASE_MIGRATOR_URL et DATABASE_WORKER_URL absents).',
+    ]);
+    return report.failed === 0 && (routerReport?.failed ?? 0) === 0 && routerReport !== null;
+  } finally {
+    await authPool.end();
   }
 }
 
 try {
-  const db = drizzle(pool, { casing: 'snake_case' });
-  const report = await rotateEncryptionKeys(db, box, {
-    dryRun,
-    // Jamais la valeur chiffrée ni la clé : uniquement l'identifiant de ligne.
-    onError: (id, error) => process.stderr.write(`Facteur ${id} : ${error.message}\n`),
-  });
-  process.stdout.write(
-    [
-      `Clé active : ${box.activeKeyId} (clés connues : ${box.keyIds.join(', ')})${dryRun ? ' — simulation' : ''}`,
-      `Secrets 2FA : ${report.total} au total, ${report.rewrapped} ré-enveloppés, ${report.failed} en échec.`,
-      'Codes de récupération non utilisés, par clé :',
-      ...report.recoveryCodesByKey.map((row) => `  - ${row.key} : ${row.count}`),
-      routerReport
-        ? `Mots de passe RouterOS : ${routerReport.total} au total, ${routerReport.rewrapped} ré-enveloppés, ${routerReport.failed} en échec.`
-        : 'Mots de passe RouterOS : non traités (DATABASE_WORKER_URL absent).',
-      report.recoveryCodesByKey.every((row) => row.key === box.activeKeyId) &&
-      report.failed === 0 &&
-      routerReport?.failed === 0
-        ? 'Aucune donnée ne dépend plus des anciennes clés : elles peuvent être retirées.'
-        : "Des données dépendent encore d'anciennes clés : conservez-les (les utilisateurs concernés peuvent régénérer leurs codes de récupération).",
-      '',
-    ].join('\n'),
-  );
-  if (report.failed > 0 || (routerReport?.failed ?? 0) > 0) process.exitCode = 1;
-} finally {
-  await pool.end();
+  let ok = verifyOnly ? await verify(migratorUrl ?? '') : await rotate(authUrl ?? '');
+  if (!verifyOnly) {
+    if (migratorUrl) ok = (await verify(migratorUrl)) && ok;
+    else out(['Contrôle non exécuté (DATABASE_MIGRATOR_URL absent) : ne retirez aucune clé.']);
+  }
+  if (!ok) process.exitCode = 1;
+} catch (error) {
+  process.stderr.write(`Échec : ${error instanceof Error ? error.message : String(error)}\n`);
+  process.exitCode = 1;
 }

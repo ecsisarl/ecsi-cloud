@@ -1,0 +1,6 @@
+# Réseau ISOLÉ pour les piles jetables de vérification (ops/backup/lib.sh) : aucun accès vers
+# l'extérieur ni depuis l'extérieur. Non utilisé pour l'exercice de reprise (--reprise), où le
+# worker doit joindre les routeurs par le tunnel WireGuard de l'hôte.
+networks:
+  default:
+    internal: true

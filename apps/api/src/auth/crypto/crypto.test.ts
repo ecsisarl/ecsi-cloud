@@ -125,6 +125,27 @@ describe('SecretBox (enveloppe AES-256-GCM, clés versionnées)', () => {
     expect(k2Only.decrypt(fromV1, 'a')).toBe('GRAINE');
   });
 
+  it('ré-enveloppe contrôlée (S3H-H2) : relit le secret avant et après, refuse un chiffré altéré', () => {
+    const old = box.encrypt('MOT-DE-PASSE', 'router:a:b:routeros-password');
+    const rotated = new SecretBox(k2, { id: 'k2', previous: [{ id: 'k1', base64: k1 }] });
+    const next = rotated.rewrapVerified(old, 'router:a:b:routeros-password');
+    expect(next).toMatch(/^v2:k2:/);
+    expect(new SecretBox(k2, { id: 'k2' }).decrypt(next, 'router:a:b:routeros-password')).toBe(
+      'MOT-DE-PASSE',
+    );
+    // Chiffré du secret altéré, enveloppe intacte : rewrap seul ne le verrait pas.
+    const parts = old.split(':');
+    parts[7] = Buffer.from('autre-contenu').toString('base64url');
+    const corrupted = parts.join(':');
+    expect(() => rotated.rewrap(corrupted, 'router:a:b:routeros-password')).not.toThrow();
+    expect(() => rotated.rewrapVerified(corrupted, 'router:a:b:routeros-password')).toThrow();
+    // Mauvais propriétaire (données associées) ou ancienne clé absente : refus.
+    expect(() => rotated.rewrapVerified(old, 'router:a:c:routeros-password')).toThrow();
+    expect(() =>
+      new SecretBox(k2, { id: 'k2' }).rewrapVerified(old, 'router:a:b:routeros-password'),
+    ).toThrow(/indisponible/);
+  });
+
   it('empreintes HMAC versionnées : retrouvées après rotation, y compris le format du Sprint 1', () => {
     const legacyMac = createHmac(
       'sha256',

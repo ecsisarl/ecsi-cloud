@@ -2,6 +2,60 @@
 
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Versions par sprint.
 
+## [S3H-H3-outillage] — 2026-10-08 — Outillage de rotation des secrets (aucune rotation réelle)
+
+### Ajouté
+
+- `rotate-encryption-keys --verify` : verdict de retrait **par clé** (active / retirable / encore nécessaire, avec ses dépendances ; clé absente dont dépendent des données signalée ECHEC) et option `--retirable <id>` (code de sortie 3 si la clé n'est pas retirable). Permet de retirer `k3` après la rotation vers `k4` tout en conservant `k2` pour les codes de récupération.
+- `ops/rotation/check-env.sh` : contrôle d'un fichier d'environnement sans afficher de valeur (présence, unicité, `devonly`, formats, clés de 32 octets distinctes, droits), empreintes courtes (KCV), comparaison entre fichiers (coffre, `gateway.env`) et avec les valeurs chargées par les conteneurs.
+- `ops/rotation/pg-role-password.sh` : rotation contrôlée du mot de passe d'un rôle PostgreSQL (simulation, idempotence, retour arrière), valeur transmise uniquement par l'entrée standard, journalisation PostgreSQL neutralisée pour la session, contrôle SCRAM nouvelle valeur acceptée / ancienne refusée.
+- Runbook « Rotation des secrets (S3H-H3) » dans `docs/SECURITY.md`.
+- Tests : intégration `test/key-rotation-three-keys.int.test.ts` (k2/k3/k4) ; essais Docker `ops/keys/tests/key-rotation-three-keys-e2e.sh` et `ops/rotation/tests/secrets-tools-e2e.sh` (PostgreSQL journalisant tout, échantillonnage `ps` continu, témoins positifs) ; `ops/rotation/tests/check-env.test.sh` ; tous en CI.
+
+### Corrigé
+
+- Redis : le mot de passe était passé en argument (`--requirepass`, contrôle de santé `redis-cli -a`), donc visible dans `ps aux`, `docker ps --no-trunc` et la commande du conteneur. Il est désormais écrit par le shell du conteneur dans une configuration sur tmpfs (0600), retiré de l'environnement de `redis-server`, et le contrôle de santé utilise `REDISCLI_AUTH`.
+- Initialisation PostgreSQL (`01-roles.sh`, volume neuf seulement) : mots de passe lus par `\getenv` au lieu d'arguments `psql -v`, journalisation neutralisée pour la session.
+
+## [S3H-H2] — 2026-10-07 — Rotation de la clé de chiffrement
+
+### Corrigé
+
+- Rotation : la commande documentée (`docker compose run --rm migrate …`) ne recevait pas de connexion permettant de ré-envelopper les mots de passe RouterOS, et les routeurs supprimés (invisibles pour `ecsi_worker`) n'étaient jamais traités. Service d'exploitation `keys-rotate` (profil `ops`, sans port ni dépendance) avec les seules connexions nécessaires ; mots de passe RouterOS traités par le propriétaire des tables (tous les routeurs).
+
+### Ajouté
+
+- Ré-enveloppe contrôlée (`SecretBox.rewrapVerified`) : chaque secret doit se déchiffrer avant et après, à l'identique, sinon rien n'est écrit ; écriture conditionnelle (un identifiant modifié pendant la rotation n'est pas écrasé).
+- `rotate-encryption-keys --verify` (lecture seule) : déchiffrement de chaque mot de passe RouterOS et secret 2FA avec la seule clé active, compteurs par clé, codes de récupération par clé ; l'ancienne clé n'est déclarée retirable qu'avec 0 restant et 0 illisible. Contrôle exécuté automatiquement après chaque rotation.
+- Procédure en 9 temps et retour arrière : `docs/SECURITY.md`.
+- Tests : intégration `test/key-rotation.int.test.ts` (11 tests) ; essai Docker complet `ops/keys/tests/key-rotation-e2e.sh` en CI ; tests du service Compose.
+
+## [S3H-H1] — 2026-10-06 — Sauvegarde PostgreSQL chiffrée et restauration testée
+
+### Ajouté
+
+- `ops/backup/pg-backup.sh` : sauvegarde en lecture seule (`pg_dump -Fc`, rôles sans mot de passe), restaurée et contrôlée à chaque exécution dans une pile jetable isolée, manifeste écrit depuis la copie restaurée, archive chiffrée avec age (clé publique seule sur le serveur), empreinte SHA-256, rétention 7/4/3 appliquée seulement après une sauvegarde vérifiée.
+- `ops/backup/pg-restore-test.sh` : restauration de test dans une pile jetable (jamais la production) : empreinte, déchiffrement, comparaison complète au manifeste (lignes, RLS, rôles, droits, migrations, audit, déchiffrement de chaque mot de passe RouterOS et secret 2FA), API saine sur la base restaurée ; mode `--reprise` pour l'exercice de reprise.
+- Commande `dist/cli/verify-restore.js` et module `apps/api/src/database/restore-check.ts` (compteurs seulement, aucune valeur affichée).
+- `infra/systemd/ecsi-backup.service` et `.timer` (quotidien) ; `docs/SAUVEGARDE.md`.
+- Tests : intégration `test/backup-restore.int.test.ts` (pg_dump / pg_restore entre deux PostgreSQL 18 réels) ; `ops/backup/tests/retention.test.sh` ; essai Docker complet `ops/backup/tests/backup-restore-e2e.sh` en CI avec cas négatifs (clé privée age sur le serveur, fichier corrompu, mauvaise clé age, mauvaise `ENCRYPTION_KEY`, projet de production, projet existant).
+
+### Modifié
+
+- `apps/api/test/helpers/infra.ts` : `startPostgres()` extrait de `startInfra()` (même conteneur, réutilisé comme cible de restauration).
+
+## [S3H-H0] — 2026-10-06 — Préparation du durcissement
+
+### Ajouté
+
+- `docker-compose.prod.yml` : surcouche de production. API, migrations, worker et passerelle en `NODE_ENV=production`, ce qui active les garde-fous existants du code. Secrets et URL publiques obligatoires (`${VAR:?…}`). Mailpit retiré. Seul Nginx :80 est publié, PostgreSQL restant sur 127.0.0.1. Le Compose de développement est inchangé.
+- `scripts/generate-prod-test-env.sh` : environnement de test pour la surcouche, avec secrets aléatoires et sans affichage.
+- Tests : `apps/api/src/config/compose-prod.test.ts`. Étape CI « Pile de production » : refus sans variables, santé, `/api/docs` fermé, ports publiés, refus d'une valeur `devonly` sans afficher la valeur.
+
+### Modifié
+
+- `docs/ROADMAP.md` à jour (S2, S3A, S3B validés ; S3H en cours) ; `docs/DEPLOYMENT.md` (section production).
+
 ## [S3B-RC2] — 2026-10-05 — Corrections de la validation indépendante S3B
 
 ### Corrigé

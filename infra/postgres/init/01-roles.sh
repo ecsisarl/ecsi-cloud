@@ -17,14 +17,20 @@ set -eu
 : "${ECSI_DB_AUTH_PASSWORD:?ECSI_DB_AUTH_PASSWORD est requis}"
 : "${ECSI_DB_WORKER_PASSWORD:?ECSI_DB_WORKER_PASSWORD est requis}"
 
+# Mots de passe lus dans l'environnement par psql (\getenv), jamais passés en argument (ps) ;
+# journalisation des requêtes neutralisée pour la session (S3H-H3) : même un serveur configuré
+# avec log_statement=all n'écrit pas les CREATE ROLE … PASSWORD dans son journal.
 psql -v ON_ERROR_STOP=1 \
   --username "$POSTGRES_USER" \
   --dbname "$POSTGRES_DB" \
-  -v migrator_password="$ECSI_DB_MIGRATOR_PASSWORD" \
-  -v app_password="$ECSI_DB_APP_PASSWORD" \
-  -v auth_password="$ECSI_DB_AUTH_PASSWORD" \
-  -v worker_password="$ECSI_DB_WORKER_PASSWORD" \
   -v db_name="$POSTGRES_DB" <<'SQL'
+SET log_statement = 'none';
+SET log_min_error_statement = 'panic';
+SET log_min_duration_statement = -1;
+\getenv migrator_password ECSI_DB_MIGRATOR_PASSWORD
+\getenv app_password ECSI_DB_APP_PASSWORD
+\getenv auth_password ECSI_DB_AUTH_PASSWORD
+\getenv worker_password ECSI_DB_WORKER_PASSWORD
 CREATE ROLE ecsi_migrator LOGIN NOSUPERUSER NOCREATEROLE NOCREATEDB NOBYPASSRLS PASSWORD :'migrator_password';
 CREATE ROLE ecsi_app LOGIN NOSUPERUSER NOCREATEROLE NOCREATEDB NOBYPASSRLS PASSWORD :'app_password';
 CREATE ROLE ecsi_auth LOGIN NOSUPERUSER NOCREATEROLE NOCREATEDB NOBYPASSRLS PASSWORD :'auth_password';

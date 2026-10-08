@@ -23,22 +23,24 @@ Pour les fonctions MikroTik : checklist de [MIKROTIK.md](MIKROTIK.md) cochée su
 
 ## Sprints
 
-| Sprint | Contenu                                                                                          | Statut                               |
-| ------ | ------------------------------------------------------------------------------------------------ | ------------------------------------ |
-| **S0** | Fondations : monorepo, Docker, CI, API de base, dashboard, portail, design system, documentation | ✅ Validé (commit `119ec9a`)         |
-| **S1** | Authentification, multi-tenant, RBAC, tests d'isolation                                          | ✅ Validé (commit `f624e99`)         |
-| **S2** | Entreprises, utilisateurs, sites, groupes de sites, audit                                        | ✅ Terminé, en attente de validation |
-| S3     | Enrôlement MikroTik + WireGuard (1 routeur, puis 2)                                              | ○                                    |
-| S4     | Monitoring, statut ONLINE/OFFLINE, alertes in-app                                                | ○                                    |
-| S5     | RADIUS central (portée LOCAL), accounting, CoA, configuration Hotspot                            | ○                                    |
-| S6     | Forfaits et tickets                                                                              | ○                                    |
-| S7     | Portail captif connecté au Hotspot, clients connectés, walled garden                             | ○                                    |
-| S8     | Vendeurs, ventes, caisse journalière                                                             | ○                                    |
-| S9     | Dashboard réel, rapports, exports                                                                | ○                                    |
-| S10    | Durcissement, E2E, tests de charge, staging → **MVP technique**                                  | ○                                    |
-| S11    | ECSI Roaming GROUPE et GLOBAL, validation multi-sites réelle                                     | ○                                    |
-| S12    | Premier fournisseur de paiement (documentation officielle et accès requis)                       | ○                                    |
-| S13    | Backups MikroTik, notifications e-mail → **MVP commercial** (avec S11 et S12)                    | ○                                    |
+| Sprint  | Contenu                                                                                                                             | Statut                                           |
+| ------- | ----------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
+| **S0**  | Fondations : monorepo, Docker, CI, API de base, dashboard, portail, design system, documentation                                    | ✅ Validé (commit `119ec9a`)                     |
+| **S1**  | Authentification, multi-tenant, RBAC, tests d'isolation                                                                             | ✅ Validé (commit `f624e99`)                     |
+| **S2**  | Entreprises, utilisateurs, sites, groupes de sites, audit                                                                           | ✅ Validé (commit `8984de6`)                     |
+| **S3A** | Laboratoire CHR (RouterOS v7, WireGuard, API par le tunnel) et fondation applicative                                                | ✅ Validé (commit `7a89b61`)                     |
+| **S3B** | Gestion et enrôlement des routeurs depuis ECSI CLOUD (RC2)                                                                          | ✅ Validé (commit `7496075`, tag `s3b-rc2`)      |
+| **S3H** | Durcissement et préproduction : sauvegarde/restauration, rotation des secrets, TLS public, gateway systemd, E2E Routeurs, guide VPS | 🔄 En cours (H0–H2 validés ; outillage H3 livré) |
+| S4      | Monitoring, statut ONLINE/OFFLINE, alertes in-app                                                                                   | ○                                                |
+| S5      | RADIUS central (portée LOCAL), accounting, CoA, configuration Hotspot                                                               | ○                                                |
+| S6      | Forfaits et tickets                                                                                                                 | ○                                                |
+| S7      | Portail captif connecté au Hotspot, clients connectés, walled garden                                                                | ○                                                |
+| S8      | Vendeurs, ventes, caisse journalière                                                                                                | ○                                                |
+| S9      | Dashboard réel, rapports, exports                                                                                                   | ○                                                |
+| S10     | Durcissement, E2E, tests de charge, staging → **MVP technique**                                                                     | ○                                                |
+| S11     | ECSI Roaming GROUPE et GLOBAL, validation multi-sites réelle                                                                        | ○                                                |
+| S12     | Premier fournisseur de paiement (documentation officielle et accès requis)                                                          | ○                                                |
+| S13     | Backups MikroTik, notifications e-mail → **MVP commercial** (avec S11 et S12)                                                       | ○                                                |
 
 ## MVP technique
 
