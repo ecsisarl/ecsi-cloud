@@ -130,7 +130,8 @@ describe('docker-compose.prod.yml (surcouche de production)', () => {
         expect(requiredOnly(overlay[key]), `${name}.${key} doit être obligatoire`).toBe(true);
       }
     }
-    expect(service(prod, 'redis').command?.join(' ')).toContain('${REDIS_PASSWORD:?');
+    // Redis : mot de passe obligatoire par l'environnement ; la commande vient du Compose de base.
+    expect(service(prod, 'redis').command).toBeUndefined();
   });
 
   it('API, migrations, worker et passerelle en production', () => {

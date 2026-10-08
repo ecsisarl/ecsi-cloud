@@ -7,8 +7,10 @@
  *  - sous une ancienne clé : déchiffrement avec cette clé (« encore à ré-envelopper ») ;
  *  - illisible : aucune clé fournie ne le déchiffre (clé absente, données altérées).
  * Les codes de récupération 2FA non utilisés (empreintes HMAC, non ré-envelopables) sont
- * comptés par clé. Une ancienne clé n'est déclarée retirable qu'avec : tout sous la clé
- * active, 0 illisible et aucun code de récupération encore lié à une ancienne clé.
+ * comptés par clé. Verdict PAR CLÉ (S3H-H3) : une ancienne clé est retirable quand plus aucun
+ * secret ni code de récupération ne dépend d'elle, sans aucun secret illisible ni donnée au
+ * format v1 (non attribuable à une clé). Exemple : k4 active, k3 retirable après la rotation,
+ * k2 encore nécessaire pour des codes de récupération.
  *
  * Connexion : propriétaire des tables (DATABASE_MIGRATOR_URL ; RLS non forcée) pour tout voir.
  * Rien n'est affiché ni renvoyé d'autre que des compteurs et des identifiants de clé.
@@ -29,6 +31,20 @@ export interface SecretFamilyReport {
   unreadable: number;
 }
 
+/** Dépendances d'une clé (fournie ou seulement référencée par des données) et verdict. */
+export interface KeyStatus {
+  id: string;
+  /** Clé active (jamais retirable). */
+  active: boolean;
+  /** Présente dans l'environnement (ENCRYPTION_KEY ou ENCRYPTION_PREVIOUS_KEYS). */
+  provided: boolean;
+  routers: number;
+  mfa: number;
+  recoveryCodes: number;
+  /** Ancienne clé dont plus rien ne dépend, avec 0 illisible et aucune donnée v1. */
+  retirable: boolean;
+}
+
 export interface KeyVerificationReport {
   activeKeyId: string;
   knownKeyIds: string[];
@@ -36,8 +52,36 @@ export interface KeyVerificationReport {
   mfa: SecretFamilyReport;
   /** Codes de récupération non utilisés, par clé. */
   recoveryCodesByKey: Record<string, number>;
+  /** Une ligne par clé fournie ou référencée par des données (hors « v1 »), active d'abord. */
+  keys: KeyStatus[];
   /** Vrai seulement si plus aucune donnée ne dépend d'une ancienne clé et 0 illisible. */
   previousKeysRetirable: boolean;
+}
+
+/** Verdict pour une clé donnée, même absente du rapport (alors : rien n'en dépend). */
+export function keyStatus(report: KeyVerificationReport, id: string): KeyStatus {
+  return (
+    report.keys.find((key) => key.id === id) ?? {
+      id,
+      active: false,
+      provided: false,
+      routers: 0,
+      mfa: 0,
+      recoveryCodes: 0,
+      retirable: blockers(report) === 0,
+    }
+  );
+}
+
+/** Secrets illisibles ou au format v1 : empêchent de déclarer une clé retirable. */
+function blockers(report: Pick<KeyVerificationReport, 'routers' | 'mfa' | 'recoveryCodesByKey'>) {
+  return (
+    report.routers.unreadable +
+    report.mfa.unreadable +
+    (report.routers.byKey.v1 ?? 0) +
+    (report.mfa.byKey.v1 ?? 0) +
+    (report.recoveryCodesByKey.v1 ?? 0)
+  );
 }
 
 const keyIdOf = (payload: string) => {
@@ -123,17 +167,65 @@ export async function verifyEncryptionKeys(
 
   const clean = (family: SecretFamilyReport) =>
     family.unreadable === 0 && family.previousOk === 0 && family.activeOk === family.total;
+  const blocked = blockers({ routers, mfa, recoveryCodesByKey }) > 0;
+  const ids = [
+    full.activeKeyId,
+    ...full.keyIds.filter((id) => id !== full.activeKeyId),
+    ...[
+      ...Object.keys(routers.byKey),
+      ...Object.keys(mfa.byKey),
+      ...Object.keys(recoveryCodesByKey),
+    ].filter((id) => id !== 'v1' && !full.keyIds.includes(id)),
+  ];
+  const statuses = [...new Set(ids)].map((id): KeyStatus => {
+    const active = id === full.activeKeyId;
+    const status = {
+      id,
+      active,
+      provided: full.keyIds.includes(id),
+      routers: routers.byKey[id] ?? 0,
+      mfa: mfa.byKey[id] ?? 0,
+      recoveryCodes: recoveryCodesByKey[id] ?? 0,
+    };
+    return {
+      ...status,
+      retirable:
+        !active &&
+        !blocked &&
+        status.routers === 0 &&
+        status.mfa === 0 &&
+        status.recoveryCodes === 0,
+    };
+  });
   return {
     activeKeyId: full.activeKeyId,
     knownKeyIds: full.keyIds,
     routers,
     mfa,
     recoveryCodesByKey,
+    keys: statuses,
     previousKeysRetirable:
       clean(routers) &&
       clean(mfa) &&
       Object.keys(recoveryCodesByKey).every((key) => key === full.activeKeyId),
   };
+}
+
+/** Ligne de verdict d'une clé : compteurs et identifiant uniquement. */
+export function formatKeyStatus(report: KeyVerificationReport, key: KeyStatus): string {
+  const deps = `${key.routers} mot(s) de passe RouterOS, ${key.mfa} secret(s) 2FA, ${key.recoveryCodes} code(s) de récupération`;
+  if (key.active) return `INFO  clé ${key.id} : active (${deps})`;
+  if (key.retirable) {
+    return `OK    clé ${key.id} : retirable, plus aucune donnée ne dépend d’elle (à conserver sous séquestre tant que des sauvegardes de son ère existent)`;
+  }
+  if (!key.provided) {
+    return `ECHEC clé ${key.id} : ABSENTE de l’environnement alors que des données en dépendent (${deps})`;
+  }
+  const reason =
+    key.routers + key.mfa + key.recoveryCodes > 0
+      ? deps
+      : `${blockers(report)} secret(s) illisible(s) ou au format v1`;
+  return `INFO  clé ${key.id} : ENCORE NÉCESSAIRE (${reason}) : NE PAS retirer`;
 }
 
 /** Rapport lisible : compteurs et identifiants de clé uniquement. */
@@ -153,8 +245,9 @@ export function formatKeyVerification(report: KeyVerificationReport): string[] {
     family('mots de passe RouterOS', report.routers),
     family('secrets 2FA', report.mfa),
     `INFO  codes de récupération 2FA non utilisés, par clé : ${codes || 'aucun'}`,
+    ...report.keys.map((key) => formatKeyStatus(report, key)),
     report.previousKeysRetirable
       ? 'OK    aucune donnée ne dépend plus des anciennes clés : elles peuvent être retirées de l’environnement (à conserver hors ligne tant que des sauvegardes antérieures existent).'
-      : 'INFO  des données dépendent encore d’anciennes clés (ou sont illisibles) : NE PAS retirer les anciennes clés.',
+      : 'INFO  des données dépendent encore d’anciennes clés (ou sont illisibles) : ne retirez que les clés marquées « retirable » ci-dessus, aucune autre.',
   ];
 }

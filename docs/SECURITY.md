@@ -106,7 +106,17 @@ $OPS               # rotation, puis contrôle
 - le nombre de secrets encore sous une ancienne clé ;
 - le nombre de secrets illisibles.
 
-Il compte aussi les codes de récupération par clé. Code de sortie non nul s'il existe un illisible.
+Il compte aussi les codes de récupération par clé, et donne un **verdict par clé** (S3H-H3) :
+
+```
+INFO  clé k4 : active (4 mot(s) de passe RouterOS, 1 secret(s) 2FA, 0 code(s) de récupération)
+OK    clé k3 : retirable, plus aucune donnée ne dépend d’elle (à conserver sous séquestre …)
+INFO  clé k2 : ENCORE NÉCESSAIRE (0 mot(s) de passe RouterOS, 0 secret(s) 2FA, 10 code(s) de récupération) : NE PAS retirer
+```
+
+Une ancienne clé n'est retirable que si plus aucun secret ni code de récupération n'en dépend, sans aucun secret illisible ni donnée au format v1. Une clé absente de l'environnement dont dépendent encore des données est signalée `ECHEC … ABSENTE`.
+
+Codes de sortie : 0 succès ; 1 échec ou secret illisible ; 2 usage ; **3** avec `--verify --retirable <id>` quand la clé demandée n'est pas retirable (critère GO/NO-GO scriptable).
 
 **Procédure** (l'ancienne clé reste disponible jusqu'au point 8) :
 
@@ -130,7 +140,7 @@ Il compte aussi les codes de récupération par clé. Code de sortie non nul s'i
 7. **Observation.**
    - Plusieurs cycles du worker (au moins 3 min), routeurs ONLINE, connexion 2FA OK.
    - Nouvelle sauvegarde H1 vérifiée, désormais sous `k3`.
-8. **Retrait de `k2` de l'environnement**, seulement si `--verify` déclare « aucune donnée ne dépend plus des anciennes clés ».
+8. **Retrait de `k2` de l'environnement**, seulement si `$OPS --verify --retirable k2` répond « retirable » (code de sortie 0).
    - Vider `ENCRYPTION_PREVIOUS_KEYS`, puis `docker compose --profile gateway up -d --no-build`.
    - `$OPS --verify` : `clés fournies : k3`, `0 illisible(s)`.
    - Routeurs ONLINE, 2FA OK.
@@ -150,6 +160,81 @@ Il compte aussi les codes de récupération par clé. Code de sortie non nul s'i
 - **Propriétaire des tables** (`DATABASE_MIGRATOR_URL`) : contrôle et mots de passe RouterOS. Lui seul voit les routeurs supprimés et en cours d'enrôlement, car la RLS de `ecsi_worker` les masque.
 - **`ecsi_auth`** : secrets 2FA.
 - **Repli sans `DATABASE_MIGRATOR_URL`** : `ecsi_worker`, routeurs actifs seulement. La commande l'indique, et l'ancienne clé n'est alors jamais déclarée retirable.
+
+### Rotation des secrets (S3H-H3)
+
+Outillage livré en S3H-H3, à valider sur une pile jetable avant toute rotation réelle. Chaque sous-étape fait l'objet d'un GO séparé. Ordre : H3.0 préparation, H3.1 JWT, H3.2 Redis, H3.3 rôles PostgreSQL, H3.4 `k3` → `k4`, H3.5 retrait de `k3` de l'environnement. `k2` n'est jamais retirée pendant H3.
+
+**Règles.**
+
+- Ne jamais afficher `.env`, une valeur, ni un `docker compose config` non filtré.
+- Jamais de valeur en argument d'une commande (elle apparaîtrait dans `ps`) : les outils ne la font transiter que par des fichiers 0600, l'entrée standard et `printf` (commande interne du shell).
+- Vérifier une copie (coffre, `gateway.env`, conteneur) par son **empreinte courte (KCV)** : 16 caractères hexadécimaux de SHA-256 avec séparation de domaine. Elle ne révèle rien d'une valeur aléatoire.
+- Sur le VPS, la pile tourne avec le Compose de base : une variable absente ou mal écrite retombe **silencieusement** sur la valeur `devonly` publique. `check-env.sh` est donc obligatoire avant et après chaque sous-étape.
+
+**Secrets et consommateurs.**
+
+| Secret                                      | Consommateurs à relancer                                              | Particularité                                                                                 |
+| ------------------------------------------- | --------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `JWT_ACCESS_SECRET`                         | `api`                                                                 | Jetons d'accès en cours refusés, puis rafraîchis automatiquement : personne n'est déconnecté. |
+| `REDIS_PASSWORD`                            | `redis` et `api` ensemble                                             | Lu au démarrage de Redis ; les données restent sur le volume (AOF).                           |
+| `ECSI_DB_MIGRATOR_PASSWORD`                 | `migrate` (à la demande), `keys-rotate`                               | Fixé à l'initialisation du volume : `ALTER ROLE` obligatoire.                                 |
+| `POSTGRES_PASSWORD`                         | aucun                                                                 | Idem ; les sauvegardes H1 passent par le socket local du conteneur.                           |
+| `ECSI_DB_WORKER_PASSWORD`                   | `worker`, `gateway` (et `/etc/ecsi-gateway/gateway.env` sous systemd) | Idem. Sans base, la passerelle garde les pairs WireGuard existants.                           |
+| `ECSI_DB_AUTH_PASSWORD`                     | `api`                                                                 | Idem.                                                                                         |
+| `ECSI_DB_APP_PASSWORD`                      | `api`                                                                 | Idem.                                                                                         |
+| `ENCRYPTION_KEY` / `_ID` / `_PREVIOUS_KEYS` | `api`, `worker`, `gateway`, `keys-rotate`                             | Voir « Rotation de la clé de chiffrement » ci-dessus.                                         |
+
+**Outils.**
+
+```
+ops/rotation/check-env.sh .env                         # présence, unicité, devonly, formats, KCV ; jamais de valeur
+ops/rotation/check-env.sh nouveaux.env --partiel       # fichier de nouvelles valeurs
+ops/rotation/check-env.sh .env --comparer <fichier>    # coffre déchiffré, gateway.env, instantané
+ops/rotation/check-env.sh .env --conteneurs            # valeurs réellement chargées (redémarrage oublié ?)
+ops/rotation/pg-role-password.sh <rôle> --ancien <instantané> [--dry-run | --rollback]
+```
+
+- **`check-env.sh`** : chaque secret présent une seule fois, non vide, sans `devonly` ; mots de passe de 24 caractères minimum parmi `A-Z a-z 0-9 . _ ~ -` (insérés dans des URL) et tous différents ; clés de 32 octets, identifiants valides et distincts, aucune clé recopiée sous deux identifiants ; fichier en 600. Code de sortie 1 au moindre ECHEC.
+- **`pg-role-password.sh`** : lit la nouvelle valeur dans `.env` (déjà mis à jour) et l'ancienne dans l'instantané, puis :
+  1. contrôle la nouvelle valeur ; refuse si elle est identique à l'ancienne ; vérifie que l'ancienne fonctionne encore ;
+  2. `ALTER ROLE` par l'entrée standard de `psql`, avec `log_statement`, `log_min_error_statement` et `log_min_duration_statement` neutralisés pour la session : rien dans le journal PostgreSQL, même configuré pour tout journaliser ; en cas d'échec, message générique sans la sortie de `psql` ;
+  3. connexion TCP réelle (SCRAM, adresse réseau du conteneur) : nouvelle valeur acceptée, ancienne refusée ;
+  4. affiche la commande de relance des consommateurs, à lancer **immédiatement**.
+
+  Idempotent (« déjà fait »). `--rollback` remet l'ancienne valeur avec les mêmes contrôles. Le contrôle de refus écrit une ligne attendue « password authentication failed » (sans valeur) dans le journal PostgreSQL.
+
+- **Redis** (depuis S3H-H3) : le mot de passe n'est plus un argument (`--requirepass`, `redis-cli -a`). Le shell du conteneur l'écrit dans `/run/ecsi-redis/redis.conf`, sur tmpfs, en 0600, puis le retire de l'environnement de `redis-server`. Le contrôle de santé utilise `REDISCLI_AUTH`. Il n'apparaît donc ni dans `ps aux`, ni dans `docker ps --no-trunc`, ni dans la commande ou le healthcheck du conteneur.
+- **Initialisation de PostgreSQL** (`infra/postgres/init/01-roles.sh`) : mots de passe lus par `\getenv`, journalisation neutralisée pour la session. Cela ne concerne que la création d'un volume neuf.
+
+**Avant chaque sous-étape.**
+
+1. `ops/rotation/check-env.sh .env` : conforme.
+2. Instantané : `install -d -m 700 /root/ecsi-h3 && cp -p .env /root/ecsi-h3/env.avant-<étape>`.
+3. Avant H3.3 et H3.4 : sauvegarde H1 du jour, restaurée et contrôlée, copiée hors VPS (SHA-256 identique).
+4. Nouvelles valeurs générées dans un fichier 0600 sans affichage, par exemple `printf 'REDIS_PASSWORD=%s\n' "$(openssl rand -hex 32)" >> /root/ecsi-h3/nouveaux.env`. Elles sont chiffrées avec age pour les destinataires H1, copiées dans le coffre hors VPS, et leurs KCV sont comparées des deux côtés.
+
+**Procédures.**
+
+- **H3.1 JWT** : mettre à jour `.env`, puis `docker compose up -d --no-deps --no-build api`. GO : API saine, session existante conservée après rafraîchissement, aucune erreur 5xx. Retour arrière : instantané, puis relance de l'API (temporairement, puisque l'ancienne valeur est compromise).
+- **H3.2 Redis** : mettre à jour `.env`, puis `docker compose up -d --no-deps --no-build redis api`. GO : `redis` et `api` sains ; ancienne valeur refusée ; `ps aux | grep -c '[r]equirepass'` égal à 0 ; `check-env.sh --conteneurs` conforme. Retour arrière : instantané, puis la même commande.
+- **H3.3 PostgreSQL**, dans l'ordre `ecsi_migrator`, `postgres`, `ecsi_worker`, `ecsi_auth`, `ecsi_app`. Pour chaque rôle : mettre à jour `.env`, puis `pg-role-password.sh <rôle> --ancien /root/ecsi-h3/env.avant-h3.3 --dry-run`, puis sans `--dry-run`, puis relancer les consommateurs affichés (toujours `--no-deps --no-build`, pour ne pas relancer `migrate` avec un mot de passe périmé). GO avant le rôle suivant : contrôles ci-dessous verts, `check-env.sh --conteneurs` conforme. Retour arrière : `pg-role-password.sh <rôle> --ancien … --rollback`, instantané de `.env`, relance des consommateurs.
+- **H3.4 `k3` → `k4`** : la procédure de « Rotation de la clé de chiffrement », avec `ENCRYPTION_KEY=<k4>`, `ENCRYPTION_KEY_ID=k4` et `ENCRYPTION_PREVIOUS_KEYS=k3:<k3>,k2:<k2>`. `$OPS --verify` **avant** tout redémarrage. Après la rotation, `$OPS --verify --retirable k3` doit renvoyer 0, et `--retirable k2` doit renvoyer 3 tant que des codes de récupération dépendent de `k2`. Puis nouvelle sauvegarde H1 conforme. Retour arrière : `k3` active, `k4` et `k2` anciennes, puis `$OPS`.
+- **H3.5 retrait de `k3`** (GO séparé) : `ENCRYPTION_PREVIOUS_KEYS=k2:<k2>`, puis relance de `api`, `worker` et `gateway`. `$OPS --verify` doit donner `0 illisible(s)`. `k3` reste **sous séquestre** hors ligne tant qu'une sauvegarde de son ère existe. Retour arrière : remettre `k3` depuis le coffre.
+
+**Contrôles après chaque sous-étape.**
+
+- `docker compose ps` : tous les services `healthy`.
+- `curl -s http://127.0.0.1:8080/api/v1/health` : base, Redis et stockage OK.
+- `curl -s -o /dev/null -w '%{http_code}' -X POST -H 'cookie: ecsi_rt=sonde' http://127.0.0.1:8080/api/v1/auth/refresh` : `401` attendu (Redis et `ecsi_auth` OK) ; `500` = NO-GO.
+- `docker compose logs --since 10m postgres | grep -c 'password authentication failed'` : 0, en dehors de la ligne attendue de `pg-role-password.sh`.
+- Routeurs : CHR-LAB ONLINE, `consecutive_failures = 0`, `last_error` vide, synchronisation récente ; `ping -c 4 10.200.0.2` ; `wg show wg0 latest-handshakes`.
+
+**Essais automatisés (CI).**
+
+- `ops/rotation/tests/check-env.test.sh`.
+- `ops/rotation/tests/secrets-tools-e2e.sh` : Redis et les 5 rôles PostgreSQL sur une pile réelle dont PostgreSQL journalise toutes les requêtes, avec un échantillonneur `ps` continu. Il comprend des témoins prouvant que l'ancien mécanisme Redis et un `ALTER ROLE` naïf **sont** détectés, et vérifie 0 valeur dans les sorties, dans `ps`, dans le journal PostgreSQL et dans les commandes des conteneurs.
+- `ops/keys/tests/key-rotation-three-keys-e2e.sh` : `k2`, `k3`, `k4`, avec 10 codes de récupération sous `k2`.
 
 ### Limites de débit
 

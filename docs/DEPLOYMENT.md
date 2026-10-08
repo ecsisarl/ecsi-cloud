@@ -52,6 +52,8 @@ Un volume PostgreSQL créé avant le Sprint 1 ne contient pas le rôle `ecsi_aut
 
 **Changer de clé de chiffrement** : ne jamais remplacer `ENCRYPTION_KEY` seule. Suivre la procédure en 9 temps de [SECURITY.md](SECURITY.md#rotation-de-la-clé-de-chiffrement) : nouvelle clé active avec un nouvel identifiant, ancienne clé dans `ENCRYPTION_PREVIOUS_KEYS`, puis le service d'exploitation `keys-rotate` (`docker compose --profile ops run --rm --no-deps keys-rotate --verify | --dry-run`, puis sans option) ([ADR 0014](adr/0014-chiffrement-enveloppe-rotation.md)). L'ancienne commande `docker compose run --rm migrate node dist/cli/rotate-encryption-keys.js` ne recevait pas les connexions nécessaires aux mots de passe RouterOS : ne plus l'utiliser.
 
+**Changer un autre secret** (JWT, Redis, rôles PostgreSQL) : suivre « Rotation des secrets (S3H-H3) » de [SECURITY.md](SECURITY.md#rotation-des-secrets-s3h-h3). Les mots de passe des rôles PostgreSQL ne sont lus qu'à la création du volume : modifier `.env` ne suffit pas (`ops/rotation/pg-role-password.sh`). Contrôler `.env` sans l'afficher avec `ops/rotation/check-env.sh .env`. Depuis S3H-H3, le mot de passe Redis n'apparaît plus dans les arguments du conteneur (configuration générée sur tmpfs).
+
 ### Variables ajoutées au Sprint 3A
 
 | Variable                       | Rôle                                                                                                          |

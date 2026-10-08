@@ -32,10 +32,11 @@ jobs:
       - run: pnpm test
       - name: Tests des outils de laboratoire (pilote S3B)
         run: node --test 'lab/**/*.test.mjs'
-      - name: Scripts de sauvegarde (shellcheck, rétention)
+      - name: Scripts d'exploitation (shellcheck, rétention, check-env)
         run: |
-          shellcheck -x -e SC1091 ops/backup/*.sh ops/backup/tests/*.sh ops/keys/tests/*.sh
+          shellcheck -x -e SC1091 ops/backup/*.sh ops/backup/tests/*.sh ops/keys/tests/*.sh ops/rotation/*.sh ops/rotation/tests/*.sh infra/postgres/init/*.sh
           ops/backup/tests/retention.test.sh
+          ops/rotation/tests/check-env.test.sh
       - run: pnpm build
         env:
           NEXT_TELEMETRY_DISABLED: '1'
@@ -179,6 +180,14 @@ jobs:
       # vérifiée, contrôle, simulation, rotation contrôlée, retour arrière, retrait de k2).
       - name: Rotation de la clé de chiffrement (procédure complète)
         run: ops/keys/tests/key-rotation-e2e.sh "$RUNNER_TEMP/rotation"
+      # S3H-H3 (outillage) : rotation k3 -> k4 à trois clés (k2 conservée pour les codes de
+      # récupération, k3 retirable puis retirée, retour arrière, idempotence).
+      - name: Rotation à trois clés k2/k3/k4 (procédure H3.4 et H3.5)
+        run: ops/keys/tests/key-rotation-three-keys-e2e.sh "$RUNNER_TEMP/rotation-3"
+      # S3H-H3 (outillage) : Redis sans mot de passe dans les processus, rotation des 5 rôles
+      # PostgreSQL sans fuite (journal PostgreSQL complet, échantillonnage ps, témoins).
+      - name: Outils de rotation des secrets (Redis, rôles PostgreSQL)
+        run: ops/rotation/tests/secrets-tools-e2e.sh "$RUNNER_TEMP/secrets"
       - uses: actions/upload-artifact@v4
         if: failure()
         with:

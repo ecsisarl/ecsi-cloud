@@ -1,0 +1,15 @@
+# ECSI CLOUD — TEST uniquement (ops/rotation/tests/secrets-tools-e2e.sh) : PostgreSQL journalise
+# TOUTES les requêtes, les connexions et les erreurs avec leur requête, pour prouver que
+# pg-role-password.sh n'y laisse jamais un mot de passe. Jamais utilisé en production.
+services:
+  postgres:
+    command:
+      [
+        'postgres',
+        '-c',
+        'log_statement=all',
+        '-c',
+        'log_min_error_statement=error',
+        '-c',
+        'log_connections=on',
+      ]

@@ -3,6 +3,9 @@
  * complète : docs/SECURITY.md, « Rotation de la clé de chiffrement », Sprint S3H-H2).
  *
  *   node dist/cli/rotate-encryption-keys.js --verify     contrôle en lecture seule
+ *   node dist/cli/rotate-encryption-keys.js --verify --retirable k3
+ *                                                        idem, et code de sortie 3 si k3 n'est
+ *                                                        pas retirable (S3H-H3)
  *   node dist/cli/rotate-encryption-keys.js --dry-run    simulation (ré-enveloppe contrôlée, rien n'est écrit)
  *   node dist/cli/rotate-encryption-keys.js              rotation, puis contrôle
  *
@@ -18,31 +21,46 @@
  * après, à l'identique (SecretBox.rewrapVerified) ; l'écriture est conditionnelle (un secret
  * modifié entre-temps n'est pas écrasé). Idempotente. Aucune clé n'est jamais retirée par la
  * commande : elle indique seulement si plus rien ne dépend des anciennes clés (contrôle
- * --verify : tout sous la clé active, déchiffré avec elle seule, 0 illisible). Les codes de
+ * --verify : tout sous la clé active, déchiffré avec elle seule, 0 illisible), et donne un
+ * verdict PAR CLÉ (k3 retirable, k2 encore nécessaire, par exemple). Les codes de
  * récupération 2FA (empreintes HMAC) ne peuvent pas être ré-enveloppés : ils sont comptés par
  * clé et bloquent le retrait tant qu'ils dépendent d'une ancienne clé.
  *
  * Sorties : compteurs et identifiants de clé uniquement, jamais une clé ni un secret.
+ * Codes de sortie : 0 succès ; 1 échec ou secret illisible ; 2 usage ou clés invalides ;
+ * 3 (--retirable) la clé demandée n'est pas retirable.
  */
 import { parseArgs } from 'node:util';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import pg from 'pg';
 import { z } from 'zod';
 import { rotateEncryptionKeys } from '../auth/key-rotation.js';
-import { formatKeyVerification, verifyEncryptionKeys } from '../auth/key-verification.js';
-import { parseKeyList, SecretBox } from '../auth/crypto/secret-box.js';
+import {
+  formatKeyStatus,
+  formatKeyVerification,
+  keyStatus,
+  verifyEncryptionKeys,
+} from '../auth/key-verification.js';
+import { KEY_ID_PATTERN, parseKeyList, SecretBox } from '../auth/crypto/secret-box.js';
 import { type RouterRotationReport, rotateRouterSecrets } from '../routers/router-secret.js';
 
 const { values } = parseArgs({
   options: {
     'dry-run': { type: 'boolean', default: false },
     verify: { type: 'boolean', default: false },
+    retirable: { type: 'string' },
   },
 });
 const dryRun = values['dry-run'];
 const verifyOnly = values.verify;
-if (dryRun && verifyOnly) {
-  process.stderr.write('Usage : rotate-encryption-keys [--verify | --dry-run]\n');
+const retirable = values.retirable;
+if (
+  (dryRun && verifyOnly) ||
+  (retirable !== undefined && (!verifyOnly || !KEY_ID_PATTERN.test(retirable)))
+) {
+  process.stderr.write(
+    'Usage : rotate-encryption-keys [--verify [--retirable <identifiant de clé>] | --dry-run]\n',
+  );
   process.exit(2);
 }
 
@@ -91,6 +109,11 @@ async function verify(url: string): Promise<boolean> {
   try {
     const report = await verifyEncryptionKeys(migrator, keys);
     out(['Contrôle (lecture seule) :', ...formatKeyVerification(report)]);
+    if (retirable !== undefined) {
+      const status = keyStatus(report, retirable);
+      out([`Verdict demandé (--retirable ${retirable}) :`, formatKeyStatus(report, status)]);
+      if (!status.retirable) process.exitCode = 3;
+    }
     return report.routers.unreadable === 0 && report.mfa.unreadable === 0;
   } finally {
     await migrator.end();

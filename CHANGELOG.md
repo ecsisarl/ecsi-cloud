@@ -2,6 +2,21 @@
 
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Versions par sprint.
 
+## [S3H-H3-outillage] — 2026-10-08 — Outillage de rotation des secrets (aucune rotation réelle)
+
+### Ajouté
+
+- `rotate-encryption-keys --verify` : verdict de retrait **par clé** (active / retirable / encore nécessaire, avec ses dépendances ; clé absente dont dépendent des données signalée ECHEC) et option `--retirable <id>` (code de sortie 3 si la clé n'est pas retirable). Permet de retirer `k3` après la rotation vers `k4` tout en conservant `k2` pour les codes de récupération.
+- `ops/rotation/check-env.sh` : contrôle d'un fichier d'environnement sans afficher de valeur (présence, unicité, `devonly`, formats, clés de 32 octets distinctes, droits), empreintes courtes (KCV), comparaison entre fichiers (coffre, `gateway.env`) et avec les valeurs chargées par les conteneurs.
+- `ops/rotation/pg-role-password.sh` : rotation contrôlée du mot de passe d'un rôle PostgreSQL (simulation, idempotence, retour arrière), valeur transmise uniquement par l'entrée standard, journalisation PostgreSQL neutralisée pour la session, contrôle SCRAM nouvelle valeur acceptée / ancienne refusée.
+- Runbook « Rotation des secrets (S3H-H3) » dans `docs/SECURITY.md`.
+- Tests : intégration `test/key-rotation-three-keys.int.test.ts` (k2/k3/k4) ; essais Docker `ops/keys/tests/key-rotation-three-keys-e2e.sh` et `ops/rotation/tests/secrets-tools-e2e.sh` (PostgreSQL journalisant tout, échantillonnage `ps` continu, témoins positifs) ; `ops/rotation/tests/check-env.test.sh` ; tous en CI.
+
+### Corrigé
+
+- Redis : le mot de passe était passé en argument (`--requirepass`, contrôle de santé `redis-cli -a`), donc visible dans `ps aux`, `docker ps --no-trunc` et la commande du conteneur. Il est désormais écrit par le shell du conteneur dans une configuration sur tmpfs (0600), retiré de l'environnement de `redis-server`, et le contrôle de santé utilise `REDISCLI_AUTH`.
+- Initialisation PostgreSQL (`01-roles.sh`, volume neuf seulement) : mots de passe lus par `\getenv` au lieu d'arguments `psql -v`, journalisation neutralisée pour la session.
+
 ## [S3H-H2] — 2026-10-07 — Rotation de la clé de chiffrement
 
 ### Corrigé
