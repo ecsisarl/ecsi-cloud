@@ -1,0 +1,41 @@
+# ECSI CLOUD — surcouche des piles JETABLES de sauvegarde (Sprint S3H, étape H1).
+#
+# Utilisée uniquement par ops/backup/lib.sh, après docker-compose.yml et docker-compose.prod.yml,
+# avec un nom de projet dédié (ecsi-backupcheck, ecsi-restoretest, ecsi-reprise) : volumes et
+# réseau propres à ce projet, jamais ceux de la production.
+#
+#  - aucun port publié (PostgreSQL et Nginx compris) ;
+#  - image applicative existante seulement (ECSI_API_IMAGE), jamais reconstruite ni téléchargée :
+#    l'étiquette utilisée par la pile de production n'est pas modifiée ;
+#  - tableau de bord, portail, Nginx et worker hors du périmètre (profils), le worker n'étant
+#    démarré que pour l'exercice de reprise (--reprise).
+
+services:
+  postgres:
+    ports: !reset []
+
+  migrate:
+    image: ${ECSI_API_IMAGE:-ecsi-cloud/api:dev}
+    pull_policy: never
+    environment:
+      # Superutilisateur de la base JETABLE : comptage de toutes les lignes (RLS non appliquée).
+      RESTORE_CHECK_URL: postgres://postgres:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD obligatoire}@postgres:5432/${POSTGRES_DB:-ecsi}
+
+  api:
+    image: ${ECSI_API_IMAGE:-ecsi-cloud/api:dev}
+    pull_policy: never
+
+  worker:
+    image: ${ECSI_API_IMAGE:-ecsi-cloud/api:dev}
+    pull_policy: never
+    profiles: ['reprise']
+
+  web:
+    profiles: ['hors-sauvegarde']
+
+  portal:
+    profiles: ['hors-sauvegarde']
+
+  nginx:
+    profiles: ['hors-sauvegarde']
+    ports: !reset []
