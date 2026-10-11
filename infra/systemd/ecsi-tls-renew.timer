@@ -1,0 +1,12 @@
+# ECSI CLOUD - renouvellement HTTPS deux fois par jour (Sprint S3H, étape H4).
+# Voir ecsi-tls-renew.service. Rollback : systemctl disable --now ecsi-tls-renew.timer.
+[Unit]
+Description=ECSI CLOUD - renouvellement du certificat HTTPS
+
+[Timer]
+OnCalendar=*-*-* 03,15:17:00 UTC
+RandomizedDelaySec=30min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

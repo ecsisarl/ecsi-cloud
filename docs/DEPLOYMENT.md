@@ -144,7 +144,8 @@ La surcouche :
 - passe l'API, les migrations, le worker et la passerelle en `NODE_ENV=production`. Le code refuse alors les valeurs contenant `devonly`, impose `COOKIE_SECURE`, des journaux JSON, une `WEB_PUBLIC_URL` en HTTPS, et interdit `S3_AUTO_CREATE_BUCKET` ;
 - rend **obligatoires** les variables ci-dessous. Si l'une manque, Compose s'arrête avec « required variable X is missing a value », sans afficher de valeur ;
 - retire Mailpit (profil `dev-mail`) : un SMTP réel est nécessaire ;
-- ne publie que Nginx sur le port **80**. 443 et TLS arrivent à l'étape H4. Redis, S3, l'API, le web et le portail ne sont plus publiés ; PostgreSQL reste publié sur `127.0.0.1` uniquement, pour l'agent passerelle, qui tourne sur le réseau de l'hôte.
+- ne publie que Nginx, sur les ports **80** et **443** (HTTPS public : étape H4, ci-dessous). Redis, S3, l'API, le web et le portail ne sont plus publiés ; PostgreSQL reste publié sur `127.0.0.1` uniquement, pour l'agent passerelle, qui tourne sur le réseau de l'hôte ;
+- ne démarre plus le portail captif (profil `portail`, publication au Sprint 7) ; Nginx ne dépend plus de lui.
 
 Variables obligatoires : `POSTGRES_PASSWORD`, `ECSI_DB_MIGRATOR_PASSWORD`, `ECSI_DB_APP_PASSWORD`, `ECSI_DB_AUTH_PASSWORD`, `ECSI_DB_WORKER_PASSWORD`, `REDIS_PASSWORD`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `JWT_ACCESS_SECRET`, `ENCRYPTION_KEY`, `ENCRYPTION_KEY_ID` (explicite en production, pour que la rotation des clés reste cohérente), `WEB_PUBLIC_URL` (HTTPS), `CORS_ORIGINS`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_FROM`. Facultatives : `SMTP_SECURE` (`true` par défaut), `SMTP_USER`, `SMTP_PASSWORD`.
 
@@ -154,6 +155,69 @@ Variables obligatoires : `POSTGRES_PASSWORD`, `ECSI_DB_MIGRATOR_PASSWORD`, `ECSI
 **Essai local ou CI** : `./scripts/generate-prod-test-env.sh <fichier>` génère des secrets de test aléatoires (droits 600, rien n'est affiché), puis `docker compose --env-file <fichier> -f docker-compose.yml -f docker-compose.prod.yml up -d`. Ce fichier ne convient pas à un vrai déploiement : ses URL et son SMTP sont fictifs.
 
 **Retour arrière** : relancer sans la surcouche, avec le seul `docker-compose.yml`. Les volumes et les données ne changent pas.
+
+## HTTPS public (Sprint S3H, étape H4)
+
+**État : code livré, rien n'est déployé.** Chaque étape ci-dessous se fait sur le VPS après la validation indépendante et un GO explicite.
+
+| Adresse                                | Service                                                                   |
+| -------------------------------------- | ------------------------------------------------------------------------- |
+| `https://app.mytikcentral.com`         | tableau de bord (web)                                                     |
+| `https://app.mytikcentral.com/api/*`   | API                                                                       |
+| `https://enroll.mytikcentral.com`      | **uniquement** `POST /api/v1/routers/enroll` (tout le reste : 404 ou 405) |
+| `http://…` (80)                        | défi ACME `/.well-known/acme-challenge/`, sinon 301 vers HTTPS            |
+| autre nom d'hôte, accès par adresse IP | connexion fermée sans réponse                                             |
+
+Le portail captif n'est pas publié (Sprint 7). PostgreSQL, Redis, S3, l'API et le portail ne sont jamais publiés directement. WireGuard (UDP 51820) et l'agent passerelle (`network_mode: host`) ne sont pas concernés.
+
+### Fichiers
+
+- `infra/nginx/production/https.conf` : mode **https** (défaut) ; `acme-bootstrap.conf` : mode **acme-bootstrap** (HTTP seul : défi ACME, 503 ailleurs, aucun service interne contacté), pour obtenir le premier certificat ; `snippets/` : TLS, en-têtes, défi ACME. La configuration de développement `infra/nginx/nginx.conf` est inchangée.
+- `docker-compose.prod.yml` : Nginx sur 80 et 443, configuration choisie par `ECSI_NGINX_MODE` (fixée par les scripts, **jamais** dans `.env`), volumes `letsencrypt` (certificats, lecture seule pour Nginx) et `acme-webroot` (défis), service `certbot` (profil `tls`, image `certbot/certbot` figée, aucun port). `LOG_PRETTY=false` imposé ; `ROUTER_ENROLL_CA_URL` / `_FINGERPRINT` neutralisées (le routeur vérifie le certificat public).
+- `ops/tls/preflight.sh` : contrôle sans rien modifier ni afficher de valeur (configuration Compose **fusionnée** : ports, portail, URL publiques, garde-fous, clés de chiffrement identiques partout et `k2` présente, SMTP réel ; `nginx -t` des deux modes).
+- `ops/tls/certificat.sh` : `amorcer`, `staging`, `production`, `activer`, `renouveler`, `etat` (détail en tête du script).
+- `infra/systemd/ecsi-tls-renew.service` et `.timer` : renouvellement deux fois par jour (à installer après validation).
+
+### Prérequis (manuels, hors dépôt)
+
+1. DNS : `app` et `enroll.mytikcentral.com` en A (et AAAA si IPv6) vers le VPS, **DNS seulement** chez Cloudflare (pas de proxy : HTTP-01 et adresse réelle des clients).
+2. Pare-feu : TCP 80 et 443 ouverts en entrée ; rien d'autre ne change.
+3. Ports 80 et 443 libres sur le VPS : le proxy temporaire `ecsi-h2-proxy` (hors dépôt) est arrêté à la main par l'exploitant au moment de la bascule.
+4. `.env` de production : `WEB_PUBLIC_URL=https://app.mytikcentral.com`, `CORS_ORIGINS=https://app.mytikcentral.com`, `ROUTER_ENROLL_PUBLIC_URL=https://enroll.mytikcentral.com/api/v1/routers/enroll`, `ROUTER_ENROLL_CA_URL` et `ROUTER_ENROLL_CA_FINGERPRINT` retirées, `ENCRYPTION_PREVIOUS_KEYS` **conservée avec `k2`**, pas de `ECSI_NGINX_MODE`. `COOKIE_SECURE=true`, `LOG_PRETTY=false` et `S3_AUTO_CREATE_BUCKET=false` sont imposés par la surcouche.
+5. **SMTP réel** (`SMTP_HOST`, `SMTP_PORT`, `SMTP_FROM`, identifiants) : obligatoire avec la surcouche de production ; Mailpit n'est pas un SMTP de production.
+6. Sauvegarde H1 vérifiée juste avant la bascule (`ops/backup/pg-backup.sh`).
+
+### Procédure (staging d'abord, puis production)
+
+```
+ops/tls/preflight.sh                       # PREFLIGHT H4 : CONFORME
+ops/tls/certificat.sh amorcer              # Nginx HTTP seul (défi ACME)
+ops/tls/certificat.sh staging              # Let's Encrypt STAGING, --dry-run : rien n'est écrit
+ops/tls/certificat.sh production           # staging à nouveau, puis certificat réel (idempotent)
+ops/tls/certificat.sh activer              # nginx -t, Nginx en https, 301 et TLS contrôlés
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --no-build
+ops/tls/preflight.sh                       # mode https : nginx -t avec le vrai certificat
+```
+
+`staging` et `production` vérifient d'abord, en local, que Nginx sert bien un fichier témoin du webroot pour les deux noms ; sans cela, rien n'est demandé à Let's Encrypt (pas de consommation des limites de débit). Contrôles depuis l'extérieur ensuite : `curl -I http://app.mytikcentral.com` (301), `curl -I https://app.mytikcentral.com` (200, en-têtes de sécurité), `curl -i https://enroll.mytikcentral.com/api/v1/routers/enroll` (405), puis un enrôlement réel depuis CHR-LAB (`check-certificate=yes` avec le certificat public).
+
+**Renouvellement** : `ops/tls/certificat.sh renouveler` (certbot ne renouvelle qu'à moins de 30 jours de l'échéance, `nginx -t` puis rechargement sans coupure), par le timer `ecsi-tls-renew.timer`.
+
+**HSTS** : `max-age=86400` (un jour, sans `includeSubDomains` ni `preload`) pendant la validation, pour garder un retour arrière possible ; à porter à `31536000` dans `snippets/security-headers.conf` après validation de H4 (modification de code séparée).
+
+**Ne jamais** lancer `docker compose … down -v` en production : il supprimerait aussi les certificats (et les données).
+
+### Retour arrière
+
+- **Avant `activer`** : seul Nginx a changé (mode acme-bootstrap). `docker compose -f docker-compose.yml -f docker-compose.prod.yml rm -sf nginx`, puis relancer l'exposition précédente (Nginx de base, proxy temporaire) comme avant H4.
+- **Après `activer`** : même commande pour retirer le Nginx de production, puis exposition précédente ; ou retour complet au commit `4662e6e` (`git checkout 4662e6e`, puis `docker compose … up -d --no-build`). Les volumes `letsencrypt` et `acme-webroot` restent en place (sans effet) ; le certificat reste valide pour un nouvel essai.
+- **Après la relance complète** (`up -d` avec la surcouche) : retour à la pile précédente par `docker compose up -d --no-build` sans la surcouche, comme avant H4 (Nginx de base recréé, mêmes volumes et données).
+- Avec HSTS à un jour, un navigateur déjà venu en HTTPS exige HTTPS au plus 24 h après sa dernière visite.
+- Le DNS, le pare-feu, WireGuard, les données et les clés de chiffrement ne sont modifiés par aucune commande H4.
+
+### Essai automatisé
+
+`ops/tls/tests/https-e2e.sh <dossier vide>` (CI ; exécutable sur le VPS : projet `ecsi-tlstest` dédié, ports 127.0.0.1:18080/18443, aucun conteneur ni volume de production touché). Le vrai Nginx de production devant un service amont factice : contrôle préalable et 7 configurations refusées, mode acme-bootstrap, Let's Encrypt **simulé par Pebble** (staging `--dry-run`, certificat, idempotence, bascule, renouvellement), puis routage app/enroll, refus, HTTP → HTTPS, défi ACME non redirigé, en-têtes, hôtes inconnus, client sans SNI, TLS 1.2/1.3, limites de corps et de débit.
 
 ## Sauvegarde et restauration (Sprint S3H)
 

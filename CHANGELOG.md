@@ -2,6 +2,19 @@
 
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Versions par sprint.
 
+## [S3H-H4] — 2026-10-11 — HTTPS public de production (livré, non déployé)
+
+### Ajouté
+
+- Nginx de production `infra/nginx/production/` : `app.mytikcentral.com` (tableau de bord, `/api/*`, WebSocket), `enroll.mytikcentral.com` (uniquement `POST /api/v1/routers/enroll`, ligne de requête exacte), HTTP limité au défi ACME et à la redirection 301, hôtes inconnus refusés, TLS 1.2/1.3, HSTS et en-têtes de sécurité sur HTTPS seulement, limitation de débit, journal sans chaîne de requête. Mode `acme-bootstrap` pour le premier certificat. Aucune dépendance au portail.
+- `docker-compose.prod.yml` : Nginx sur 80 et 443 (`ECSI_NGINX_MODE`), volumes `letsencrypt` et `acme-webroot`, service `certbot` (profil `tls`, image figée), portail en profil `portail`, `LOG_PRETTY=false` imposé, AC privée d'enrôlement neutralisée.
+- `ops/tls/certificat.sh` (Let's Encrypt staging `--dry-run` puis production, idempotent ; activation, renouvellement avec `nginx -t` et rechargement), `ops/tls/preflight.sh` et `ops/tls/compose-check.mjs` (configuration Compose fusionnée contrôlée sans afficher de valeur, `k2` exigée), `infra/systemd/ecsi-tls-renew.{service,timer}`.
+- Tests : essai Docker `ops/tls/tests/https-e2e.sh` (vrai Nginx, Let's Encrypt simulé par Pebble, en CI) ; tests de la surcouche (`compose-prod.test.ts`).
+
+### Modifié
+
+- CI : l'étape « Pile de production » démarre Nginx en mode `acme-bootstrap` (pas de certificat) et vérifie l'API depuis son conteneur ; ports attendus 80 et 443.
+
 ## [S3H-H3-outillage] — 2026-10-08 — Outillage de rotation des secrets (aucune rotation réelle)
 
 ### Ajouté

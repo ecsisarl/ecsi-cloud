@@ -9,8 +9,14 @@
 #   - rend OBLIGATOIRE chaque secret et chaque URL publique (${VAR:?…}) : la pile refuse de
 #     démarrer si l'un d'eux manque, sans jamais afficher de valeur ;
 #   - retire Mailpit (profil « dev-mail ») : SMTP réel obligatoire ;
-#   - ne publie plus que Nginx sur le port 80 (443 et TLS : étape H4). PostgreSQL reste publié
-#     sur 127.0.0.1 seulement, pour l'agent passerelle qui tourne sur le réseau de l'hôte.
+#   - ne publie plus que Nginx, sur les ports 80 et 443 (étape H4 : HTTPS public pour
+#     app.mytikcentral.com et enroll.mytikcentral.com, infra/nginx/production/). PostgreSQL
+#     reste publié sur 127.0.0.1 seulement, pour l'agent passerelle (réseau de l'hôte) ;
+#   - ne démarre plus le portail captif (profil « portail », publication au Sprint 7).
+#
+# Certificats Let's Encrypt (HTTP-01, webroot) : service certbot (profil « tls ») piloté par
+# ops/tls/certificat.sh ; procédure, validation staging puis production et retour arrière :
+# docs/DEPLOYMENT.md (« HTTPS public, étape H4 »).
 #
 # Le bucket S3 n'est jamais créé automatiquement en production : il doit exister (voir
 # docs/DEPLOYMENT.md). Les variables obligatoires sont listées dans docs/DEPLOYMENT.md.
@@ -32,6 +38,7 @@ x-prod-env: &prod-env
   # Explicite en production : un identifiant erroné rendrait la rotation des clés incohérente.
   ENCRYPTION_KEY_ID: ${ENCRYPTION_KEY_ID:?ENCRYPTION_KEY_ID obligatoire}
   COOKIE_SECURE: 'true'
+  LOG_PRETTY: 'false'
   WEB_PUBLIC_URL: ${WEB_PUBLIC_URL:?WEB_PUBLIC_URL obligatoire}
   SMTP_HOST: ${SMTP_HOST:?SMTP_HOST obligatoire (Mailpit est retiré en production)}
   SMTP_PORT: ${SMTP_PORT:?SMTP_PORT obligatoire}
@@ -39,6 +46,12 @@ x-prod-env: &prod-env
   SMTP_USER: ${SMTP_USER:-}
   SMTP_PASSWORD: ${SMTP_PASSWORD:-}
   SMTP_FROM: ${SMTP_FROM:?SMTP_FROM obligatoire}
+  # Enrôlement des routeurs (H4) : ROUTER_ENROLL_PUBLIC_URL vient du Compose de base
+  # (https://enroll.mytikcentral.com/api/v1/routers/enroll, ops/tls/preflight.sh). Le certificat
+  # public Let's Encrypt est vérifié par le routeur : l'AC privée de laboratoire est neutralisée
+  # ici, quelle que soit la valeur du fichier .env.
+  ROUTER_ENROLL_CA_URL: ''
+  ROUTER_ENROLL_CA_FINGERPRINT: ''
 
 services:
   postgres:
@@ -107,11 +120,50 @@ services:
   web:
     ports: !reset []
 
+  # Portail captif : non publié et non démarré en production avant le Sprint 7 (profil
+  # « portail » pour le lancer à la main ; Nginx ne dépend plus de lui).
   portal:
+    profiles: ['portail']
     ports: !reset []
 
+  # Nginx PRODUCTION (étape H4) : configuration infra/nginx/production/<ECSI_NGINX_MODE>.conf,
+  #   https (défaut)   80 = défi ACME + redirection 301 ; 443 = app et enroll (TLS public) ;
+  #   acme-bootstrap   80 seulement = défi ACME, 503 ailleurs (obtention du 1er certificat).
+  # Certificats en lecture seule (volume letsencrypt), défis ACME en lecture seule (volume
+  # acme-webroot) : seul le service certbot y écrit. Aucune dépendance au portail.
   nginx:
-    # Port 80 seulement (tableau de bord et API, bloc 8080 de nginx.conf). Le portail captif
-    # n'est pas publié en production à ce stade (Sprint 7) ; TLS et 443 : étape H4.
+    command: ['nginx', '-c', '/etc/nginx/ecsi/${ECSI_NGINX_MODE:-https}.conf', '-g', 'daemon off;']
+    volumes: !override
+      - type: bind
+        source: ./infra/nginx/production
+        target: /etc/nginx/ecsi
+        read_only: true
+      - type: volume
+        source: letsencrypt
+        target: /etc/letsencrypt
+        read_only: true
+      - type: volume
+        source: acme-webroot
+        target: /var/www/acme
+        read_only: true
+    depends_on: !override
+      - api
+      - web
     ports: !override
       - '80:8080'
+      - '443:8443'
+
+  # Let's Encrypt (étape H4), à la demande seulement, via ops/tls/certificat.sh : aucun port,
+  # aucun démarrage automatique, aucune dépendance. Défi HTTP-01 par le webroot servi par Nginx.
+  certbot:
+    profiles: ['tls']
+    image: certbot/certbot:v5.8.0
+    restart: 'no'
+    volumes:
+      - letsencrypt:/etc/letsencrypt
+      - acme-webroot:/var/www/acme
+
+volumes:
+  # Clés privées et certificats Let's Encrypt : à conserver (jamais « down -v » en production).
+  letsencrypt:
+  acme-webroot:

@@ -236,6 +236,16 @@ ops/rotation/pg-role-password.sh <rôle> --ancien <instantané> [--dry-run | --r
 - `ops/rotation/tests/secrets-tools-e2e.sh` : Redis et les 5 rôles PostgreSQL sur une pile réelle dont PostgreSQL journalise toutes les requêtes, avec un échantillonneur `ps` continu. Il comprend des témoins prouvant que l'ancien mécanisme Redis et un `ALTER ROLE` naïf **sont** détectés, et vérifie 0 valeur dans les sorties, dans `ps`, dans le journal PostgreSQL et dans les commandes des conteneurs.
 - `ops/keys/tests/key-rotation-three-keys-e2e.sh` : `k2`, `k3`, `k4`, avec 10 codes de récupération sous `k2`.
 
+### Exposition HTTPS (S3H-H4, livrée, non déployée)
+
+- **Nginx seul exposé**, sur 80 et 443 ; PostgreSQL (127.0.0.1), Redis, S3, l'API, le web et le portail ne sont jamais publiés. Le portail captif n'est pas démarré en production avant le Sprint 7.
+- `app.mytikcentral.com` : tableau de bord et `/api/*`. `enroll.mytikcentral.com` : **seule** la ligne de requête brute exacte `POST /api/v1/routers/enroll` est transmise (sans chaîne de requête ni variante encodée ou normalisée), avec une URI fixe vers l'API, un corps de 4 Kio au plus et une limite de 30 / min par IP (rafale 20) ; autres méthodes 405 (`Allow: POST`), autres chemins 404, sans atteindre l'API. Hôte inconnu ou accès par IP : connexion fermée.
+- TLS 1.2 et 1.3 (profil intermediate de Mozilla), certificat Let's Encrypt (HTTP-01, webroot en lecture seule pour Nginx). HTTP : défi ACME servi tel quel, tout le reste en 301 vers HTTPS, jamais de HSTS en HTTP.
+- En-têtes posés par Nginx seul sur toutes les réponses HTTPS, erreurs comprises (ceux de l'API et du tableau de bord sont masqués pour éviter les doublons) : HSTS (`max-age=86400` pendant la validation, puis un an), `X-Content-Type-Options`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`, `Cross-Origin-Opener-Policy` ; CSP `default-src 'none'` sur enroll. Version de Nginx masquée.
+- `X-Real-IP`, `X-Forwarded-For` (client réel en dernier, seul élément cru par l'API), `X-Forwarded-Proto: https`, `X-Request-Id` transmis ; journal d'accès sans chaîne de requête (aucun jeton d'URL journalisé).
+- Enrôlement : l'AC privée de laboratoire (`ROUTER_ENROLL_CA_URL`) est neutralisée par la surcouche de production ; le routeur vérifie le certificat public (`check-certificate=yes`).
+- Procédure, prérequis et retour arrière : [DEPLOYMENT.md](DEPLOYMENT.md#https-public-sprint-s3h-étape-h4).
+
 ### Limites de débit
 
 | Action                        | Limite                                                                                                                      |
