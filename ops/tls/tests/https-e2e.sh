@@ -192,8 +192,16 @@ if docker image inspect "$PEBBLE_IMAGE" >/dev/null 2>&1 || docker pull -q "$PEBB
   pass 'production relancée : certificat valide conservé (idempotent)'
   ok env ECSI_RENEW_FORCE=1 "$CERTSH" renouveler
   expect_in 'OK    renouvellement contrôlé, Nginx rechargé'
-  s2=$(served_serial)
-  { [ "$s2" != "$s1" ] && [ "$s2" = "$(stored_serial)" ]; } || fail 'certificat renouvelé non servi après rechargement'
+  # Rechargement asynchrone (HUP) : les anciens processus de travail finissent leurs
+  # connexions ; le nouveau certificat est servi dès que les nouveaux ont pris le relais.
+  s3=$(stored_serial)
+  [ "$s3" != "$s1" ] || fail 'certificat non renouvelé'
+  for _ in $(seq 1 20); do
+    s2=$(served_serial)
+    [ "$s2" = "$s3" ] && break
+    sleep 1
+  done
+  [ "$s2" = "$s3" ] || fail 'certificat renouvelé non servi après rechargement'
   pass "Pebble : staging sans écriture, certificat, https vérifié, idempotence, renouvellement rechargé"
   unset ECSI_ACME_SERVER ECSI_ACME_INSECURE
   $C --profile tls --profile pebble down -v >>"$OUT" 2>&1
