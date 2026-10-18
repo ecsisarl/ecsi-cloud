@@ -8,6 +8,25 @@ test.describe('Parcours de connexion', () => {
     await expect(page.getByRole('heading', { name: 'Connexion' })).toBeVisible();
   });
 
+  test('reste sur le dashboard malgré un « next » piégé (pas de redirection ouverte)', async ({
+    page,
+  }) => {
+    const violations: string[] = [];
+    page.on('console', (message) => {
+      if (/Content Security Policy/i.test(message.text())) violations.push(message.text());
+    });
+    const response = await page.goto('/connexion?next=%2F%09%2Fmalveillant.example');
+    // CSP du build de production (image Docker) : aucune ressource externe autorisée.
+    expect(response?.headers()['content-security-policy']).toContain("object-src 'none'");
+    await page.getByLabel('Adresse e-mail').fill('vendeur.a@ecsi.test');
+    await page.getByLabel('Mot de passe', { exact: true }).fill(SEED_PASSWORD);
+    await page.getByRole('button', { name: 'Se connecter' }).click();
+    await expect(page.getByRole('heading', { name: 'Tableau de bord' })).toBeVisible();
+    await expect(page).toHaveURL('/');
+    expect(violations).toEqual([]);
+    await logout(page);
+  });
+
   test('refuse un mauvais mot de passe avec un message générique', async ({ page }) => {
     await login(page, 'gerant.a@ecsi.test', 'mauvais-mot-de-passe');
     await expect(page.getByRole('main').getByRole('alert')).toHaveText(
