@@ -362,4 +362,12 @@ describe('S3H-H4 : HTTPS public (Nginx de production, certbot)', () => {
     expect(enroll).toContain('proxy_pass http://ecsi_api/api/v1/routers/enroll;');
     expect((enroll ?? '').match(/proxy_pass/g)).toHaveLength(1);
   });
+
+  it('S3H-H7 : en production, seul « migrate » reçoit le propriétaire du schéma', () => {
+    const api = merged('api');
+    expect(api).not.toHaveProperty('DATABASE_MIGRATOR_URL');
+    expect(api).not.toHaveProperty('DATABASE_WORKER_URL');
+    expect(merged('migrate').DATABASE_MIGRATOR_URL).toContain('ecsi_migrator:');
+    expect(merged('migrate').DATABASE_MIGRATOR_URL).not.toContain('devonly');
+  });
 });
