@@ -7,3 +7,4 @@ export * from './tenancy.js';
 export * from './audit.js';
 export * from './sites.js';
 export * from './routers.js';
+export * from './monitoring.js';
