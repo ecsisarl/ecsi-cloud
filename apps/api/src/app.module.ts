@@ -20,6 +20,7 @@ import { CompaniesModule } from './companies/companies.module.js';
 import { SitesModule } from './sites/sites.module.js';
 import { PlatformModule } from './platform/platform.module.js';
 import { RoutersModule } from './routers/routers.module.js';
+import { MonitoringModule } from './monitoring/monitoring.module.js';
 import { safeError } from './common/safe-error.js';
 
 export interface AppOptions {
@@ -79,6 +80,7 @@ export class AppModule {
         CompaniesModule,
         SitesModule,
         RoutersModule,
+        MonitoringModule,
         PlatformModule,
         HealthModule,
       ],

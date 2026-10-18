@@ -1,7 +1,16 @@
 'use client';
 
 import type { EnrollmentCreated, RouterDetail as RouterDetailView, Site } from '@ecsi/shared';
-import { Badge, Button, Card, CardContent, CardHeader, CardTitle, EmptyState } from '@ecsi/ui';
+import {
+  Badge,
+  Button,
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+  EmptyState,
+} from '@ecsi/ui';
 import { ArrowLeft, RouterIcon } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -18,6 +27,7 @@ import {
   useProblemMessage,
 } from '@/components/admin/controls';
 import { usePermissions } from '@/components/me-context';
+import { RouterHistory } from '@/components/monitoring/router-history';
 import { PageHeader } from '@/components/page-header';
 import { api } from '@/lib/client-api';
 import { EnrollmentScript, RemovalScript } from './enrollment-panel';
@@ -448,6 +458,18 @@ export function RouterDetail({ id }: { id: string }) {
           )}
         </CardContent>
       </Card>
+
+      {!provisioning && permissions.any('monitoring.read') ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>{t('historyTitle')}</CardTitle>
+            <CardDescription>{t('historyDescription')}</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <RouterHistory routerId={router.id} />
+          </CardContent>
+        </Card>
+      ) : null}
     </div>
   );
 }

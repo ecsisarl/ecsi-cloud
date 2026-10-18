@@ -27,7 +27,8 @@
     "openMenu": "Ouvrir le menu",
     "closeMenu": "Fermer le menu",
     "company": "Entreprise",
-    "siteGroups": "Groupes de sites"
+    "siteGroups": "Groupes de sites",
+    "alertsBadge": "{count, plural, one {# alerte non acquittée} other {# alertes non acquittées}}"
   },
   "dashboard": {
     "title": "Tableau de bord",
@@ -58,7 +59,10 @@
         "storage": "Stockage de fichiers"
       },
       "version": "Version {version}"
-    }
+    },
+    "monitoringHint": "Supervision des routeurs",
+    "monitoringNoAccess": "Réservé aux profils ayant accès à la supervision",
+    "alertsHint": "{critical, plural, =0 {aucune critique} one {# critique} other {# critiques}} · {unacknowledged, plural, =0 {toutes acquittées} one {# non acquittée} other {# non acquittées}}"
   },
   "placeholder": {
     "title": "Module en préparation",
@@ -355,6 +359,89 @@
       "download": "Télécharger le script de retrait",
       "copy": "Copier",
       "copied": "Copié"
+    },
+    "historyTitle": "Historique de supervision",
+    "historyDescription": "Charge CPU, mémoire utilisée et disponibilité, d’après les collectes du worker."
+  },
+  "monitoring": {
+    "title": "Monitoring",
+    "subtitle": "État de vos routeurs et alertes, d’après la supervision automatique (collecte toutes les minutes).",
+    "loading": "Chargement de la supervision…",
+    "kpi": {
+      "online": "Routeurs en ligne",
+      "degraded": "Routeurs dégradés",
+      "offline": "Routeurs hors ligne",
+      "openAlerts": "Alertes ouvertes",
+      "alertsHint": "{critical, plural, =0 {aucune critique} one {# critique} other {# critiques}} · {unacknowledged, plural, =0 {toutes acquittées} one {# non acquittée} other {# non acquittées}}",
+      "provisioning": "{count, plural, one {# routeur} other {# routeurs}} en cours d’enrôlement"
+    },
+    "severities": {
+      "CRITICAL": "Critique",
+      "WARNING": "Avertissement"
+    },
+    "types": {
+      "ROUTER_OFFLINE": "Routeur hors ligne",
+      "ROUTER_DEGRADED": "Routeur dégradé",
+      "CPU_HIGH": "Charge CPU élevée",
+      "MEMORY_HIGH": "Mémoire presque pleine"
+    },
+    "alerts": {
+      "title": "Alertes",
+      "description": "Ouvertes et résolues automatiquement selon l’état des routeurs. Acquitter une alerte indique qu’elle est prise en charge (action tracée dans le journal d’audit).",
+      "filter": "Afficher",
+      "states": {
+        "open": "Alertes en cours",
+        "resolved": "Alertes résolues",
+        "all": "Toutes les alertes"
+      },
+      "columns": {
+        "severity": "Gravité",
+        "type": "Alerte",
+        "router": "Routeur",
+        "opened": "Ouverte",
+        "state": "État",
+        "acknowledgement": "Prise en charge"
+      },
+      "ongoing": "En cours",
+      "resolvedAt": "Résolue {when}",
+      "acknowledge": "Acquitter",
+      "acknowledgedBy": "Acquittée par {name} {when}",
+      "formerMember": "un ancien membre",
+      "notAcknowledged": "Non acquittée",
+      "acknowledgedMessage": "Alerte acquittée.",
+      "detailCpu": "CPU à {value} % (seuil {threshold} %)",
+      "detailMemory": "Mémoire utilisée à {value} % (seuil {threshold} %)",
+      "detailFailures": "{count, plural, one {# collecte en échec} other {# collectes en échec}}",
+      "emptyOpenTitle": "Aucune alerte en cours",
+      "emptyTitle": "Aucune alerte",
+      "emptyDescription": "Les alertes apparaissent ici dès qu’un routeur est hors ligne, dégradé ou surchargé."
+    },
+    "routers": {
+      "title": "Routeurs supervisés",
+      "description": "Dernières valeurs collectées. Choisissez un routeur pour afficher son historique.",
+      "openAlerts": "Alertes",
+      "emptyTitle": "Aucun routeur supervisé",
+      "emptyDescription": "Ajoutez un routeur dans Réseau → Routeurs : il apparaîtra ici dès sa première collecte."
+    },
+    "history": {
+      "title": "Historique — {name}",
+      "description": "Moyennes par intervalle. Une interruption de la courbe signifie qu’aucune mesure n’a pu être collectée.",
+      "cpu": "CPU",
+      "memory": "Mémoire",
+      "availability": "Disponibilité : {value}",
+      "availabilityShort": "Disponibilité",
+      "range": "Période",
+      "ranges": {
+        "1": "1 h",
+        "6": "6 h",
+        "24": "24 h",
+        "168": "7 j"
+      },
+      "empty": "Aucune mesure sur cette période.",
+      "chartLabel": "Charge CPU et mémoire utilisée du routeur sur la période",
+      "now": "Maintenant",
+      "time": "Heure",
+      "showValues": "Afficher les valeurs"
     }
   },
   "siteGroups": {

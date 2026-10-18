@@ -13,6 +13,12 @@ describe('configuration du worker', () => {
     expect(env.ROUTER_TUNNEL_CIDR).toBe('10.200.0.0/24');
     expect(env.ROUTER_OFFLINE_AFTER_SECONDS).toBe(180);
     expect(env.ROUTER_OFFLINE_MIN_FAILURES).toBe(3);
+    expect(env.MONITORING_METRICS_RETENTION_DAYS).toBe(7);
+    expect(env.MONITORING_ALERTS_RETENTION_DAYS).toBe(90);
+    expect(env.MONITORING_CPU_HIGH_PERCENT).toBe(90);
+    expect(env.MONITORING_MEMORY_HIGH_PERCENT).toBe(90);
+    expect(env.MONITORING_SUSTAIN_SAMPLES).toBe(3);
+    expect(env.MONITORING_DEGRADED_MIN_FAILURES).toBe(3);
     expect(Object.keys(env)).not.toContain('JWT_ACCESS_SECRET');
     expect(Object.keys(env)).not.toContain('DATABASE_URL');
   });
@@ -31,6 +37,22 @@ describe('configuration du worker', () => {
     expect(() => parseWorkerEnv({ ENCRYPTION_KEY: base.ENCRYPTION_KEY })).toThrow(
       /DATABASE_WORKER_URL/,
     );
+  });
+
+  it('borne les réglages de l’historique et des alertes (lot E1)', () => {
+    // La base refuse de toute façon une purge plus courte (politiques worker_purge, 0007).
+    expect(() => parseWorkerEnv({ ...base, MONITORING_METRICS_RETENTION_DAYS: '0' })).toThrow(
+      /MONITORING_METRICS_RETENTION_DAYS/,
+    );
+    expect(() => parseWorkerEnv({ ...base, MONITORING_ALERTS_RETENTION_DAYS: '3' })).toThrow(
+      /MONITORING_ALERTS_RETENTION_DAYS/,
+    );
+    expect(() => parseWorkerEnv({ ...base, MONITORING_CPU_HIGH_PERCENT: '120' })).toThrow(
+      /MONITORING_CPU_HIGH_PERCENT/,
+    );
+    expect(
+      parseWorkerEnv({ ...base, MONITORING_SUSTAIN_SAMPLES: '5' }).MONITORING_SUSTAIN_SAMPLES,
+    ).toBe(5);
   });
 
   it('refuse les valeurs de développement en production', () => {

@@ -118,6 +118,12 @@ export const PERMISSIONS = [
     sprint: 4,
   },
   { code: 'monitoring.read', module: 'monitoring', description: 'Voir la supervision', sprint: 3 },
+  {
+    code: 'monitoring.acknowledge',
+    module: 'monitoring',
+    description: 'Acquitter les alertes de supervision',
+    sprint: 3,
+  },
   // Offres, tickets, clients
   { code: 'plans.read', module: 'plans', description: 'Voir les forfaits', sprint: 4 },
   { code: 'plans.manage', module: 'plans', description: 'Gérer les forfaits', sprint: 4 },
@@ -248,6 +254,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Readonly<Record<CompanySystemRole, readon
       'routers.update',
       'routers.command',
       'hotspots.manage',
+      'monitoring.acknowledge',
       'clients.disconnect',
     ],
     VENDEUR: [
@@ -286,6 +293,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Readonly<Record<CompanySystemRole, readon
         'vouchers',
         'plans',
       ]),
+      'monitoring.acknowledge',
       'clients.disconnect',
     ],
   };

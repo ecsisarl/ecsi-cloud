@@ -186,7 +186,24 @@ Code : `apps/api/src/routers` ; worker : `apps/api/src/worker.ts`.
 - **Données lues** : `system/identity`, `system/resource` (version, carte, architecture, uptime, CPU, nombre de CPU, charge, mémoire totale et libre), `interface` (nom, type, état, MTU, MAC, compteurs). Réservé : trafic dans le temps, santé, pairs WireGuard.
 - **États** : `ONLINE` (collecte réussie) ; `DEGRADED` (le routeur répond mais la collecte échoue, ou silence plus court que le seuil) ; `OFFLINE` (silence ≥ `ROUTER_OFFLINE_AFTER_SECONDS`, 180 s, ET ≥ `ROUTER_OFFLINE_MIN_FAILURES`, 3, échecs consécutifs). Une erreur transitoire isolée ne rend jamais un routeur `OFFLINE`.
 - **Secrets** : mot de passe RouterOS chiffré par le SecretBox, AAD `router:<company_id>:<router_id>:routeros-password` ; jamais journalisé ; messages d'erreur nettoyés et secrets masqués avant journalisation ou stockage dans `last_error`. Aucune clé privée WireGuard de routeur côté cloud.
-- **Base** : rôle `ecsi_worker` limité à la table `routers` (voir [DATABASE.md](DATABASE.md)).
+- **Base** : rôle `ecsi_worker` limité à la table `routers`, et depuis le lot E1 à `router_metrics` et `alerts` (voir [DATABASE.md](DATABASE.md)).
+
+## Historique et alertes (lot E1)
+
+Code : `apps/api/src/monitoring` ; page Réseau → Monitoring.
+
+- **Aucune nouvelle commande RouterOS** : à chaque collecte, le worker enregistre une mesure (`router_metrics`) à partir des valeurs déjà lues (`system/resource`) et du statut décidé ci-dessus, puis réconcilie les alertes (`alert-rules.ts`, fonction pure et idempotente).
+- **Règles** : `ROUTER_OFFLINE` (critique) tant que le routeur est `OFFLINE` ; `ROUTER_DEGRADED` quand il est `DEGRADED` depuis au moins `MONITORING_DEGRADED_MIN_FAILURES` collectes ; `CPU_HIGH` / `MEMORY_HIGH` quand les `MONITORING_SUSTAIN_SAMPLES` dernières collectes réussies dépassent `MONITORING_CPU_HIGH_PERCENT` / `MONITORING_MEMORY_HIGH_PERCENT`, résolues sous « seuil − 10 points » (hystérésis), résolues aussi quand le routeur passe `OFFLINE`. Toutes les alertes se résolvent seules ; l'acquittement (permission `monitoring.acknowledge`) signale la prise en charge.
+- **Conservation** : purge horaire des mesures de plus de `MONITORING_METRICS_RETENTION_DAYS` jours et des alertes résolues depuis plus de `MONITORING_ALERTS_RETENTION_DAYS` jours.
+
+| Variable du worker                  | Défaut | Bornes   |
+| ----------------------------------- | ------ | -------- |
+| `MONITORING_METRICS_RETENTION_DAYS` | 7      | 1 à 90   |
+| `MONITORING_ALERTS_RETENTION_DAYS`  | 90     | 7 à 730  |
+| `MONITORING_CPU_HIGH_PERCENT`       | 90     | 50 à 100 |
+| `MONITORING_MEMORY_HIGH_PERCENT`    | 90     | 50 à 100 |
+| `MONITORING_SUSTAIN_SAMPLES`        | 3      | 1 à 30   |
+| `MONITORING_DEGRADED_MIN_FAILURES`  | 3      | 1 à 100  |
 
 ## Enrôlement depuis ECSI CLOUD (Sprint 3B)
 
