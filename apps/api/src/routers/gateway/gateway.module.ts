@@ -16,6 +16,7 @@ import { formatIpv4, parseTunnelNetwork } from '../tunnel-ip.js';
 import { ActivationServer, type ActivationStore } from './activation-server.js';
 import { GatewayPeerSync, type GatewayPeerRow } from './peer-sync.js';
 import { execWgClient } from './wg-client.js';
+import { safeError, safeErrorMessage } from '../../common/safe-error.js';
 
 export const GATEWAY_ENV = Symbol('GATEWAY_ENV');
 export const GATEWAY_PG_POOL = Symbol('GATEWAY_PG_POOL');
@@ -137,9 +138,7 @@ export class GatewayAgent implements OnApplicationBootstrap, OnApplicationShutdo
         }
       })
       .catch((error: unknown) => {
-        this.logger.error(
-          `Synchronisation des pairs en échec : ${error instanceof Error ? error.message : String(error)}`,
-        );
+        this.logger.error(`Synchronisation des pairs en échec : ${safeErrorMessage(error)}`);
       })
       .finally(() => {
         this.running = null;
@@ -156,6 +155,7 @@ export class GatewayModule {
         LoggerModule.forRoot({
           pinoHttp: {
             level: env.LOG_LEVEL,
+            serializers: { err: safeError },
             ...(env.LOG_PRETTY
               ? { transport: { target: 'pino-pretty', options: { singleLine: true } } }
               : {}),

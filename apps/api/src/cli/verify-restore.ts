@@ -28,6 +28,7 @@ import {
   parseManifest,
   selfChecks,
 } from '../database/restore-check.js';
+import { safeErrorMessage } from '../common/safe-error.js';
 
 const { values } = parseArgs({
   options: {
@@ -69,9 +70,7 @@ try {
     previous: parseKeyList(env.data.ENCRYPTION_PREVIOUS_KEYS),
   });
 } catch (error) {
-  process.stderr.write(
-    `Clé de chiffrement invalide : ${error instanceof Error ? error.message : String(error)}\n`,
-  );
+  process.stderr.write(`Clé de chiffrement invalide : ${safeErrorMessage(error)}\n`);
   process.exit(2);
 }
 
@@ -116,9 +115,7 @@ try {
     process.stdout.write(`${JSON.stringify(state, null, 2)}\n`);
   }
 } catch (error) {
-  process.stderr.write(
-    `ECHEC vérification impossible : ${error instanceof Error ? error.message : String(error)}\n`,
-  );
+  process.stderr.write(`ECHEC vérification impossible : ${safeErrorMessage(error)}\n`);
   process.exitCode = 1;
 } finally {
   await pool.end();

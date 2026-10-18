@@ -47,10 +47,7 @@ export class MailService {
   /** Envoi sans bloquer la réponse HTTP (même durée de réponse que le compte existe ou non). */
   sendInBackground(mail: OutgoingMail, kind: string): void {
     this.send(mail).catch((error: unknown) => {
-      this.logger.error(
-        { event: 'mail.failed', kind, err: error instanceof Error ? error.message : 'inconnue' },
-        "Échec d'envoi d'e-mail",
-      );
+      this.logger.error({ event: 'mail.failed', kind, err: error }, "Échec d'envoi d'e-mail");
     });
   }
 }

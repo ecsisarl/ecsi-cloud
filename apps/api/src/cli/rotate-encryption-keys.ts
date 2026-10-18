@@ -43,6 +43,7 @@ import {
 } from '../auth/key-verification.js';
 import { KEY_ID_PATTERN, parseKeyList, SecretBox } from '../auth/crypto/secret-box.js';
 import { type RouterRotationReport, rotateRouterSecrets } from '../routers/router-secret.js';
+import { safeErrorMessage } from '../common/safe-error.js';
 
 const { values } = parseArgs({
   options: {
@@ -94,9 +95,7 @@ try {
   box = new SecretBox(keys.active.base64, { id: keys.active.id, previous: keys.previous });
 } catch (error) {
   // Message de validation (format, longueur, doublon) : jamais la valeur.
-  process.stderr.write(
-    `Clés de chiffrement invalides : ${error instanceof Error ? error.message : String(error)}\n`,
-  );
+  process.stderr.write(`Clés de chiffrement invalides : ${safeErrorMessage(error)}\n`);
   process.exit(2);
 }
 
@@ -134,7 +133,8 @@ async function rotate(url: string): Promise<boolean> {
         box,
         {
           dryRun,
-          onError: (id, error) => process.stderr.write(`Routeur ${id} : ${error.message}\n`),
+          onError: (id, error) =>
+            process.stderr.write(`Routeur ${id} : ${safeErrorMessage(error)}\n`),
         },
       );
     } finally {
@@ -146,7 +146,7 @@ async function rotate(url: string): Promise<boolean> {
     const report = await rotateEncryptionKeys(drizzle(authPool, { casing: 'snake_case' }), box, {
       dryRun,
       // Jamais la valeur chiffrée ni la clé : uniquement l'identifiant de ligne.
-      onError: (id, error) => process.stderr.write(`Facteur ${id} : ${error.message}\n`),
+      onError: (id, error) => process.stderr.write(`Facteur ${id} : ${safeErrorMessage(error)}\n`),
     });
     const verb = dryRun ? 'à ré-envelopper (contrôlés)' : 'ré-enveloppés (contrôlés)';
     out([
@@ -169,6 +169,6 @@ try {
   }
   if (!ok) process.exitCode = 1;
 } catch (error) {
-  process.stderr.write(`Échec : ${error instanceof Error ? error.message : String(error)}\n`);
+  process.stderr.write(`Échec : ${safeErrorMessage(error)}\n`);
   process.exitCode = 1;
 }

@@ -17,6 +17,7 @@ import * as schema from '../../database/schema/index.js';
 import { tunnelTransportFactory } from '../routeros/factory.js';
 import { parseTunnelNetwork } from '../tunnel-ip.js';
 import { RouterSupervisor } from './supervisor.js';
+import { safeError, safeErrorMessage } from '../../common/safe-error.js';
 
 export const WORKER_ENV = Symbol('WORKER_ENV');
 export const WORKER_PG_POOL = Symbol('WORKER_PG_POOL');
@@ -71,9 +72,7 @@ export class SupervisionScheduler implements OnApplicationBootstrap, OnApplicati
       })
       .catch((error: unknown) => {
         // Erreur base de données : message seul (aucune donnée de routeur ni secret).
-        this.logger.error(
-          `Cycle de supervision en échec : ${error instanceof Error ? error.message : String(error)}`,
-        );
+        this.logger.error(`Cycle de supervision en échec : ${safeErrorMessage(error)}`);
       })
       .finally(() => {
         this.running = null;
@@ -103,6 +102,7 @@ export class WorkerModule {
         LoggerModule.forRoot({
           pinoHttp: {
             level: env.LOG_LEVEL,
+            serializers: { err: safeError },
             ...(env.LOG_PRETTY
               ? { transport: { target: 'pino-pretty', options: { singleLine: true } } }
               : {}),
