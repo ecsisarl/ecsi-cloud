@@ -5,6 +5,11 @@ import { routers, type RouterStatus } from '../../database/schema/index.js';
 import { decryptRouterPassword } from '../router-secret.js';
 import { RouterOsError, sanitizeDetail } from '../routeros/errors.js';
 import type { TransportFactory } from '../routeros/factory.js';
+import {
+  databaseErrorMessage,
+  type MonitoringRecorder,
+  type PollRecord,
+} from '../../monitoring/recorder.js';
 import { collectSnapshot, type RouterSnapshot } from './collector.js';
 import {
   DEFAULT_THRESHOLDS,
@@ -65,6 +70,8 @@ export class RouterSupervisor {
     private readonly options: SupervisorOptions = DEFAULT_SUPERVISOR_OPTIONS,
     private readonly logger: SupervisorLogger = { log: () => undefined, warn: () => undefined },
     private readonly clock: () => Date = () => new Date(),
+    /** Historique et alertes (lot E1) ; absent : supervision seule, comme en S3A. */
+    private readonly recorder: MonitoringRecorder | null = null,
   ) {}
 
   /** Un cycle complet : réserve les routeurs dus et les collecte (concurrence bornée). */
@@ -180,6 +187,19 @@ export class RouterSupervisor {
         .where(eq(routers.id, router.id));
       if (router.status !== 'ONLINE')
         this.logger.log(`Routeur ${router.id} : ${router.status} -> ONLINE`);
+      await this.record({
+        routerId: router.id,
+        companyId: router.companyId,
+        status: 'ONLINE',
+        consecutiveFailures: 0,
+        lastError: null,
+        metrics: {
+          cpuLoad: snapshot.cpuLoad,
+          totalMemory: snapshot.totalMemory,
+          freeMemory: snapshot.freeMemory,
+          uptimeSeconds: snapshot.uptimeSeconds,
+        },
+      });
       return { routerId: router.id, status: 'ONLINE', outcome: 'success', error: null };
     }
 
@@ -208,6 +228,37 @@ export class RouterSupervisor {
         `Routeur ${router.id} : ${status}, échec n° ${consecutiveFailures} (${error.code})`,
       );
     }
+    if (status !== 'PROVISIONING') {
+      await this.record({
+        routerId: router.id,
+        companyId: router.companyId,
+        status,
+        consecutiveFailures,
+        lastError,
+        metrics: null,
+      });
+    }
     return { routerId: router.id, status, outcome, error: lastError };
+  }
+
+  /**
+   * Mesure et alertes de la collecte. Une erreur ici (base indisponible…) est journalisée
+   * sans interrompre la supervision : le statut du routeur est déjà enregistré.
+   */
+  private async record(poll: PollRecord): Promise<void> {
+    if (!this.recorder) return;
+    try {
+      const changes = await this.recorder.record(poll);
+      for (const alert of changes.open) {
+        this.logger.warn(`Routeur ${poll.routerId} : alerte ${alert.type} ouverte`);
+      }
+      for (const type of changes.resolve) {
+        this.logger.log(`Routeur ${poll.routerId} : alerte ${type} résolue`);
+      }
+    } catch (error) {
+      this.logger.warn(
+        `Routeur ${poll.routerId} : historique et alertes non enregistrés (${databaseErrorMessage(error)})`,
+      );
+    }
   }
 }

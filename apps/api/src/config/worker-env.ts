@@ -19,7 +19,7 @@ export const workerEnvSchema = envSchema
     ENCRYPTION_PREVIOUS_KEYS: true,
   })
   .extend({
-    /** Rôle ecsi_worker : table routers uniquement (migration 0005). */
+    /** Rôle ecsi_worker : routers (0005), router_metrics et alerts (0007) uniquement. */
     DATABASE_WORKER_URL: z.url({ protocol: /^postgres(ql)?$/ }),
     ...routerNetworkShape,
     ROUTER_POLL_INTERVAL_SECONDS: z.coerce.number().int().min(10).max(3600).default(60),
@@ -27,6 +27,13 @@ export const workerEnvSchema = envSchema
     ROUTER_POLL_BATCH_SIZE: z.coerce.number().int().min(1).max(1000).default(100),
     ROUTER_OFFLINE_AFTER_SECONDS: z.coerce.number().int().min(30).max(86_400).default(180),
     ROUTER_OFFLINE_MIN_FAILURES: z.coerce.number().int().min(1).max(100).default(3),
+    // Historique et alertes de supervision (lot E1, migration 0007).
+    MONITORING_METRICS_RETENTION_DAYS: z.coerce.number().int().min(1).max(90).default(7),
+    MONITORING_ALERTS_RETENTION_DAYS: z.coerce.number().int().min(7).max(730).default(90),
+    MONITORING_CPU_HIGH_PERCENT: z.coerce.number().int().min(50).max(100).default(90),
+    MONITORING_MEMORY_HIGH_PERCENT: z.coerce.number().int().min(50).max(100).default(90),
+    MONITORING_SUSTAIN_SAMPLES: z.coerce.number().int().min(1).max(30).default(3),
+    MONITORING_DEGRADED_MIN_FAILURES: z.coerce.number().int().min(1).max(100).default(3),
   })
   .superRefine(refineRouterNetwork);
 
