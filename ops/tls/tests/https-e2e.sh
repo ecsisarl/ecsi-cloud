@@ -262,11 +262,30 @@ real=$(upstream x-real-ip)
 { [ -n "$real" ] && [ "$real" != 203.0.113.66 ]; } || fail 'X-Real-IP : adresse réelle du client attendue'
 [ "$(upstream x-forwarded-for)" = "203.0.113.66, $real" ] || fail 'X-Forwarded-For : client réel en dernier attendu'
 security_headers 'app /'
-for p in /api/v1/health /api/v1/auth/me; do
+for p in /api/v1/health/live /api/v1/auth/me; do
   { [ "$(https_code $APP GET $p)" = 200 ] && [ "$(upstream stub)" = api ] && [ "$(upstream url)" = $p ]; } ||
     fail "app $p : API attendue"
   security_headers "app $p"
 done
+# H7 : santé détaillée jamais publique (variantes de chemin comprises), sans atteindre l'API.
+before=$(api_hits)
+for p in /api/v1/health /api/v1/health/ /api/v1//health /api/v1/%68ealth /api/v1/health?x=1 /api/v1/health/autre; do
+  code=$(https_code $APP GET "$p")
+  [ "$code" = 404 ] || fail "app $p : 404 attendu (santé détaillée interne), reçu $code"
+done
+security_headers 'app santé 404'
+[ "$(api_hits)" = "$before" ] || fail "app : la santé détaillée a atteint l'API"
+# H7 : tableau de bord en lecture seule côté Nginx (aucune Server Action) ; en-tête interne
+# X-Ecsi-Pathname jamais transmis depuis le client.
+for m in POST PUT PATCH DELETE OPTIONS; do
+  code=$(https_code $APP $m /connexion -H 'Next-Action: 0123456789abcdef' -d '[]')
+  [ "$code" = 405 ] || fail "app $m / : 405 attendu, reçu $code"
+  [ "$(header Allow)" = 'GET, HEAD' ] || fail "app $m / : Allow: GET, HEAD attendu"
+  security_headers "app $m 405"
+done
+[ "$(https_code $APP HEAD /)" = 200 ] || fail 'app HEAD / : 200 attendu'
+[ "$(https_code $APP GET /x.png -H 'X-Ecsi-Pathname: /securite/2fa')" = 200 ] || fail 'app /x.png : 200 attendu'
+[ -z "$(upstream x-ecsi-pathname)" ] || fail 'X-Ecsi-Pathname du client transmis au tableau de bord'
 for m in POST PUT PATCH DELETE; do
   { [ "$(https_code $APP $m /api/v1/sites/x -H 'Content-Type: application/json' -d '{}')" = 200 ] &&
     [ "$(upstream method)" = $m ]; } || fail "app $m /api/ : API attendue"
@@ -278,7 +297,7 @@ ws=$(curl --noproxy "*" -s --http1.1 --cacert "$CA" -o /dev/null -w '%{http_code
   -H 'Sec-WebSocket-Version: 13' -H "Sec-WebSocket-Key: $(openssl rand -base64 16)" \
   "https://$APP:$ECSI_HTTPS_PORT/_ws" || true)
 [ "$ws" = 101 ] || fail "app : WebSocket (101) attendu, reçu $ws"
-pass 'app : tableau de bord, API (toutes méthodes), HTTP/2, WebSocket, en-têtes transmis et de sécurité'
+pass 'app : tableau de bord (GET/HEAD seulement), API (toutes méthodes), santé détaillée non publique, HTTP/2, WebSocket, en-têtes transmis et de sécurité'
 
 # enroll : POST exact seulement
 before=$(api_hits)
