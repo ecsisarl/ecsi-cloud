@@ -93,6 +93,11 @@ export const envSchema = z.object({
   SMTP_HOST: z.string().min(1).default('localhost'),
   SMTP_PORT: z.coerce.number().int().min(1).max(65535).default(1025),
   SMTP_SECURE: booleanFromString.default(false),
+  /**
+   * Sans SMTP_SECURE (port 587) : STARTTLS exigé, l'envoi échoue plutôt que de partir en clair.
+   * Par défaut : exigé en production, facultatif ailleurs (Mailpit n'a pas de TLS).
+   */
+  SMTP_REQUIRE_TLS: booleanFromString.optional(),
   SMTP_USER: z.string().optional(),
   SMTP_PASSWORD: z.string().optional(),
   SMTP_FROM: z.string().min(3).default('ECSI CLOUD <no-reply@ecsi.local>'),
@@ -150,6 +155,21 @@ export function parseEnv(source: Record<string, string | undefined>): Env {
     }
     if (env.CORS_ORIGINS.some((origin) => origin === '*')) {
       issues.push('CORS_ORIGINS : le joker « * » est interdit en production');
+    } else if (env.CORS_ORIGINS.some((origin) => !origin.startsWith('https://'))) {
+      issues.push('CORS_ORIGINS : seules des origines https:// sont admises en production');
+    }
+    if (env.API_DOCS_ENABLED === true) {
+      issues.push(
+        'API_DOCS_ENABLED : documentation interdite en production (elle désactive la CSP de l’API)',
+      );
+    }
+    if (env.TRUST_PROXY_HOPS === 0) {
+      issues.push(
+        'TRUST_PROXY_HOPS : 0 interdit en production (Nginx devant l’API : adresse client sinon fausse)',
+      );
+    }
+    if (!env.SMTP_SECURE && env.SMTP_REQUIRE_TLS === false) {
+      issues.push('SMTP_REQUIRE_TLS : envoi d’e-mails en clair interdit en production');
     }
     if (issues.length > 0) {
       throw new InvalidEnvironmentError(issues);
@@ -161,6 +181,11 @@ export function parseEnv(source: Record<string, string | undefined>): Env {
 
 export function isCookieSecure(env: Env): boolean {
   return env.COOKIE_SECURE ?? env.NODE_ENV === 'production';
+}
+
+/** STARTTLS obligatoire (sauf TLS implicite, SMTP_SECURE) : par défaut en production. */
+export function isSmtpTlsRequired(env: Env): boolean {
+  return !env.SMTP_SECURE && (env.SMTP_REQUIRE_TLS ?? env.NODE_ENV === 'production');
 }
 
 export function isApiDocsEnabled(env: Env): boolean {

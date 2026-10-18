@@ -149,6 +149,15 @@ La surcouche :
 
 Variables obligatoires : `POSTGRES_PASSWORD`, `ECSI_DB_MIGRATOR_PASSWORD`, `ECSI_DB_APP_PASSWORD`, `ECSI_DB_AUTH_PASSWORD`, `ECSI_DB_WORKER_PASSWORD`, `REDIS_PASSWORD`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `JWT_ACCESS_SECRET`, `ENCRYPTION_KEY`, `ENCRYPTION_KEY_ID` (explicite en production, pour que la rotation des clés reste cohérente), `WEB_PUBLIC_URL` (HTTPS), `CORS_ORIGINS`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_FROM`. Facultatives : `SMTP_SECURE` (`true` par défaut), `SMTP_USER`, `SMTP_PASSWORD`.
 
+Garde-fous de production ajoutés en S3H-H7 (l'API refuse de démarrer sinon) : `CORS_ORIGINS` en `https://` uniquement, `API_DOCS_ENABLED` absent ou `false` (la documentation désactive la CSP de l'API), `TRUST_PROXY_HOPS` ≥ 1, et pas d'envoi d'e-mail en clair : sans `SMTP_SECURE=true` (TLS implicite, port 465), STARTTLS est exigé (`SMTP_REQUIRE_TLS`, vrai par défaut en production). Avant de déployer une nouvelle version, contrôler la configuration EN SERVICE sans rien afficher :
+
+```bash
+docker build -t ecsi-cloud/api:candidat -f infra/docker/api.Dockerfile .   # n'arrête rien
+docker exec "$(docker compose ps -q api)" env | docker run --rm -i ecsi-cloud/api:candidat node dist/cli/check-production-env.js
+```
+
+Code 0 : conforme ; 1 : refus listés par nom de variable, à corriger dans `.env` avant le déploiement.
+
 **Bucket S3** : il n'est jamais créé par l'API en production. Avec le SeaweedFS du Compose, créez-le une seule fois :
 `docker compose -f docker-compose.yml -f docker-compose.prod.yml exec s3 sh -c "echo 's3.bucket.create -name <S3_BUCKET>' | weed shell -master=localhost:9333"`.
 

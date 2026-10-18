@@ -1,7 +1,7 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import nodemailer, { type Transporter } from 'nodemailer';
 import { ENV } from '../config/config.module.js';
-import type { Env } from '../config/env.js';
+import { type Env, isSmtpTlsRequired } from '../config/env.js';
 
 export interface OutgoingMail {
   readonly to: string;
@@ -22,6 +22,8 @@ export function createSmtpTransport(env: Env): Transporter {
     host: env.SMTP_HOST,
     port: env.SMTP_PORT,
     secure: env.SMTP_SECURE,
+    // STARTTLS exigé (production) : jamais d'identifiants ni de lien de connexion en clair.
+    requireTLS: isSmtpTlsRequired(env),
     ...(env.SMTP_USER ? { auth: { user: env.SMTP_USER, pass: env.SMTP_PASSWORD ?? '' } } : {}),
   });
 }
