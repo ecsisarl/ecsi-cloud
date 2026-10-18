@@ -11,3 +11,4 @@ export * from './sites.js';
 export * from './platform.js';
 export * from './routers.js';
 export * from './routeros-removal.js';
+export * from './monitoring.js';
