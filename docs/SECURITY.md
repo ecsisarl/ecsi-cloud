@@ -248,14 +248,18 @@ ops/rotation/pg-role-password.sh <rôle> --ancien <instantané> [--dry-run | --r
 
 ### Limites de débit
 
-| Action                        | Limite                                                                                                                      |
-| ----------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| Connexion                     | 20 / 15 min par IP (`RATE_LIMIT_LOGIN_PER_IP`, relevé uniquement pour les tests E2E) ; 5 échecs / 15 min par adresse e-mail |
-| Vérification 2FA              | 30 / 15 min par IP ; 5 essais par défi                                                                                      |
-| Mot de passe oublié           | 5 / h par adresse e-mail ; 20 / h par IP                                                                                    |
-| Réinitialisation              | 20 / h par IP                                                                                                               |
-| Invitation (aperçu, accepter) | 30 / h par IP                                                                                                               |
-| Refresh                       | 300 / 15 min par IP                                                                                                         |
+| Action                                | Limite                                                                                                                                                                                                                                                                                               |
+| ------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Connexion                             | 20 / 15 min par IP (`RATE_LIMIT_LOGIN_PER_IP`, relevé uniquement pour les tests E2E) ; 5 échecs / 15 min par couple adresse e-mail + IP ; 50 échecs / 15 min par adresse e-mail toutes IP confondues (H7 : un tiers ne verrouille plus un compte avec 5 essais, il lui faut au moins 10 adresses IP) |
+| Vérification 2FA                      | 30 / 15 min par IP ; 5 essais par défi ; 10 codes faux / h par compte, tous défis confondus (H7)                                                                                                                                                                                                     |
+| Activation 2FA, codes de récupération | 10 / 15 min par compte (H7)                                                                                                                                                                                                                                                                          |
+| Mot de passe oublié                   | 5 / h par adresse e-mail ; 20 / h par IP                                                                                                                                                                                                                                                             |
+| Réinitialisation                      | 20 / h par IP ; jeton vérifié avant le calcul Argon2id (H7)                                                                                                                                                                                                                                          |
+| Invitation (aperçu, accepter)         | 30 / h par IP ; 5 mots de passe faux / 15 min par compte existant (H7)                                                                                                                                                                                                                               |
+| Refresh                               | 300 / 15 min par IP                                                                                                                                                                                                                                                                                  |
+| Déconnexion                           | 120 / 15 min par IP (H7)                                                                                                                                                                                                                                                                             |
+
+Adresses IP : IPv4 telle quelle, IPv6 regroupée par réseau /64 (H7).
 
 Les clés Redis ne contiennent jamais d'adresse e-mail en clair (empreinte HMAC).
 

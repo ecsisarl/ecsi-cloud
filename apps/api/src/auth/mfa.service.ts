@@ -20,6 +20,7 @@ import type { Realm } from './auth.types.js';
 import type { SecretBox } from './crypto/secret-box.js';
 import { generateRecoveryCodes, normalizeRecoveryCode } from './crypto/tokens.js';
 import { generateTotpSecret, otpauthUri, verifyTotp } from './crypto/totp.js';
+import { RATE_LIMITS, RateLimiterService } from './rate-limiter.service.js';
 import { SECRET_BOX } from './secret-box.provider.js';
 
 const INVALID_CODE = 'Code de vérification invalide';
@@ -30,7 +31,16 @@ export class MfaService {
   constructor(
     @Inject(AUTH_DRIZZLE) private readonly db: Database,
     @Inject(SECRET_BOX) private readonly secretBox: SecretBox,
+    @Inject(RateLimiterService) private readonly rateLimiter: RateLimiterService,
   ) {}
+
+  /** Activation et régénération des codes : essais bornés par compte (session ouverte). */
+  private limitManagement(realm: Realm, principalId: string): Promise<void> {
+    return this.rateLimiter.consume(
+      `mfa:manage:${realm}:${principalId}`,
+      RATE_LIMITS.mfaManagePerAccount,
+    );
+  }
 
   private owner(realm: Realm, principalId: string) {
     return realm === 'user'
@@ -103,6 +113,7 @@ export class MfaService {
 
   /** Valide le premier code, active la 2FA et retourne les codes de récupération (affichés une seule fois). */
   async confirmSetup(realm: Realm, principalId: string, code: string): Promise<string[]> {
+    await this.limitManagement(realm, principalId);
     const { column } = this.owner(realm, principalId);
     const [factor] = await this.db
       .select()
@@ -165,6 +176,7 @@ export class MfaService {
   }
 
   async regenerateRecoveryCodes(realm: Realm, principalId: string, code: string) {
+    await this.limitManagement(realm, principalId);
     if (!(await this.verify(realm, principalId, { code }))) {
       throw new UnprocessableEntityException(INVALID_CODE);
     }

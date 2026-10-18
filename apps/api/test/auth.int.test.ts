@@ -129,29 +129,75 @@ describe('connexion', () => {
 });
 
 describe('protection contre la force brute', () => {
-  it('verrouille une adresse après 5 échecs, même avec le bon mot de passe ensuite', async () => {
+  it('verrouille le couple adresse + IP après 5 échecs, même avec le bon mot de passe ensuite', async () => {
     const email = 'vendeur.a@ecsi.test';
+    const attacker = '198.51.100.10';
     for (let i = 0; i < 5; i++) {
-      const r = await new HttpClient(t.app).post('/auth/login', { email, password: `faux-${i}` });
+      const r = await new HttpClient(t.app, attacker).post('/auth/login', {
+        email,
+        password: `faux-${i}`,
+      });
       expect(r.statusCode).toBe(401);
     }
-    const locked = await new HttpClient(t.app).post('/auth/login', {
+    const locked = await new HttpClient(t.app, attacker).post('/auth/login', {
       email,
       password: SEED_PASSWORD,
     });
     expect(locked.statusCode).toBe(429);
     expect(Number(locked.headers['retry-after'])).toBeGreaterThan(0);
+    // Pas de déni de service : le titulaire, depuis une autre adresse, se connecte toujours.
+    const owner = await new HttpClient(t.app, '198.51.100.20').post('/auth/login', {
+      email,
+      password: SEED_PASSWORD,
+    });
+    expect(owner.statusCode).toBe(200);
+    await resetLoginLocks();
+  });
+
+  it('traite un réseau IPv6 /64 comme une seule adresse', async () => {
+    const email = 'vendeur.a@ecsi.test';
+    for (let i = 0; i < 5; i++) {
+      await new HttpClient(t.app, `2001:db8:1:2::${i + 1}`).post('/auth/login', {
+        email,
+        password: `faux-${i}`,
+      });
+    }
+    const sameNetwork = await new HttpClient(t.app, '2001:db8:1:2::99').post('/auth/login', {
+      email,
+      password: SEED_PASSWORD,
+    });
+    expect(sameNetwork.statusCode).toBe(429);
+    await resetLoginLocks();
+  });
+
+  it('plafonne les échecs d’un compte toutes adresses confondues (attaque distribuée)', async () => {
+    const email = 'vendeur.a@ecsi.test';
+    for (let ip = 0; ip < 10; ip++) {
+      for (let i = 0; i < 5; i++) {
+        const r = await new HttpClient(t.app, `198.51.100.${100 + ip}`).post('/auth/login', {
+          email,
+          password: `faux-${ip}-${i}`,
+        });
+        expect(r.statusCode).toBe(401);
+      }
+    }
+    const fresh = await new HttpClient(t.app, '198.51.100.250').post('/auth/login', {
+      email,
+      password: SEED_PASSWORD,
+    });
+    expect(fresh.statusCode).toBe(429);
     await resetLoginLocks();
   });
 
   it('verrouille de la même façon une adresse inexistante (pas d’énumération)', async () => {
+    const ip = '198.51.100.30';
     for (let i = 0; i < 5; i++) {
-      await new HttpClient(t.app).post('/auth/login', {
+      await new HttpClient(t.app, ip).post('/auth/login', {
         email: 'fantome@ecsi.test',
         password: 'x',
       });
     }
-    const r = await new HttpClient(t.app).post('/auth/login', {
+    const r = await new HttpClient(t.app, ip).post('/auth/login', {
       email: 'fantome@ecsi.test',
       password: 'x',
     });
@@ -403,6 +449,34 @@ describe('2FA TOTP (obligatoire pour ADMIN_ENTREPRISE)', () => {
     const r = await client.post('/auth/mfa/verify', { code: totp(secret, Date.now() + 60_000) });
     expect(r.statusCode).toBe(401);
   });
+
+  it('plafonne les codes faux par compte, d’un défi à l’autre (10 par heure)', async () => {
+    const redis = t.app.get<Redis>(REDIS);
+    const [admin] = (
+      await t.migrator.query<{ id: string }>(
+        "select id from users where email = 'admin.a@ecsi.test'",
+      )
+    ).rows;
+    const key = `rl:mfa:fail:user:${admin?.id}`;
+    await redis.del(key);
+    // Deux connexions par mot de passe : 2 défis x 5 codes faux = 10 échecs pour le compte.
+    for (let round = 0; round < 2; round++) {
+      const client = new HttpClient(t.app);
+      await client.post('/auth/login', { email: 'admin.a@ecsi.test', password: SEED_PASSWORD });
+      for (let i = 0; i < 5; i++) {
+        expect((await client.post('/auth/mfa/verify', { code: '123456' })).statusCode).toBe(401);
+      }
+    }
+    // Troisième défi : même le bon code est refusé tant que le plafond n'est pas expiré.
+    const locked = new HttpClient(t.app);
+    await locked.post('/auth/login', { email: 'admin.a@ecsi.test', password: SEED_PASSWORD });
+    const refused = await locked.post('/auth/mfa/verify', {
+      code: totp(secret, Date.now() + 90_000),
+    });
+    expect(refused.statusCode).toBe(429);
+    expect(Number(refused.headers['retry-after'])).toBeGreaterThan(0);
+    await redis.del(key);
+  });
 });
 
 describe('mot de passe oublié', () => {
@@ -532,6 +606,27 @@ describe('invitations', () => {
       (await anonymous.post('/auth/invitations/accept', { token, password: SEED_PASSWORD }))
         .statusCode,
     ).toBe(201);
+  });
+
+  it('borne les mots de passe faux à l’acceptation (compte existant)', async () => {
+    const adminB = await loginAs(t.app, 'gerant.b@ecsi.test');
+    await adminB.post('/invitations', {
+      email: 'gerant.a@ecsi.test',
+      roles: [{ roleId: t.seed.roles.B.VENDEUR }],
+    });
+    const token = await t.mails.tokenFor('gerant.a@ecsi.test', '/invitation');
+    const statuses: number[] = [];
+    for (let i = 0; i < 6; i++) {
+      const client = new HttpClient(t.app);
+      statuses.push(
+        (await client.post('/auth/invitations/accept', { token, password: `faux-${i}` }))
+          .statusCode,
+      );
+    }
+    expect(statuses).toEqual([401, 401, 401, 401, 401, 429]);
+    const redis = t.app.get<Redis>(REDIS);
+    const keys = await redis.keys('rl:invitation:fail:*');
+    if (keys.length > 0) await redis.del(...keys);
   });
 
   it('refuse une invitation expirée ou révoquée', async () => {
