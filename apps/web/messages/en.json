@@ -27,7 +27,8 @@
     "openMenu": "Open menu",
     "closeMenu": "Close menu",
     "company": "Company",
-    "siteGroups": "Site groups"
+    "siteGroups": "Site groups",
+    "alertsBadge": "{count, plural, one {# unacknowledged alert} other {# unacknowledged alerts}}"
   },
   "dashboard": {
     "title": "Dashboard",
@@ -58,7 +59,10 @@
         "storage": "File storage"
       },
       "version": "Version {version}"
-    }
+    },
+    "monitoringHint": "Router monitoring",
+    "monitoringNoAccess": "Restricted to profiles with monitoring access",
+    "alertsHint": "{critical, plural, =0 {none critical} one {# critical} other {# critical}} · {unacknowledged, plural, =0 {all acknowledged} one {# unacknowledged} other {# unacknowledged}}"
   },
   "placeholder": {
     "title": "Module in preparation",
@@ -355,6 +359,89 @@
       "download": "Download the removal script",
       "copy": "Copy",
       "copied": "Copied"
+    },
+    "historyTitle": "Monitoring history",
+    "historyDescription": "CPU load, memory used and availability, from the worker polls."
+  },
+  "monitoring": {
+    "title": "Monitoring",
+    "subtitle": "Status of your routers and alerts, from automatic monitoring (polled every minute).",
+    "loading": "Loading monitoring…",
+    "kpi": {
+      "online": "Routers online",
+      "degraded": "Degraded routers",
+      "offline": "Offline routers",
+      "openAlerts": "Open alerts",
+      "alertsHint": "{critical, plural, =0 {none critical} one {# critical} other {# critical}} · {unacknowledged, plural, =0 {all acknowledged} one {# unacknowledged} other {# unacknowledged}}",
+      "provisioning": "{count, plural, one {# router} other {# routers}} enrolling"
+    },
+    "severities": {
+      "CRITICAL": "Critical",
+      "WARNING": "Warning"
+    },
+    "types": {
+      "ROUTER_OFFLINE": "Router offline",
+      "ROUTER_DEGRADED": "Router degraded",
+      "CPU_HIGH": "High CPU load",
+      "MEMORY_HIGH": "Memory almost full"
+    },
+    "alerts": {
+      "title": "Alerts",
+      "description": "Opened and resolved automatically from router status. Acknowledging an alert means it is being handled (recorded in the audit log).",
+      "filter": "Show",
+      "states": {
+        "open": "Ongoing alerts",
+        "resolved": "Resolved alerts",
+        "all": "All alerts"
+      },
+      "columns": {
+        "severity": "Severity",
+        "type": "Alert",
+        "router": "Router",
+        "opened": "Opened",
+        "state": "Status",
+        "acknowledgement": "Handling"
+      },
+      "ongoing": "Ongoing",
+      "resolvedAt": "Resolved {when}",
+      "acknowledge": "Acknowledge",
+      "acknowledgedBy": "Acknowledged by {name} {when}",
+      "formerMember": "a former member",
+      "notAcknowledged": "Not acknowledged",
+      "acknowledgedMessage": "Alert acknowledged.",
+      "detailCpu": "CPU at {value}% (threshold {threshold}%)",
+      "detailMemory": "Memory used at {value}% (threshold {threshold}%)",
+      "detailFailures": "{count, plural, one {# failed poll} other {# failed polls}}",
+      "emptyOpenTitle": "No ongoing alert",
+      "emptyTitle": "No alert",
+      "emptyDescription": "Alerts show up here as soon as a router is offline, degraded or overloaded."
+    },
+    "routers": {
+      "title": "Monitored routers",
+      "description": "Latest collected values. Pick a router to show its history.",
+      "openAlerts": "Alerts",
+      "emptyTitle": "No monitored router",
+      "emptyDescription": "Add a router in Network → Routers: it will show up here after its first poll."
+    },
+    "history": {
+      "title": "History — {name}",
+      "description": "Averages per interval. A gap in the line means no measurement could be collected.",
+      "cpu": "CPU",
+      "memory": "Memory",
+      "availability": "Availability: {value}",
+      "availabilityShort": "Availability",
+      "range": "Period",
+      "ranges": {
+        "1": "1 h",
+        "6": "6 h",
+        "24": "24 h",
+        "168": "7 d"
+      },
+      "empty": "No measurement over this period.",
+      "chartLabel": "Router CPU load and memory used over the period",
+      "now": "Now",
+      "time": "Time",
+      "showValues": "Show values"
     }
   },
   "siteGroups": {

@@ -48,6 +48,12 @@ describe('navigation selon les permissions', () => {
     expect(keys(['routers.read'])).toContain('routers');
   });
 
+  it('affiche Réseau → Monitoring avec monitoring.read (lot E1), plus en attente', () => {
+    expect(keys(['monitoring.read'])).toContain('monitoring');
+    expect(keys(['routers.read'])).not.toContain('monitoring');
+    expect(findNavItem('/reseau/monitoring')?.plannedSprint).toBeUndefined();
+  });
+
   it('affiche les modules du Sprint 2 à un administrateur', () => {
     const admin = keys([
       'sites.read',

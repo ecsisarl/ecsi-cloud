@@ -66,7 +66,12 @@ export const NAVIGATION: NavGroup[] = [
     items: [
       { key: 'routers', href: '/reseau/routeurs', icon: Router, permission: 'routers.read' },
       { key: 'hotspots', href: '/reseau/hotspots', icon: Wifi, plannedSprint: 'S5' },
-      { key: 'monitoring', href: '/reseau/monitoring', icon: Activity, plannedSprint: 'S4' },
+      {
+        key: 'monitoring',
+        href: '/reseau/monitoring',
+        icon: Activity,
+        permission: 'monitoring.read',
+      },
     ],
   },
   {
