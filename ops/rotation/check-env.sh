@@ -187,6 +187,8 @@ if [ -n "$COMPARE" ]; then
     compare_value 'ECSI_DB_WORKER_PASSWORD (DATABASE_WORKER_URL)' \
       "$(env_get "$FILE" ECSI_DB_WORKER_PASSWORD)" "$(url_password "$url")"
   fi
+  # Fichier temporaire à nom imprévisible (mktemp), jamais un chemin devinable de /tmp (S3H-H7).
+  keys_report=$(mktemp "${TMPDIR:-/tmp}/check-env.XXXXXX")
   there=$(keys_of "$COMPARE")
   keys_of "$FILE" | while read -r id value; do
     other=$(printf '%s\n' "$there" | sed -n "s/^$id //p" | head -n 1)
@@ -197,10 +199,10 @@ if [ -n "$COMPARE" ]; then
     else
       printf 'ECHEC clé %s : DIFFÉRENTE entre les deux fichiers\n' "$id"
     fi
-  done >"${TMPDIR:-/tmp}/check-env.$$"
-  cat "${TMPDIR:-/tmp}/check-env.$$"
-  if grep -q '^ECHEC' "${TMPDIR:-/tmp}/check-env.$$"; then FAILS=$((FAILS + 1)); fi
-  rm -f "${TMPDIR:-/tmp}/check-env.$$"
+  done >"$keys_report"
+  cat "$keys_report"
+  if grep -q '^ECHEC' "$keys_report"; then FAILS=$((FAILS + 1)); fi
+  rm -f "$keys_report"
 fi
 
 # --- Valeurs réellement chargées par les conteneurs en cours (redémarrage oublié ?)

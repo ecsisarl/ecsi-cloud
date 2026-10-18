@@ -120,9 +120,12 @@ if [ "$reprise" = 1 ]; then
   throwaway_compose --profile reprise up -d --no-build worker >>"$TW_LOG" 2>&1 ||
     die "le worker ne démarre pas sur la base restaurée"
   keep_stack=1
-  cp "$TW_ENV" "${TMPDIR:-/tmp}/$project.env"
+  # Copie des clés de production : répertoire privé à nom imprévisible (0700, mktemp), jamais
+  # un chemin fixe de /tmp (lien symbolique piégé, fichier laissé lisible) (S3H-H7).
+  keep_dir=$(umask 077 && mktemp -d "${TMPDIR:-/tmp}/ecsi-reprise-XXXXXX")
+  (umask 077 && cp "$TW_ENV" "$keep_dir/$project.env")
   log "OK    exercice de reprise : pile $project conservée, worker démarré"
-  log "      fichier d'environnement de la pile : ${TMPDIR:-/tmp}/$project.env (à supprimer à la fin)"
+  log "      fichier d'environnement de la pile : $keep_dir/$project.env (à supprimer à la fin : rm -r $keep_dir)"
   log "      suivi : voir docs/SAUVEGARDE.md, section « Exercice de reprise »"
   exit 0
 fi
