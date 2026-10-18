@@ -2,6 +2,16 @@
 
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Versions par sprint.
 
+## [E1] — 2026-10-18 — Monitoring et alertes dans l'application (non déployé)
+
+### Ajouté
+
+- Migration 0007 (additive) : `router_metrics` (une mesure par collecte, conservation bornée) et `alerts` (une seule alerte ouverte par routeur et par type), RLS et privilèges minimaux pour `ecsi_app`, `ecsi_worker` ; aucun accès pour `ecsi_auth`.
+- Worker : mesures à chaque collecte, ouverture et résolution automatiques des alertes `ROUTER_OFFLINE`, `ROUTER_DEGRADED`, `CPU_HIGH`, `MEMORY_HIGH` (seuils, mesures soutenues, hystérésis), purge horaire ; réglages `MONITORING_*` avec valeurs par défaut. Aucune nouvelle commande RouterOS.
+- API `/api/v1/monitoring` : vue d'ensemble, alertes, compteurs, historique d'un routeur, acquittement audité ; permission `monitoring.acknowledge` (Administrateur, Gérant, Technicien, Support).
+- Dashboard : page Réseau → Monitoring (compteurs, alertes avec acquittement, routeurs supervisés, historique CPU / mémoire / disponibilité), indicateur d'alertes non acquittées dans la navigation, historique sur le détail d'un routeur, indicateurs « Routeurs en ligne » et « Alertes ouvertes » du tableau de bord.
+- Tests : règles d'alerte (unitaires), intégration `test/monitoring.int.test.ts` (migration, RLS entre entreprises, droits des rôles, worker contre un faux service RouterOS, purge, routes HTTP et audit).
+
 ## [S3H-H4] — 2026-10-11 — HTTPS public de production (livré, non déployé)
 
 ### Ajouté

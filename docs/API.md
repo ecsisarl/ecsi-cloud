@@ -139,6 +139,18 @@ Domaine plateforme uniquement, 2FA vérifiée ([ADR 0013](adr/0013-console-plate
 
 Codes : 401 non authentifié, 403 permission ou CSRF manquants (ou 2FA à activer), 404 ressource absente ou d'une autre entreprise, 415 corps non JSON, 422 validation, 429 limite de débit (`Retry-After`).
 
+## Supervision et alertes (lot E1, `/api/v1/monitoring`)
+
+Données écrites par le worker de supervision (aucune commande RouterOS supplémentaire). Portée par site comme les routeurs : un routeur, une alerte ou un historique hors des sites où l'utilisateur détient `monitoring.read` répond 404.
+
+| Méthode | Route                     | Permission               | Rôle                                                                                  |
+| ------- | ------------------------- | ------------------------ | ------------------------------------------------------------------------------------- |
+| GET     | `/overview`               | `monitoring.read`        | Routeurs par statut, alertes ouvertes (critiques, non acquittées), dernières valeurs  |
+| GET     | `/alerts`                 | `monitoring.read`        | `?state=open\|resolved\|all&siteId=&routerId=&limit=` (1 à 200, 50 par défaut)        |
+| GET     | `/alerts/summary`         | `monitoring.read`        | Compteurs seuls (indicateur de la navigation)                                         |
+| GET     | `/routers/:id/metrics`    | `monitoring.read`        | `?hours=1..168` : moyennes CPU, mémoire et disponibilité par intervalle (~240 points) |
+| POST    | `/alerts/:id/acknowledge` | `monitoring.acknowledge` | Acquittement (une fois ; 409 ensuite), audité `monitoring.alert.acknowledge`          |
+
 ## Ressources prévues
 
-routers, hotspots, plans, vouchers, sessions, vendors, sales, payments, reports, notifications (voir [ROADMAP.md](ROADMAP.md)).
+hotspots, plans, vouchers, sessions, vendors, sales, payments, reports, notifications (voir [ROADMAP.md](ROADMAP.md)).
