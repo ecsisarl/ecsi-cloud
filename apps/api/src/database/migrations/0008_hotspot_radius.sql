@@ -276,10 +276,12 @@ CREATE POLICY tenant_isolation ON voucher_batches TO ecsi_app
   WITH CHECK (company_id = app.current_company_id());
 --> statement-breakpoint
 -- Tickets : création (avec les limites copiées du forfait) et désactivation. La consommation
--- et l'activation ne sont écrites que par RADIUS (fonctions radius.*).
+-- et l'activation ne sont écrites que par RADIUS (fonctions radius.*). L'identifiant est
+-- choisi par l'API (uuidv7() lu avant l'insertion) : le code imprimable en est dérivé et son
+-- empreinte code_lookup doit être connue dès l'INSERT.
 GRANT SELECT ON vouchers TO ecsi_app;
 --> statement-breakpoint
-GRANT INSERT (company_id, batch_id, plan_id, site_id, serial, code_lookup, lookup_key_version,
+GRANT INSERT (id, company_id, batch_id, plan_id, site_id, serial, code_lookup, lookup_key_version,
               code_key_version,
               price_minor, currency, validity_seconds, session_time_seconds, rate_up_kbps,
               rate_down_kbps, data_quota_bytes, max_devices, idle_timeout_seconds)
