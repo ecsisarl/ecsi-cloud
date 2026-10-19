@@ -109,6 +109,8 @@ const VALUES: Record<string, string> = {
   JWT_ACCESS_SECRET: random(32),
   ENCRYPTION_KEY: randomBytes(32).toString('base64'),
   ENCRYPTION_KEY_ID: 'k1',
+  VOUCHER_CODE_KEY: random(32),
+  RADIUS_VOUCHER_LOOKUP_KEY: random(32),
   WEB_PUBLIC_URL: 'https://app.mytikcentral.com',
   CORS_ORIGINS: 'https://app.mytikcentral.com',
   ROUTER_ENROLL_PUBLIC_URL: 'https://enroll.mytikcentral.com/api/v1/routers/enroll',

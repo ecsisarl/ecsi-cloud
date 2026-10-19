@@ -63,6 +63,10 @@ x-api-env: &api-env
   WG_GATEWAY_ENDPOINT: ${WG_GATEWAY_ENDPOINT:-}
   WG_GATEWAY_PORT: ${WG_GATEWAY_PORT:-51820}
   ROUTER_ACTIVATION_PORT: ${ROUTER_ACTIVATION_PORT:-8081}
+  # Tickets Hotspot (lot B) : clé de dérivation des codes (API seule) et clé d'empreinte
+  # (API et FreeRADIUS). Production : openssl rand -hex 32, distinctes (docs/DEPLOYMENT.md).
+  VOUCHER_CODE_KEY: ${VOUCHER_CODE_KEY:-devonly-voucher-code-key}
+  RADIUS_VOUCHER_LOOKUP_KEY: ${RADIUS_VOUCHER_LOOKUP_KEY:-devonly-voucher-lookup-key}
 
 # S3H-H7 : journaux Docker bornés (10 Mio x 5 fichiers par conteneur) : un service bavard ne
 # remplit plus le disque du VPS (PostgreSQL s'arrêterait).
