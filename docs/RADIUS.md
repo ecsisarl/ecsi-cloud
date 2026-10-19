@@ -43,13 +43,13 @@ Ordre des contrôles de `radius.decide` : NAS actif → ticket de l'entreprise d
 
 ### Attributs de réponse (dictionnaire officiel `dictionary.mikrotik`, vendor 14988)
 
-| Attribut                              | Valeur                                                                                                           |
-| ------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| `Session-Timeout`                     | min(temps de connexion restant, validité restante), en secondes                                                  |
-| `Idle-Timeout`                        | inactivité du forfait (300 s par défaut)                                                                         |
-| `Acct-Interim-Interval`               | 300 s (pris en compte en Hotspot avec `radius-interim-update=received`)                                          |
-| `Mikrotik-Rate-Limit`                 | `<montant>k/<descendant>k` : du point de vue du routeur, rx = envoi du client, tx = réception ; `0` = non limité |
-| `Mikrotik-Total-Limit` / `-Gigawords` | volume restant (32 bits bas / bits hauts) — **comportement Hotspot à vérifier sur CHR**                          |
+| Attribut                              | Valeur                                                                                                                           |
+| ------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `Session-Timeout`                     | min(temps de connexion restant, validité restante), en secondes                                                                  |
+| `Idle-Timeout`                        | inactivité du forfait (300 s par défaut)                                                                                         |
+| `Acct-Interim-Interval`               | 300 s (pris en compte en Hotspot avec `radius-interim-update=received`)                                                          |
+| `Mikrotik-Rate-Limit`                 | `<montant>k/<descendant>k` : du point de vue du routeur, rx = envoi du client, tx = réception ; `0` = non limité                 |
+| `Mikrotik-Total-Limit` / `-Gigawords` | volume restant (32 bits bas / bits hauts) — appliqué en `limit-bytes-total` sur l'entrée active, coupure vérifiée sur CHR 7.24.5 |
 
 Motifs de refus (`radius_postauth.reason`, `Reply-Message` en français pour la page de connexion) : `UNKNOWN`, `WRONG_SITE`, `DISABLED`, `EXPIRED`, `EXHAUSTED`, `TOO_MANY_DEVICES`, `NAS_UNKNOWN`, `PAP_REFUSED`, `INVALID`, `DB_UNAVAILABLE`, `AUTH_FAILED` (mot de passe différent du code).
 
@@ -62,7 +62,7 @@ Motifs de refus (`radius_postauth.reason`, `Reply-Message` en français pour la 
 
 ## Expiration imposée côté RADIUS/RouterOS
 
-- Pendant une session : `Session-Timeout` coupe la session à la fin du temps ou de la validité ; `Mikrotik-Total-Limit` borne le volume (à confirmer sur CHR).
+- Pendant une session : `Session-Timeout` coupe la session à la fin du temps ou de la validité ; `Mikrotik-Total-Limit` borne le volume (vérifié sur CHR 7.24.5 : la session est coupée au quota, cause d'arrêt `NAS-Request`).
 - Toute nouvelle connexion est refusée par `radius.decide` dès que le ticket est expiré, épuisé ou désactivé, quel que soit l'état affiché par l'interface.
 
 ## Limites connues (MVP)

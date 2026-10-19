@@ -112,6 +112,44 @@ Le worker et l'agent passerelle n'ont pas de serveur HTTP : chaque cycle réussi
 
 La migration 0006 est additive : les routeurs du Sprint 3A (dont CHR-LAB) restent supervisés sans action. Elle retire à `ecsi_app` le `DELETE` sur `routers` (suppression douce uniquement).
 
+### Lot B : rôle ecsi_radius, FreeRADIUS et montée de version
+
+Variables (`openssl rand -hex 32`, trois valeurs **distinctes**, jamais dans Git ; [RADIUS.md](RADIUS.md#aucun-secret-en-base)) : `VOUCHER_CODE_KEY` (API), `RADIUS_VOUCHER_LOOKUP_KEY` (API **et** FreeRADIUS, même valeur), `RADIUS_NAS_KEY` (worker **et** FreeRADIUS, même valeur), plus `ECSI_DB_RADIUS_PASSWORD` (rôle PostgreSQL de FreeRADIUS).
+
+#### Rôle ecsi_radius
+
+Un volume PostgreSQL neuf le crée à l'initialisation (`infra/postgres/init/01-roles.sh`, si `ECSI_DB_RADIUS_PASSWORD` est fourni). Sur une base **existante** (VPS déjà en service), la migration 0008 refuse de s'appliquer tant qu'il n'existe pas ; le créer une fois, avec le même SQL, avant `migrate` :
+
+```sh
+# 1. Secret ajouté au .env (0600) ; valeur jamais affichée.
+umask 077; printf 'ECSI_DB_RADIUS_PASSWORD=%s\n' "$(openssl rand -hex 24)" >> .env
+# 2. Rôle : mot de passe lu par psql dans l'environnement (\getenv), jamais en argument,
+#    journalisation des requêtes coupée pour la session.
+set -a; . ./.env; set +a
+docker compose exec -T -e ECSI_DB_RADIUS_PASSWORD postgres \
+  psql -v ON_ERROR_STOP=1 -U postgres -d "${POSTGRES_DB:-ecsi}" <<'SQL'
+SET log_statement = 'none';
+SET log_min_error_statement = 'panic';
+SET log_min_duration_statement = -1;
+\getenv radius_password ECSI_DB_RADIUS_PASSWORD
+CREATE ROLE ecsi_radius LOGIN NOSUPERUSER NOCREATEROLE NOCREATEDB NOBYPASSRLS PASSWORD :'radius_password';
+GRANT CONNECT ON DATABASE ecsi TO ecsi_radius;
+SQL
+# 3. Migrations 0008 et 0009 (service migrate), puis contrôle.
+docker compose run --rm migrate
+docker compose exec -T postgres psql -U postgres -d "${POSTGRES_DB:-ecsi}" -At \
+  -c "select count(*) from drizzle.__drizzle_migrations" \
+  -c "select count(*) from information_schema.role_table_grants where grantee = 'ecsi_radius'"
+```
+
+Attendu : 10 migrations ; 0 droit de `ecsi_radius` sur les tables (seulement `EXECUTE` sur les fonctions `radius.*`). Rejoué sur une base de laboratoire remise en 0007 : [`lab/routeros/resultats/2026-10-19-lot-b-parcours-complet.md`](../lab/routeros/resultats/2026-10-19-lot-b-parcours-complet.md).
+
+#### FreeRADIUS sur l'hôte de la passerelle
+
+- `docker compose --profile gateway up -d radius` : `network_mode: host`, écoute **uniquement** sur `ROUTER_TUNNEL_GATEWAY` (UDP 1812/1813), clients = `ROUTER_TUNNEL_CIDR` ; joint PostgreSQL par `127.0.0.1:5432`.
+- Firewall de l'hôte : UDP 1812 et 1813 acceptés **uniquement** depuis l'interface WireGuard (source `ROUTER_TUNNEL_CIDR`, destination `ROUTER_TUNNEL_GATEWAY`), comme le port d'activation. Sans cette règle, le routeur n'obtient aucune réponse (constaté au laboratoire, où la règle a été ajoutée à `lab/sim/gateway-firewall.sh`).
+- Le worker reçoit `RADIUS_NAS_KEY` (sinon le provisionnement Hotspot est désactivé) ; l'API reçoit `VOUCHER_CODE_KEY` et `RADIUS_VOUCHER_LOOKUP_KEY` (sinon la génération de tickets est indisponible).
+
 ## Images
 
 | Image               | Dockerfile                                                 | Contenu                                                                                       |
