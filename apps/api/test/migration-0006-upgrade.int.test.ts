@@ -65,12 +65,12 @@ describe('migration 0006 sur une installation S3A existante', () => {
         ])
       ).rows[0] ?? {};
 
-    await runMigrations(infra.urls.migrator); // applique 0006 et 0007 (et rien d'autre)
+    await runMigrations(infra.urls.migrator); // applique 0006 à 0008 (et rien d'autre)
 
     const migrations = await migrator.query(
       'select count(*)::int as n from drizzle.__drizzle_migrations',
     );
-    expect(migrations.rows[0]).toEqual({ n: 8 });
+    expect(migrations.rows[0]).toEqual({ n: 9 });
     const after =
       (
         await migrator.query<Record<string, unknown>>('select * from routers where id = $1', [

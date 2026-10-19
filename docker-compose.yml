@@ -84,6 +84,7 @@ services:
       ECSI_DB_APP_PASSWORD: ${ECSI_DB_APP_PASSWORD:-devonly-app-password}
       ECSI_DB_AUTH_PASSWORD: ${ECSI_DB_AUTH_PASSWORD:-devonly-auth-password}
       ECSI_DB_WORKER_PASSWORD: ${ECSI_DB_WORKER_PASSWORD:-devonly-worker-password}
+      ECSI_DB_RADIUS_PASSWORD: ${ECSI_DB_RADIUS_PASSWORD:-devonly-radius-password}
     volumes:
       - postgres-data:/var/lib/postgresql
       - ./infra/postgres/init:/docker-entrypoint-initdb.d:ro

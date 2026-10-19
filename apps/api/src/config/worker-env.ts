@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { DEV_ONLY_MARKER, envSchema, InvalidEnvironmentError } from './env.js';
+import { RADIUS_KEY_PATTERN } from '../hotspot/radius-keys.js';
 import { refineRouterNetwork, routerNetworkShape } from './router-network.js';
 
 /**
@@ -34,6 +35,16 @@ export const workerEnvSchema = envSchema
     MONITORING_MEMORY_HIGH_PERCENT: z.coerce.number().int().min(50).max(100).default(90),
     MONITORING_SUSTAIN_SAMPLES: z.coerce.number().int().min(1).max(30).default(3),
     MONITORING_DEGRADED_MIN_FAILURES: z.coerce.number().int().min(1).max(100).default(3),
+    /**
+     * Clé de dérivation des secrets RADIUS des routeurs (lot B, hotspot/radius-keys.ts),
+     * partagée avec FreeRADIUS seulement. Absente : la configuration Hotspot n'est pas poussée.
+     */
+    RADIUS_NAS_KEY: z
+      .string()
+      .regex(RADIUS_KEY_PATTERN, {
+        message: '64 caractères hexadécimaux attendus (openssl rand -hex 32)',
+      })
+      .optional(),
   })
   .superRefine(refineRouterNetwork);
 

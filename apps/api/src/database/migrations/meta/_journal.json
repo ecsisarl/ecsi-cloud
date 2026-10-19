@@ -57,6 +57,13 @@
       "when": 1792348398270,
       "tag": "0007_monitoring_alerts",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1792402696388,
+      "tag": "0008_hotspot_radius",
+      "breakpoints": true
     }
   ]
 }

@@ -10,12 +10,17 @@
 #  - ecsi_worker   : rôle du worker de supervision MikroTik (Sprint 3A). Pas de BYPASSRLS,
 #                    aucun privilège par défaut : la migration 0005 lui accorde la seule table
 #                    routers (lecture, et écriture des colonnes de supervision uniquement).
+#  - ecsi_radius   : rôle de FreeRADIUS (lot B). Pas de BYPASSRLS, aucun droit sur les tables :
+#                    la migration 0008 lui accorde EXECUTE sur les seules fonctions radius.*.
 set -eu
 
 : "${ECSI_DB_MIGRATOR_PASSWORD:?ECSI_DB_MIGRATOR_PASSWORD est requis}"
 : "${ECSI_DB_APP_PASSWORD:?ECSI_DB_APP_PASSWORD est requis}"
 : "${ECSI_DB_AUTH_PASSWORD:?ECSI_DB_AUTH_PASSWORD est requis}"
 : "${ECSI_DB_WORKER_PASSWORD:?ECSI_DB_WORKER_PASSWORD est requis}"
+# ecsi_radius : créé si ECSI_DB_RADIUS_PASSWORD est fourni (sinon la migration 0008 le réclame,
+# création manuelle : docs/DEPLOYMENT.md, « Rôle ecsi_radius »).
+export ECSI_DB_RADIUS_PASSWORD="${ECSI_DB_RADIUS_PASSWORD:-}"
 
 # Mots de passe lus dans l'environnement par psql (\getenv), jamais passés en argument (ps) ;
 # journalisation des requêtes neutralisée pour la session (S3H-H3) : même un serveur configuré
@@ -31,10 +36,16 @@ SET log_min_duration_statement = -1;
 \getenv app_password ECSI_DB_APP_PASSWORD
 \getenv auth_password ECSI_DB_AUTH_PASSWORD
 \getenv worker_password ECSI_DB_WORKER_PASSWORD
+\getenv radius_password ECSI_DB_RADIUS_PASSWORD
 CREATE ROLE ecsi_migrator LOGIN NOSUPERUSER NOCREATEROLE NOCREATEDB NOBYPASSRLS PASSWORD :'migrator_password';
 CREATE ROLE ecsi_app LOGIN NOSUPERUSER NOCREATEROLE NOCREATEDB NOBYPASSRLS PASSWORD :'app_password';
 CREATE ROLE ecsi_auth LOGIN NOSUPERUSER NOCREATEROLE NOCREATEDB NOBYPASSRLS PASSWORD :'auth_password';
 CREATE ROLE ecsi_worker LOGIN NOSUPERUSER NOCREATEROLE NOCREATEDB NOBYPASSRLS PASSWORD :'worker_password';
+SELECT :'radius_password' <> '' AS with_radius \gset
+\if :with_radius
+CREATE ROLE ecsi_radius LOGIN NOSUPERUSER NOCREATEROLE NOCREATEDB NOBYPASSRLS PASSWORD :'radius_password';
+GRANT CONNECT ON DATABASE :"db_name" TO ecsi_radius;
+\endif
 
 ALTER DATABASE :"db_name" OWNER TO ecsi_migrator;
 REVOKE ALL ON DATABASE :"db_name" FROM PUBLIC;

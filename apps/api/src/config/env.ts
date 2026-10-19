@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { refineRouterEnrollment, routerEnrollmentShape } from './router-enrollment.js';
 import { refineRouterNetwork, routerNetworkShape } from './router-network.js';
+import { RADIUS_KEY_PATTERN } from '../hotspot/radius-keys.js';
 
 /**
  * Marqueur présent dans toutes les valeurs par défaut de développement
@@ -19,6 +20,11 @@ const csv = z.string().transform((value) =>
     .map((item) => item.trim())
     .filter((item) => item.length > 0),
 );
+
+/** Clé HMAC du lot B (hotspot/radius-keys.ts). */
+const radiusKey = z.string().regex(RADIUS_KEY_PATTERN, {
+  message: '64 caractères hexadécimaux attendus (openssl rand -hex 32)',
+});
 
 export const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
@@ -101,6 +107,36 @@ export const envSchema = z.object({
   SMTP_USER: z.string().optional(),
   SMTP_PASSWORD: z.string().optional(),
   SMTP_FROM: z.string().min(3).default('ECSI CLOUD <no-reply@ecsi.local>'),
+  /**
+   * Tickets Hotspot (lot B, hotspot/radius-keys.ts). Clé de dérivation des codes imprimables
+   * (API seule) : 64 caractères hexadécimaux (openssl rand -hex 32). Absente : génération et
+   * impression de tickets indisponibles (503), le reste de l'API fonctionne.
+   */
+  VOUCHER_CODE_KEY: radiusKey.optional(),
+  VOUCHER_CODE_KEY_VERSION: z.coerce.number().int().min(1).max(999).default(1),
+  /** Anciennes clés de dérivation (réimpression des tickets émis avant une rotation). */
+  VOUCHER_CODE_PREVIOUS_KEYS: z
+    .string()
+    .optional()
+    .refine(
+      (value) =>
+        !value?.trim() ||
+        value.split(',').every((entry) => {
+          const index = entry.indexOf(':');
+          const version = Number(entry.slice(0, index).trim());
+          return (
+            index > 0 &&
+            Number.isInteger(version) &&
+            version >= 1 &&
+            version <= 999 &&
+            RADIUS_KEY_PATTERN.test(entry.slice(index + 1).trim())
+          );
+        }),
+      { message: 'format « version:hex64,… » attendu' },
+    ),
+  /** Clé d'empreinte des codes (API et FreeRADIUS) : seule trace d'un code en base. */
+  RADIUS_VOUCHER_LOOKUP_KEY: radiusKey.optional(),
+  RADIUS_VOUCHER_LOOKUP_KEY_VERSION: z.coerce.number().int().min(1).max(999).default(1),
   /** Réseau tunnel WireGuard des routeurs MikroTik (Sprint 3A, routers/tunnel-ip.ts). */
   ...routerNetworkShape,
   /** Enrôlement des routeurs (Sprint 3B, config/router-enrollment.ts) : valeurs publiques. */
@@ -108,6 +144,31 @@ export const envSchema = z.object({
 });
 
 export type Env = z.infer<typeof envSchema>;
+
+/** Clés du lot B : présentes ensemble et distinctes (une clé = un rôle). */
+export function refineVoucherKeys(
+  env: {
+    VOUCHER_CODE_KEY?: string | undefined;
+    VOUCHER_CODE_PREVIOUS_KEYS?: string | undefined;
+    RADIUS_VOUCHER_LOOKUP_KEY?: string | undefined;
+  },
+  ctx: z.RefinementCtx,
+): void {
+  if (Boolean(env.VOUCHER_CODE_KEY) !== Boolean(env.RADIUS_VOUCHER_LOOKUP_KEY)) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['RADIUS_VOUCHER_LOOKUP_KEY'],
+      message: 'VOUCHER_CODE_KEY et RADIUS_VOUCHER_LOOKUP_KEY vont ensemble',
+    });
+  }
+  if (env.VOUCHER_CODE_KEY && env.VOUCHER_CODE_KEY === env.RADIUS_VOUCHER_LOOKUP_KEY) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['RADIUS_VOUCHER_LOOKUP_KEY'],
+      message: 'doit être différente de VOUCHER_CODE_KEY',
+    });
+  }
+}
 
 export class InvalidEnvironmentError extends Error {
   constructor(public readonly issues: string[]) {
@@ -121,6 +182,7 @@ export function parseEnv(source: Record<string, string | undefined>): Env {
   const result = envSchema
     .superRefine(refineRouterNetwork)
     .superRefine(refineRouterEnrollment)
+    .superRefine(refineVoucherKeys)
     .safeParse(source);
   if (!result.success) {
     throw new InvalidEnvironmentError(

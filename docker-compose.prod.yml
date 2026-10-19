@@ -59,6 +59,7 @@ services:
       ECSI_DB_APP_PASSWORD: ${ECSI_DB_APP_PASSWORD:?ECSI_DB_APP_PASSWORD obligatoire}
       ECSI_DB_AUTH_PASSWORD: ${ECSI_DB_AUTH_PASSWORD:?ECSI_DB_AUTH_PASSWORD obligatoire}
       ECSI_DB_WORKER_PASSWORD: ${ECSI_DB_WORKER_PASSWORD:?ECSI_DB_WORKER_PASSWORD obligatoire}
+      ECSI_DB_RADIUS_PASSWORD: ${ECSI_DB_RADIUS_PASSWORD:?ECSI_DB_RADIUS_PASSWORD obligatoire}
 
   # Commande du Compose de base (mot de passe lu dans l'environnement, jamais en argument).
   redis:
