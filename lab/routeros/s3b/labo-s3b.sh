@@ -170,11 +170,15 @@ radius() {
 
 stop_radius() {
   # Seul le processus lancé ici (racine = radius-rootfs) : jamais un FreeRADIUS de conteneur.
-  local pid
-  pid="$(cat "$S3B/radius.pid" 2>/dev/null || true)"
-  if [[ -n "$pid" && "$(readlink "/proc/$pid/root" 2>/dev/null)" == "$S3B/radius-rootfs" ]]; then
-    kill "$pid"
-  fi
+  # Le pid enregistré est celui de l'enveloppe (ip netns exec) ; FreeRADIUS en est un
+  # descendant : on cherche donc tout processus dont la racine est radius-rootfs.
+  local root
+  for root in /proc/[0-9]*/root; do
+    if [[ "$(readlink "$root" 2>/dev/null)" == "$S3B/radius-rootfs" ]]; then
+      root="${root#/proc/}"
+      kill "${root%/root}" 2>/dev/null || true
+    fi
+  done
   rm -f "$S3B/radius.pid"
   sleep 1
   umount "$S3B/radius-rootfs/proc" 2>/dev/null || true
