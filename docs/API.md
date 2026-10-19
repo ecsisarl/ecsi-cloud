@@ -151,6 +151,30 @@ Données écrites par le worker de supervision (aucune commande RouterOS supplé
 | GET     | `/routers/:id/metrics`    | `monitoring.read`        | `?hours=1..168` : moyennes CPU, mémoire et disponibilité par intervalle (~240 points) |
 | POST    | `/alerts/:id/acknowledge` | `monitoring.acknowledge` | Acquittement (une fois ; 409 ensuite), audité `monitoring.alert.acknowledge`          |
 
+## Hotspot, forfaits et tickets (lot B5)
+
+Portée par site : un lot, un ticket, un hotspot ou une session hors des sites où l'utilisateur détient la permission répond 404. Un **code de ticket est un secret porteur** : la base n'en garde qu'une empreinte (`RADIUS_VOUCHER_LOOKUP_KEY`), le code est re-dérivé (`VOUCHER_CODE_KEY`) uniquement par les routes d'impression (`vouchers.export`, auditées `vouchers.export` avec le seul nombre de tickets, réponses `Cache-Control: no-store`). Listes, détails, erreurs et journal d'audit ne contiennent jamais de code. Clés absentes : génération et impression répondent 503 « Clés de tickets non configurées ».
+
+| Méthode | Route                                     | Permission                      | Rôle                                                                                                                                     |
+| ------- | ----------------------------------------- | ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| GET     | `/plans`, `/plans/:id`                    | `plans.read` (un site au moins) | Forfaits (`?status=`)                                                                                                                    |
+| POST    | `/plans`                                  | `plans.manage` (entreprise)     | Création (au moins une limite : validité, durée ou volume ; 409 nom déjà pris)                                                           |
+| PATCH   | `/plans/:id`                              | `plans.manage`                  | Modification (les tickets déjà générés gardent leurs conditions)                                                                         |
+| POST    | `/plans/:id/disable`, `enable`            | `plans.manage`                  | Suspension / réactivation                                                                                                                |
+| DELETE  | `/plans/:id`                              | `plans.manage`                  | Suppression logique                                                                                                                      |
+| POST    | `/voucher-batches`                        | `vouchers.generate` (site)      | Génération de 1 à 1000 tickets ; audit `vouchers.generate` (lot, forfait, site, nombre)                                                  |
+| GET     | `/voucher-batches[/:id]`                  | `vouchers.read`                 | Lots et répartition par état, sans code                                                                                                  |
+| GET     | `/voucher-batches/:id/print`              | `vouchers.export`               | Feuille d'impression (codes) ; `no-store`                                                                                                |
+| GET     | `/vouchers[/:id]`                         | `vouchers.read`                 | Tickets filtrés (`state`, `planId`, `siteId`, `batchId`, `serial`, `limit`, `offset`) ; détail avec consommation, tentatives, connexions |
+| POST    | `/vouchers/:id/print`                     | `vouchers.export`               | Réimpression d'un ticket ; `no-store`                                                                                                    |
+| POST    | `/vouchers/:id/disable`                   | `vouchers.disable`              | Désactivation définitive (motif), 409 si déjà désactivé                                                                                  |
+| GET     | `/radius-sessions`                        | `clients.read`                  | Sessions RADIUS (`?active=true\|false&siteId=&routerId=`)                                                                                |
+| GET     | `/hotspots[/:id]`                         | `hotspots.read`                 | Hotspots et état de synchronisation                                                                                                      |
+| POST    | `/hotspots`                               | `hotspots.manage`               | Un hotspot par routeur (même entreprise, site du routeur) ; réseau privé RFC 1918, hors plage tunnel ; HTTP-CHAP seul                    |
+| PATCH   | `/hotspots/:id`                           | `hotspots.manage`               | Modification : `config_version` + 1, synchronisation `PENDING`                                                                           |
+| POST    | `/hotspots/:id/disable`, `enable`, `sync` | `hotspots.manage`               | État souhaité, nouvelle synchronisation                                                                                                  |
+| DELETE  | `/hotspots/:id`                           | `hotspots.manage`               | Suppression logique (retrait à appliquer par le worker)                                                                                  |
+
 ## Ressources prévues
 
-hotspots, plans, vouchers, sessions, vendors, sales, payments, reports, notifications (voir [ROADMAP.md](ROADMAP.md)).
+vendors, sales, payments, reports, notifications (voir [ROADMAP.md](ROADMAP.md)).

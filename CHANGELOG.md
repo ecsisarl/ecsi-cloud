@@ -2,6 +2,21 @@
 
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Versions par sprint.
 
+## [B5] — 2026-10-19 — Forfaits, tickets et hotspots dans l'application (non déployé)
+
+### Ajouté
+
+- Types et schémas partagés (`packages/shared/src/hotspot.ts`) : forfaits, lots et tickets, hotspots (contrôles réseau RFC 1918), sessions RADIUS.
+- API : `/plans`, `/voucher-batches` (génération et impression), `/vouchers` (détail, réimpression, désactivation), `/hotspots` (création, modification versionnée, activation, synchronisation, suppression logique), `/radius-sessions`. Codes jamais stockés ni journalisés : empreinte seule en base, code re-dérivé à l'impression (audit `vouchers.export` avec le nombre seulement, `Cache-Control: no-store`). Clés absentes : 503.
+- Dashboard : pages Forfaits, Tickets (lots, filtres, détail, désactivation), impression A4 des tickets (sans menu), Réseau → Hotspots (configuration HTTP-CHAP, synchronisation, accès de configuration, sessions actives).
+- Environnement : `VOUCHER_CODE_KEY` et `RADIUS_VOUCHER_LOOKUP_KEY` pour l'API (valeurs `devonly` en développement, obligatoires dans la surcouche de production).
+- Tests : schémas partagés, intégration `test/hotspot.int.test.ts` (RLS, portée par site, codes, audit, hotspots, RADIUS simulé), E2E `e2e/tests/lot-b.spec.ts`.
+
+### Modifié
+
+- Migration 0008 (non déployée) : `ecsi_app` peut fournir `vouchers.id` (identifiant nécessaire à la dérivation du code avant l'insertion).
+- Réponses d'erreur : le détail d'un 503 volontaire est conservé (« Clés de tickets non configurées »).
+
 ## [E1] — 2026-10-18 — Monitoring et alertes dans l'application (non déployé)
 
 ### Ajouté
