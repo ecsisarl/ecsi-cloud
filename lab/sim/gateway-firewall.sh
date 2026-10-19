@@ -5,7 +5,8 @@
 #   - WAN : seul UDP 51820 (WireGuard) est accepté ; tout le reste est ignoré.
 #   - Tunnel → passerelle : ICMP (diagnostic) et TCP 8081, le point d'activation de
 #     l'enrôlement (étape 8 du protocole : identifiants du compte de service envoyés par le
-#     tunnel, acceptés une seule fois). Rien d'autre ; aucun accès au réseau interne.
+#     tunnel, acceptés une seule fois) ; UDP 1812/1813, FreeRADIUS du lot B (le NAS est
+#     identifié par son adresse tunnel). Rien d'autre ; aucun accès au réseau interne.
 #   - Routeur → routeur (wg → wg) : INTERDIT. Un routeur compromis ne peut joindre aucun autre.
 #   - Worker → routeurs : uniquement le port d'administration, traduit (SNAT) vers 10.200.0.1,
 #     pour que chaque routeur n'ait à autoriser qu'une seule adresse source.
@@ -28,6 +29,7 @@ apply() {
   ns iptables -A INPUT -i wan -p udp --dport 51820 -j ACCEPT
   ns iptables -A INPUT -i wg-gw -p icmp --icmp-type echo-request -j ACCEPT
   ns iptables -A INPUT -i wg-gw -s 10.200.0.0/24 -d 10.200.0.1 -p tcp --dport 8081 -j ACCEPT
+  ns iptables -A INPUT -i wg-gw -s 10.200.0.0/24 -d 10.200.0.1 -p udp -m multiport --dports 1812,1813 -j ACCEPT
 
   ns iptables -A FORWARD -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
   ns iptables -A FORWARD -m conntrack --ctstate INVALID -j DROP

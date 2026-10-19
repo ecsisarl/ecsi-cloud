@@ -14,7 +14,8 @@
 # (pnpm --filter @ecsi/api build), Docker. Secrets générés au premier « up » dans
 # $STATE/s3b (0600, ignoré par Git), jamais affichés.
 #
-# Usage : sudo ./labo-s3b.sh up | services | down   (services : redémarrage sans la base)
+# Usage : sudo ./labo-s3b.sh up | services | radius | down
+#   services : redémarrage sans la base ; radius : FreeRADIUS (lot B) dans le namespace gw
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/../../.." && pwd)"
@@ -33,6 +34,8 @@ secrets() {
       umask 077
       grep -q '^PGR=' "$S3B/env" || echo "PGR=$(rnd)" >>"$S3B/env"
       grep -q '^NAS=' "$S3B/env" || echo "NAS=$(openssl rand -hex 32)" >>"$S3B/env"
+      grep -q '^VCK=' "$S3B/env" || echo "VCK=$(openssl rand -hex 32)" >>"$S3B/env"
+      grep -q '^VLK=' "$S3B/env" || echo "VLK=$(openssl rand -hex 32)" >>"$S3B/env"
     )
     return
   fi
@@ -43,6 +46,7 @@ secrets() {
       echo "PGS=$(rnd)"; echo "RDS=$(rnd)"; echo "JWT=$(rnd)$(rnd)"
       echo "KEY=$(openssl rand -base64 32)"
       echo "PGR=$(rnd)"; echo "NAS=$(openssl rand -hex 32)"
+      echo "VCK=$(openssl rand -hex 32)"; echo "VLK=$(openssl rand -hex 32)"
     } >"$S3B/env"
     rnd >"$S3B/seed.pass"
   )
@@ -79,6 +83,7 @@ up() {
 # (Re)démarre l'API, le front HTTPS, l'agent passerelle et le worker SANS toucher à la base :
 # après une recompilation (lot B), le routeur enrôlé et la base sont conservés.
 services() {
+  secrets
   # shellcheck disable=SC1091
   source "$S3B/env"
   stop_services
@@ -111,6 +116,7 @@ services() {
       ROUTER_ENROLL_PUBLIC_URL=https://203.0.113.30:8443/api/v1/routers/enroll \
       ROUTER_ENROLL_CA_URL=https://203.0.113.30:8443/ca.pem ROUTER_ENROLL_CA_FINGERPRINT="$ca_fp" \
       WG_GATEWAY_PUBLIC_KEY="$gw_public" WG_GATEWAY_ENDPOINT=203.0.113.10 WG_GATEWAY_PORT=51820 \
+      VOUCHER_CODE_KEY="$VCK" RADIUS_VOUCHER_LOOKUP_KEY="$VLK" \
       setsid node "$API/dist/main.js" >>"$S3B/api.log" 2>&1 &
   )
   ns cloud setsid node "$HERE/front-https.mjs" "$STATE/pki" 10.99.0.1 14000 203.0.113.30 8443 \
@@ -130,6 +136,51 @@ services() {
   echo "API, front HTTPS, agent passerelle et worker démarrés (journaux : $S3B/*.log)"
 }
 
+# FreeRADIUS du lot B (image infra/radius) dans le namespace gw, à l'écoute de 10.200.0.1.
+# Sur un VPS, le service Compose « radius » (network_mode: host) écoute l'adresse de wg-gw
+# du système hôte. Ici la passerelle vit dans un namespace ip netns que Docker ne sait pas
+# rejoindre : le système de fichiers de l'image (mêmes binaires, configuration et point
+# d'entrée) est exécuté par chroot dans ce namespace, sous l'utilisateur de l'image.
+radius() {
+  # shellcheck disable=SC1091
+  source "$S3B/env"
+  stop_radius
+  local image="${RADIUS_IMAGE:-ecsi-cloud/radius:lab}" root="$S3B/radius-rootfs" cid
+  rm -rf "$root" && mkdir -p "$root"
+  cid="$(docker create "$image")"
+  docker export "$cid" | tar -x -C "$root"
+  docker rm "$cid" >/dev/null
+  mount --bind /dev "$root/dev"
+  mount -t proc proc "$root/proc"
+  local gid
+  gid="$(awk -F: '$1 == "ecsiradius" { print $4 }' "$root/etc/passwd")"
+  (
+    # Valeurs transmises par l'environnement (jamais en argument : ps).
+    export ECSI_ENV=development RADIUS_LISTEN_ADDRESS=10.200.0.1 \
+      RADIUS_CLIENT_CIDR=10.200.0.0/24 RADIUS_DB_HOST=10.99.1.1 RADIUS_DB_PORT=15432 \
+      RADIUS_DB_NAME=ecsi RADIUS_DB_PASSWORD="${PGR_VPS:-$PGR}" \
+      RADIUS_VOUCHER_LOOKUP_KEY="$VLK" RADIUS_NAS_KEY="$NAS"
+    ns gw setsid chroot --userspec="10812:$gid" "$root" /usr/local/bin/ecsi-radius-entrypoint \
+      >>"$S3B/radius.log" 2>&1 &
+    echo $! >"$S3B/radius.pid"
+  )
+  sleep 3
+  ns gw ss -lun | grep -E '10\.200\.0\.1:181[23]' || { echo "FreeRADIUS n'écoute pas" >&2; return 1; }
+}
+
+stop_radius() {
+  # Seul le processus lancé ici (racine = radius-rootfs) : jamais un FreeRADIUS de conteneur.
+  local pid
+  pid="$(cat "$S3B/radius.pid" 2>/dev/null || true)"
+  if [[ -n "$pid" && "$(readlink "/proc/$pid/root" 2>/dev/null)" == "$S3B/radius-rootfs" ]]; then
+    kill "$pid"
+  fi
+  rm -f "$S3B/radius.pid"
+  sleep 1
+  umount "$S3B/radius-rootfs/proc" 2>/dev/null || true
+  umount "$S3B/radius-rootfs/dev" 2>/dev/null || true
+}
+
 stop_services() {
   pkill -f "$API/dist/main.js" 2>/dev/null || true
   pkill -f "$API/dist/gateway.js" 2>/dev/null || true
@@ -140,6 +191,7 @@ stop_services() {
 
 down() {
   stop_services
+  stop_radius
   ip link del s3b-cloud 2>/dev/null || true
   ip link del s3b-gw 2>/dev/null || true
   docker rm -f ecsi-s3b-pg ecsi-s3b-redis >/dev/null 2>&1 || true
@@ -148,6 +200,7 @@ down() {
 case "${1:-}" in
   up) up ;;
   services) services ;;
+  radius) radius ;;
   down) down ;;
-  *) echo "usage: $0 up | services | down" >&2; exit 1 ;;
+  *) echo "usage: $0 up | services | radius | down" >&2; exit 1 ;;
 esac
