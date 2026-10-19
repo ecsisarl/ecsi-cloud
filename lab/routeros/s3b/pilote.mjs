@@ -31,6 +31,19 @@ async function call(method, path, body) {
 }
 
 async function main() {
+  // Session réutilisée entre deux appels (fichier 0600, PILOTE_SESSION_FILE) : évite une
+  // nouvelle connexion 2FA à chaque commande (un code TOTP ne sert qu'une fois).
+  const sessionFile = process.env.PILOTE_SESSION_FILE;
+  if (sessionFile && existsSync(sessionFile)) {
+    for (const [k, v] of JSON.parse(readFileSync(sessionFile, 'utf8'))) cookies.set(k, v);
+    if ((await call('GET', '/sites')).status !== 200) cookies.clear();
+  }
+  if (cookies.size === 0) await connect();
+  if (sessionFile) writeFileSync(sessionFile, JSON.stringify([...cookies]), { mode: 0o600 });
+  await run();
+}
+
+async function connect() {
   const login = await call('POST', '/auth/login', {
     email,
     password: readFileSync(passwordFile, 'utf8').trim(),
@@ -49,6 +62,9 @@ async function main() {
     });
     expectStatus(confirm, 200, '2FA');
   }
+}
+
+async function run() {
   const sites = expectStatus(await call('GET', '/sites'), 200, 'sites');
   const siteId = (code) => {
     const id = sites.find((s) => s.code === code)?.id;
@@ -81,6 +97,35 @@ async function main() {
         expiresAt: created.expiresAt,
       }),
     );
+  } else if (command === 'config-acces') {
+    // Lot B : script d'activation configuration (jeton : fichier 0600, jamais affiché).
+    const [id, scriptPath] = args;
+    const r = await call('POST', `/routers/${id}/config-access`);
+    const created = expectStatus(r, 201, 'config-acces');
+    writeFileSync(scriptPath, created.script, { mode: 0o600 });
+    console.log(JSON.stringify({ status: r.status, expiresAt: created.expiresAt }));
+  } else if (command === 'config-etat') {
+    const state = expectStatus(
+      await call('GET', `/routers/${args[0]}/config-access`),
+      200,
+      'config-etat',
+    );
+    console.log(JSON.stringify(state));
+  } else if (command === 'requete') {
+    // Lot B : appel quelconque de l'API (forfaits, lots, Hotspots, sessions). Réponse
+    // affichée : à NE PAS utiliser pour l'impression des tickets (codes) ; voir « codes ».
+    const [method, path, body] = args;
+    if (/\/print$/.test(path)) throw new Error('impression : utiliser la commande codes');
+    const r = await call(method, path, body === undefined ? undefined : JSON.parse(body));
+    console.log(JSON.stringify({ status: r.status, body: r.json }));
+    if (r.status >= 400) process.exitCode = 1;
+  } else if (command === 'codes') {
+    // Feuille d'impression d'un lot (codes des tickets) : fichier 0600, jamais affichée.
+    const [batchId, outPath] = args;
+    const r = await call('GET', `/voucher-batches/${batchId}/print`);
+    const sheet = expectStatus(r, 200, 'codes');
+    writeFileSync(outPath, JSON.stringify(sheet), { mode: 0o600 });
+    console.log(JSON.stringify({ status: r.status, tickets: sheet.vouchers.length }));
   } else if (command === 'voir') {
     const router = expectStatus(await call('GET', `/routers/${args[0]}`), 200, 'voir');
     console.log(JSON.stringify(routerView(router), null, 2));

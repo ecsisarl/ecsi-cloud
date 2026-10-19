@@ -50,21 +50,23 @@ Un volume PostgreSQL créé avant le Sprint 1 ne contient pas le rôle `ecsi_aut
 | `ENCRYPTION_PREVIOUS_KEYS` | Anciennes clés encore lisibles pendant une rotation : `id:base64,…` (vide hors rotation)                                |
 | `RATE_LIMIT_LOGIN_PER_IP`  | Connexions par IP et par 15 min (20 par défaut) ; relevé à 200 uniquement pour les tests E2E (toutes depuis la même IP) |
 
-**Changer de clé de chiffrement** : ne jamais remplacer `ENCRYPTION_KEY` seule. Suivre la procédure de rotation de [SECURITY.md](SECURITY.md#rotation-de-la-clé-de-chiffrement) : nouvelle clé active avec un nouvel identifiant, ancienne clé dans `ENCRYPTION_PREVIOUS_KEYS`, puis `docker compose run --rm migrate node dist/cli/rotate-encryption-keys.js --dry-run` et sans `--dry-run` ([ADR 0014](adr/0014-chiffrement-enveloppe-rotation.md)).
+**Changer de clé de chiffrement** : ne jamais remplacer `ENCRYPTION_KEY` seule. Suivre la procédure en 9 temps de [SECURITY.md](SECURITY.md#rotation-de-la-clé-de-chiffrement) : nouvelle clé active avec un nouvel identifiant, ancienne clé dans `ENCRYPTION_PREVIOUS_KEYS`, puis le service d'exploitation `keys-rotate` (`docker compose --profile ops run --rm --no-deps keys-rotate --verify | --dry-run`, puis sans option) ([ADR 0014](adr/0014-chiffrement-enveloppe-rotation.md)). L'ancienne commande `docker compose run --rm migrate node dist/cli/rotate-encryption-keys.js` ne recevait pas les connexions nécessaires aux mots de passe RouterOS : ne plus l'utiliser.
+
+**Changer un autre secret** (JWT, Redis, rôles PostgreSQL) : suivre « Rotation des secrets (S3H-H3) » de [SECURITY.md](SECURITY.md#rotation-des-secrets-s3h-h3). Les mots de passe des rôles PostgreSQL ne sont lus qu'à la création du volume : modifier `.env` ne suffit pas (`ops/rotation/pg-role-password.sh`). Contrôler `.env` sans l'afficher avec `ops/rotation/check-env.sh .env`. Depuis S3H-H3, le mot de passe Redis n'apparaît plus dans les arguments du conteneur (configuration générée sur tmpfs).
 
 ### Variables ajoutées au Sprint 3A
 
-| Variable                       | Rôle                                                                                                   |
-| ------------------------------ | ------------------------------------------------------------------------------------------------------ |
-| `ECSI_DB_WORKER_PASSWORD`      | Mot de passe du rôle PostgreSQL `ecsi_worker` (créé par `infra/postgres/init/01-roles.sh`)             |
-| `DATABASE_WORKER_URL`          | Connexion du worker de supervision (rôle `ecsi_worker`) ; aussi utilisée par `keys:rotate` si présente |
-| `ROUTER_TUNNEL_CIDR`           | Plage des adresses tunnel WireGuard des routeurs (`10.200.0.0/24`) : seule plage jamais contactée      |
-| `ROUTER_TUNNEL_GATEWAY`        | Adresse de la passerelle WireGuard (`10.200.0.1`), jamais une cible                                    |
-| `ROUTER_POLL_INTERVAL_SECONDS` | Intervalle de collecte par routeur (60 s)                                                              |
-| `ROUTER_POLL_CONCURRENCY`      | Collectes simultanées (10)                                                                             |
-| `ROUTER_POLL_BATCH_SIZE`       | Routeurs réservés par cycle (100)                                                                      |
-| `ROUTER_OFFLINE_AFTER_SECONDS` | Silence minimal avant OFFLINE (180 s, seuil du laboratoire)                                            |
-| `ROUTER_OFFLINE_MIN_FAILURES`  | Échecs consécutifs minimaux avant OFFLINE (3)                                                          |
+| Variable                       | Rôle                                                                                                          |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------- |
+| `ECSI_DB_WORKER_PASSWORD`      | Mot de passe du rôle PostgreSQL `ecsi_worker` (créé par `infra/postgres/init/01-roles.sh`)                    |
+| `DATABASE_WORKER_URL`          | Connexion du worker de supervision (rôle `ecsi_worker`) ; repli de `keys-rotate` sans `DATABASE_MIGRATOR_URL` |
+| `ROUTER_TUNNEL_CIDR`           | Plage des adresses tunnel WireGuard des routeurs (`10.200.0.0/24`) : seule plage jamais contactée             |
+| `ROUTER_TUNNEL_GATEWAY`        | Adresse de la passerelle WireGuard (`10.200.0.1`), jamais une cible                                           |
+| `ROUTER_POLL_INTERVAL_SECONDS` | Intervalle de collecte par routeur (60 s)                                                                     |
+| `ROUTER_POLL_CONCURRENCY`      | Collectes simultanées (10)                                                                                    |
+| `ROUTER_POLL_BATCH_SIZE`       | Routeurs réservés par cycle (100)                                                                             |
+| `ROUTER_OFFLINE_AFTER_SECONDS` | Silence minimal avant OFFLINE (180 s, seuil du laboratoire)                                                   |
+| `ROUTER_OFFLINE_MIN_FAILURES`  | Échecs consécutifs minimaux avant OFFLINE (3)                                                                 |
 
 Le worker (`node dist/worker.js`, service `worker` de Docker Compose) ne reçoit que `DATABASE_WORKER_URL`, les clés du SecretBox et les variables `ROUTER_*` : ni les connexions `ecsi_app`/`ecsi_auth`, ni le secret JWT, ni Redis/S3. Il doit tourner sur un hôte qui route la plage tunnel vers la passerelle WireGuard ; en développement, sans passerelle, aucun routeur n'est joignable (état `OFFLINE`).
 
@@ -110,6 +112,49 @@ Le worker et l'agent passerelle n'ont pas de serveur HTTP : chaque cycle réussi
 
 La migration 0006 est additive : les routeurs du Sprint 3A (dont CHR-LAB) restent supervisés sans action. Elle retire à `ecsi_app` le `DELETE` sur `routers` (suppression douce uniquement).
 
+### Lot B : rôle ecsi_radius, FreeRADIUS et montée de version
+
+Variables (`openssl rand -hex 32`, trois valeurs **distinctes**, jamais dans Git ; [RADIUS.md](RADIUS.md#aucun-secret-en-base)) : `VOUCHER_CODE_KEY` (API), `RADIUS_VOUCHER_LOOKUP_KEY` (API **et** FreeRADIUS, même valeur), `RADIUS_NAS_KEY` (worker **et** FreeRADIUS, même valeur), plus `ECSI_DB_RADIUS_PASSWORD` (rôle PostgreSQL de FreeRADIUS).
+
+#### Rôle ecsi_radius
+
+Un volume PostgreSQL neuf le crée à l'initialisation (`infra/postgres/init/01-roles.sh`, si `ECSI_DB_RADIUS_PASSWORD` est fourni). Sur une base **existante** (VPS déjà en service), la migration 0008 refuse de s'appliquer tant qu'il n'existe pas ; le créer une fois, avec le même SQL, avant `migrate` :
+
+```sh
+# Avec VOS options habituelles de Compose : PROD="docker compose -f docker-compose.yml -f docker-compose.prod.yml"
+# 1. Les quatre secrets du lot B ajoutés au .env (0600), valeurs jamais affichées. La surcouche
+#    de production les exige toutes (« :? ») dès le premier appel de Compose, migrate compris.
+umask 077
+for v in ECSI_DB_RADIUS_PASSWORD RADIUS_VOUCHER_LOOKUP_KEY RADIUS_NAS_KEY VOUCHER_CODE_KEY; do
+  grep -q "^$v=" .env || printf '%s=%s\n' "$v" "$(openssl rand -hex 32)" >> .env
+done
+# 2. Rôle : seul ECSI_DB_RADIUS_PASSWORD est lu du .env (pas de « source » du fichier entier),
+#    passé à psql par l'environnement (\getenv), jamais en argument ; journalisation coupée.
+ECSI_DB_RADIUS_PASSWORD="$(sed -n 's/^ECSI_DB_RADIUS_PASSWORD=//p' .env)" \
+$PROD exec -T -e ECSI_DB_RADIUS_PASSWORD postgres \
+  psql -v ON_ERROR_STOP=1 -U postgres -d ecsi <<'SQL'
+SET log_statement = 'none';
+SET log_min_error_statement = 'panic';
+SET log_min_duration_statement = -1;
+\getenv radius_password ECSI_DB_RADIUS_PASSWORD
+CREATE ROLE ecsi_radius LOGIN NOSUPERUSER NOCREATEROLE NOCREATEDB NOBYPASSRLS PASSWORD :'radius_password';
+GRANT CONNECT ON DATABASE ecsi TO ecsi_radius;
+SQL
+# 3. Migrations 0008 et 0009 (service migrate), puis contrôle.
+$PROD run --rm migrate
+$PROD exec -T postgres psql -U postgres -d ecsi -At \
+  -c "select count(*) from drizzle.__drizzle_migrations" \
+  -c "select count(*) from information_schema.role_table_grants where grantee = 'ecsi_radius'"
+```
+
+Base nommée autrement que `ecsi` (`POSTGRES_DB`) : remplacer `ecsi` dans les trois commandes. Attendu : 10 migrations ; 0 droit de `ecsi_radius` sur les tables (seulement `EXECUTE` sur les fonctions `radius.*`). Rejoué sur une base de laboratoire remise en 0007 : [`lab/routeros/resultats/2026-10-19-lot-b-parcours-complet.md`](../lab/routeros/resultats/2026-10-19-lot-b-parcours-complet.md).
+
+#### FreeRADIUS sur l'hôte de la passerelle
+
+- `docker compose --profile gateway up -d radius` : `network_mode: host`, écoute **uniquement** sur `ROUTER_TUNNEL_GATEWAY` (UDP 1812/1813), clients = `ROUTER_TUNNEL_CIDR` ; joint PostgreSQL par `127.0.0.1:5432`.
+- Firewall de l'hôte : UDP 1812 et 1813 acceptés **uniquement** depuis l'interface WireGuard (source `ROUTER_TUNNEL_CIDR`, destination `ROUTER_TUNNEL_GATEWAY`), comme le port d'activation. Sans cette règle, le routeur n'obtient aucune réponse (constaté au laboratoire, où la règle a été ajoutée à `lab/sim/gateway-firewall.sh`).
+- Le worker reçoit `RADIUS_NAS_KEY` (sinon le provisionnement Hotspot est désactivé) ; l'API reçoit `VOUCHER_CODE_KEY` et `RADIUS_VOUCHER_LOOKUP_KEY` (sinon la génération de tickets est indisponible).
+
 ## Images
 
 | Image               | Dockerfile                                                 | Contenu                                                                                       |
@@ -129,6 +174,107 @@ Derrière un proxy d'entreprise qui intercepte TLS, `pnpm install` dans `docker 
 3. Construction des images, démarrage de l'environnement complet et vérification de la santé via Nginx.
 4. Scan de secrets gitleaks sur tout l'historique.
 
+## Production : surcouche `docker-compose.prod.yml` (Sprint S3H)
+
+Le Compose de développement fixe `NODE_ENV=development` : les garde-fous de production du code y sont inactifs. En production, on lance toujours les deux fichiers :
+
+```
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+```
+
+La surcouche :
+
+- passe l'API, les migrations, le worker et la passerelle en `NODE_ENV=production`. Le code refuse alors les valeurs contenant `devonly`, impose `COOKIE_SECURE`, des journaux JSON, une `WEB_PUBLIC_URL` en HTTPS, et interdit `S3_AUTO_CREATE_BUCKET` ;
+- rend **obligatoires** les variables ci-dessous. Si l'une manque, Compose s'arrête avec « required variable X is missing a value », sans afficher de valeur ;
+- retire Mailpit (profil `dev-mail`) : un SMTP réel est nécessaire ;
+- ne publie que Nginx, sur les ports **80** et **443** (HTTPS public : étape H4, ci-dessous). Redis, S3, l'API, le web et le portail ne sont plus publiés ; PostgreSQL reste publié sur `127.0.0.1` uniquement, pour l'agent passerelle, qui tourne sur le réseau de l'hôte ;
+- ne démarre plus le portail captif (profil `portail`, publication au Sprint 7) ; Nginx ne dépend plus de lui.
+
+Variables obligatoires : `POSTGRES_PASSWORD`, `ECSI_DB_MIGRATOR_PASSWORD`, `ECSI_DB_APP_PASSWORD`, `ECSI_DB_AUTH_PASSWORD`, `ECSI_DB_WORKER_PASSWORD`, `REDIS_PASSWORD`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `JWT_ACCESS_SECRET`, `ENCRYPTION_KEY`, `ENCRYPTION_KEY_ID` (explicite en production, pour que la rotation des clés reste cohérente), `WEB_PUBLIC_URL` (HTTPS), `CORS_ORIGINS`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_FROM`. Facultatives : `SMTP_SECURE` (`true` par défaut), `SMTP_USER`, `SMTP_PASSWORD`.
+
+Garde-fous de production ajoutés en S3H-H7 (l'API refuse de démarrer sinon) : `CORS_ORIGINS` en `https://` uniquement, `API_DOCS_ENABLED` absent ou `false` (la documentation désactive la CSP de l'API), `TRUST_PROXY_HOPS` ≥ 1, et pas d'envoi d'e-mail en clair : sans `SMTP_SECURE=true` (TLS implicite, port 465), STARTTLS est exigé (`SMTP_REQUIRE_TLS`, vrai par défaut en production). Avant de déployer une nouvelle version, contrôler la configuration EN SERVICE sans rien afficher :
+
+```bash
+docker build -t ecsi-cloud/api:candidat -f infra/docker/api.Dockerfile .   # n'arrête rien
+docker exec "$(docker compose ps -q api)" env | docker run --rm -i ecsi-cloud/api:candidat node dist/cli/check-production-env.js
+```
+
+Code 0 : conforme ; 1 : refus listés par nom de variable, à corriger dans `.env` avant le déploiement.
+
+**Bucket S3** : il n'est jamais créé par l'API en production. Avec le SeaweedFS du Compose, créez-le une seule fois :
+`docker compose -f docker-compose.yml -f docker-compose.prod.yml exec s3 sh -c "echo 's3.bucket.create -name <S3_BUCKET>' | weed shell -master=localhost:9333"`.
+
+**Essai local ou CI** : `./scripts/generate-prod-test-env.sh <fichier>` génère des secrets de test aléatoires (droits 600, rien n'est affiché), puis `docker compose --env-file <fichier> -f docker-compose.yml -f docker-compose.prod.yml up -d`. Ce fichier ne convient pas à un vrai déploiement : ses URL et son SMTP sont fictifs.
+
+**Retour arrière** : relancer sans la surcouche, avec le seul `docker-compose.yml`. Les volumes et les données ne changent pas.
+
+## HTTPS public (Sprint S3H, étape H4)
+
+**État : code livré, rien n'est déployé.** Chaque étape ci-dessous se fait sur le VPS après la validation indépendante et un GO explicite.
+
+| Adresse                                | Service                                                                   |
+| -------------------------------------- | ------------------------------------------------------------------------- |
+| `https://app.mytikcentral.com`         | tableau de bord (web)                                                     |
+| `https://app.mytikcentral.com/api/*`   | API                                                                       |
+| `https://enroll.mytikcentral.com`      | **uniquement** `POST /api/v1/routers/enroll` (tout le reste : 404 ou 405) |
+| `http://…` (80)                        | défi ACME `/.well-known/acme-challenge/`, sinon 301 vers HTTPS            |
+| autre nom d'hôte, accès par adresse IP | connexion fermée sans réponse                                             |
+
+Le portail captif n'est pas publié (Sprint 7). PostgreSQL, Redis, S3, l'API et le portail ne sont jamais publiés directement. WireGuard (UDP 51820) et l'agent passerelle (`network_mode: host`) ne sont pas concernés.
+
+### Fichiers
+
+- `infra/nginx/production/https.conf` : mode **https** (défaut) ; `acme-bootstrap.conf` : mode **acme-bootstrap** (HTTP seul : défi ACME, 503 ailleurs, aucun service interne contacté), pour obtenir le premier certificat ; `snippets/` : TLS, en-têtes, défi ACME. La configuration de développement `infra/nginx/nginx.conf` est inchangée.
+- `docker-compose.prod.yml` : Nginx sur 80 et 443, configuration choisie par `ECSI_NGINX_MODE` (fixée par les scripts, **jamais** dans `.env`), volumes `letsencrypt` (certificats, lecture seule pour Nginx) et `acme-webroot` (défis), service `certbot` (profil `tls`, image `certbot/certbot` figée, aucun port). `LOG_PRETTY=false` imposé ; `ROUTER_ENROLL_CA_URL` / `_FINGERPRINT` neutralisées (le routeur vérifie le certificat public).
+- `ops/tls/preflight.sh` : contrôle sans rien modifier ni afficher de valeur (configuration Compose **fusionnée** : ports, portail, URL publiques, garde-fous, clés de chiffrement identiques partout et `k2` présente, SMTP réel ; `nginx -t` des deux modes).
+- `ops/tls/certificat.sh` : `amorcer`, `staging`, `production`, `activer`, `renouveler`, `etat` (détail en tête du script).
+- `infra/systemd/ecsi-tls-renew.service` et `.timer` : renouvellement deux fois par jour (à installer après validation).
+
+### Prérequis (manuels, hors dépôt)
+
+1. DNS : `app` et `enroll.mytikcentral.com` en A (et AAAA si IPv6) vers le VPS, **DNS seulement** chez Cloudflare (pas de proxy : HTTP-01 et adresse réelle des clients).
+2. Pare-feu : TCP 80 et 443 ouverts en entrée ; rien d'autre ne change.
+3. Ports 80 et 443 libres sur le VPS : le proxy temporaire `ecsi-h2-proxy` (hors dépôt) est arrêté à la main par l'exploitant au moment de la bascule.
+4. `.env` de production : `WEB_PUBLIC_URL=https://app.mytikcentral.com`, `CORS_ORIGINS=https://app.mytikcentral.com`, `ROUTER_ENROLL_PUBLIC_URL=https://enroll.mytikcentral.com/api/v1/routers/enroll`, `ROUTER_ENROLL_CA_URL` et `ROUTER_ENROLL_CA_FINGERPRINT` retirées, `ENCRYPTION_PREVIOUS_KEYS` **conservée avec `k2`**, pas de `ECSI_NGINX_MODE`. `COOKIE_SECURE=true`, `LOG_PRETTY=false` et `S3_AUTO_CREATE_BUCKET=false` sont imposés par la surcouche.
+5. **SMTP réel** (`SMTP_HOST`, `SMTP_PORT`, `SMTP_FROM`, identifiants) : obligatoire avec la surcouche de production ; Mailpit n'est pas un SMTP de production.
+6. Sauvegarde H1 vérifiée juste avant la bascule (`ops/backup/pg-backup.sh`).
+
+### Procédure (staging d'abord, puis production)
+
+```
+ops/tls/preflight.sh                       # PREFLIGHT H4 : CONFORME
+ops/tls/certificat.sh amorcer              # Nginx HTTP seul (défi ACME)
+ops/tls/certificat.sh staging              # Let's Encrypt STAGING, --dry-run : rien n'est écrit
+ops/tls/certificat.sh production           # staging à nouveau, puis certificat réel (idempotent)
+ops/tls/certificat.sh activer              # nginx -t, Nginx en https, 301 et TLS contrôlés
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --no-build
+ops/tls/preflight.sh                       # mode https : nginx -t avec le vrai certificat
+```
+
+`staging` et `production` vérifient d'abord, en local, que Nginx sert bien un fichier témoin du webroot pour les deux noms ; sans cela, rien n'est demandé à Let's Encrypt (pas de consommation des limites de débit). Contrôles depuis l'extérieur ensuite : `curl -I http://app.mytikcentral.com` (301), `curl -I https://app.mytikcentral.com` (200, en-têtes de sécurité), `curl -i https://enroll.mytikcentral.com/api/v1/routers/enroll` (405), puis un enrôlement réel depuis CHR-LAB (`check-certificate=yes` avec le certificat public).
+
+**Renouvellement** : `ops/tls/certificat.sh renouveler` (certbot ne renouvelle qu'à moins de 30 jours de l'échéance, `nginx -t` puis rechargement sans coupure), par le timer `ecsi-tls-renew.timer`.
+
+**HSTS** : `max-age=86400` (un jour, sans `includeSubDomains` ni `preload`) pendant la validation, pour garder un retour arrière possible ; à porter à `31536000` dans `snippets/security-headers.conf` après validation de H4 (modification de code séparée).
+
+**Ne jamais** lancer `docker compose … down -v` en production : il supprimerait aussi les certificats (et les données).
+
+### Retour arrière
+
+- **Avant `activer`** : seul Nginx a changé (mode acme-bootstrap). `docker compose -f docker-compose.yml -f docker-compose.prod.yml rm -sf nginx`, puis relancer l'exposition précédente (Nginx de base, proxy temporaire) comme avant H4.
+- **Après `activer`** : même commande pour retirer le Nginx de production, puis exposition précédente ; ou retour complet au commit `4662e6e` (`git checkout 4662e6e`, puis `docker compose … up -d --no-build`). Les volumes `letsencrypt` et `acme-webroot` restent en place (sans effet) ; le certificat reste valide pour un nouvel essai.
+- **Après la relance complète** (`up -d` avec la surcouche) : retour à la pile précédente par `docker compose up -d --no-build` sans la surcouche, comme avant H4 (Nginx de base recréé, mêmes volumes et données).
+- Avec HSTS à un jour, un navigateur déjà venu en HTTPS exige HTTPS au plus 24 h après sa dernière visite.
+- Le DNS, le pare-feu, WireGuard, les données et les clés de chiffrement ne sont modifiés par aucune commande H4.
+
+### Essai automatisé
+
+`ops/tls/tests/https-e2e.sh <dossier vide>` (CI ; exécutable sur le VPS : projet `ecsi-tlstest` dédié, ports 127.0.0.1:18080/18443, aucun conteneur ni volume de production touché). Le vrai Nginx de production devant un service amont factice : contrôle préalable et 7 configurations refusées, mode acme-bootstrap, Let's Encrypt **simulé par Pebble** (staging `--dry-run`, certificat, idempotence, bascule, renouvellement), puis routage app/enroll, refus, HTTP → HTTPS, défi ACME non redirigé, en-têtes, hôtes inconnus, client sans SNI, TLS 1.2/1.3, limites de corps et de débit.
+
+## Sauvegarde et restauration (Sprint S3H)
+
+Sauvegarde PostgreSQL chiffrée (age), vérifiée par une restauration jetable à chaque exécution, timer systemd quotidien, restauration de test et exercice de reprise : voir [SAUVEGARDE.md](SAUVEGARDE.md).
+
 ## Production (à partir du Sprint 10)
 
 Phase pilote : un serveur applicatif (Compose), PostgreSQL managé avec PITR, Redis managé, S3 managé, **une passerelle** (WireGuard + FreeRADIUS) au départ, une seconde lorsque les paliers de [MIKROTIK.md](MIKROTIK.md) le justifient. Images publiées sur GHCR, déploiement de production approuvé manuellement, migrations exécutées avant la bascule.
@@ -136,3 +282,5 @@ Phase pilote : un serveur applicatif (Compose), PostgreSQL managé avec PITR, Re
 ## Points de restauration
 
 Chaque sprint validé est marqué par un tag Git `sN-done` (ex. `s0-done`, `s1-done`). Revenir à un point de restauration : `git checkout s0-done`.
+
+Depuis S3B, la référence validée est l'étiquette **`s3b-rc2`** (commit `7496075`). La branche **`main`**, protégée (pull request obligatoire et 4 contrôles CI verts), reçoit chaque sprint après sa validation indépendante. Le développement se fait sur une branche de travail.

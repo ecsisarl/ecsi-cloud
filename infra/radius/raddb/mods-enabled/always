@@ -1,0 +1,12 @@
+always reject {
+	rcode = reject
+}
+always fail {
+	rcode = fail
+}
+always ok {
+	rcode = ok
+}
+always noop {
+	rcode = noop
+}

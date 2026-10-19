@@ -56,7 +56,9 @@ export function toProblem(
     type: 'about:blank',
     title: TITLES[status] ?? 'Erreur',
     status,
-    ...(detail && status < 500 ? { detail } : {}),
+    // 503 volontaire (ServiceUnavailableException) : message métier rédigé pour l'utilisateur
+    // (ex. « Clés de tickets non configurées ») ; les autres erreurs 5xx restent muettes.
+    ...(detail && (status < 500 || status === 503) ? { detail } : {}),
     ...(errors ? { errors } : {}),
     ...(instance ? { instance } : {}),
     ...(requestId ? { requestId } : {}),
@@ -71,9 +73,11 @@ export class ProblemDetailsFilter implements ExceptionFilter {
     const ctx = host.switchToHttp();
     const request = ctx.getRequest<FastifyRequest>();
     const reply = ctx.getResponse<FastifyReply>();
-    const problem = toProblem(exception, request.url, request.id);
+    // Chemin sans chaîne de requête : un jeton (?token=) n'est jamais renvoyé ni journalisé.
+    const problem = toProblem(exception, request.url.split('?')[0], request.id);
 
     if (problem.status >= 500) {
+      // `err` passe par le sérialiseur safeError (app.module.ts) : aucun paramètre SQL.
       this.logger.error({ err: exception, requestId: request.id }, 'Erreur non gérée');
     }
 

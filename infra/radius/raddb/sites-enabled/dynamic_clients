@@ -1,0 +1,31 @@
+# Reconnaissance des routeurs (NAS) : appelé pour le premier paquet d'une adresse de la
+# plage tunnel (puis mis en cache « lifetime » secondes). Le NAS est identifié par l'adresse
+# SOURCE du paquet, garantie par le routage cryptographique WireGuard (pair /32), jamais par
+# NAS-IP-Address ni NAS-Identifier. Son secret n'est stocké nulle part : il est dérivé de
+# RADIUS_NAS_KEY et de l'identité renvoyée par radius.nas_identity() (le worker calcule la
+# même valeur pour configurer le routeur). Adresse inconnue, routeur supprimé ou hotspot
+# désactivé : aucun client créé, paquet ignoré.
+server dynamic_clients {
+	authorize {
+		if ("%{sql:SELECT radius.nas_identity('%{Packet-Src-IP-Address}')}" =~ /^([0-9a-f-]{36}):([0-9]{1,9})$/) {
+			update request {
+				&Tmp-String-1 := "nas:%{1}:%{2}"
+				&Tmp-String-2 := "$ENV{RADIUS_NAS_KEY}"
+			}
+			update control {
+				&FreeRADIUS-Client-IP-Address = "%{Packet-Src-IP-Address}"
+				&FreeRADIUS-Client-Secret = "%{hmacsha1:&Tmp-String-1 &Tmp-String-2}"
+				&FreeRADIUS-Client-Shortname = "%{1}"
+				&FreeRADIUS-Client-Require-MA = yes
+				&FreeRADIUS-Client-Virtual-Server = "ecsi"
+			}
+			update request {
+				&Tmp-String-2 !* ANY
+			}
+			ok
+		}
+		else {
+			fail
+		}
+	}
+}

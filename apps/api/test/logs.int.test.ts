@@ -55,4 +55,33 @@ describe('journaux', () => {
     ];
     for (const secret of secrets) expect(output).not.toContain(secret);
   });
+
+  it('une erreur SQL (500) est journalisée sans ses paramètres', async () => {
+    // Toute écriture sur user_credentials échoue : la réinitialisation déclenche une erreur Drizzle dont
+    // les paramètres contiennent le nouveau haché Argon2id.
+    await t.migrator.query(
+      'alter table user_credentials add constraint h7_test_refus check (false) not valid',
+    );
+    try {
+      const client = new HttpClient(t.app);
+      await client.post('/auth/password/forgot', { email: 'gerant.a@ecsi.test' });
+      const token = await t.mails.tokenFor('gerant.a@ecsi.test', '/reinitialisation');
+      const from = lines.length;
+      const response = await client.post('/auth/password/reset', {
+        token,
+        password: 'phrase de passe journal h7',
+      });
+      expect(response.statusCode).toBe(500);
+      expect(response.json()).not.toHaveProperty('detail');
+      const output = lines.slice(from).join('');
+      expect(output).toContain('Erreur non gérée');
+      expect(output).toContain('params: [masqués]');
+      expect(output).toContain('h7_test_refus');
+      expect(output).not.toContain('$argon2id$');
+      expect(output).not.toContain('gerant.a@ecsi.test');
+      expect(output).not.toContain(token);
+    } finally {
+      await t.migrator.query('alter table user_credentials drop constraint h7_test_refus');
+    }
+  });
 });

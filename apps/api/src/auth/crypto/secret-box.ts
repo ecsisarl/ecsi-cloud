@@ -1,4 +1,11 @@
-import { createCipheriv, createDecipheriv, createHmac, hkdfSync, randomBytes } from 'node:crypto';
+import {
+  createCipheriv,
+  createDecipheriv,
+  createHmac,
+  hkdfSync,
+  randomBytes,
+  timingSafeEqual,
+} from 'node:crypto';
 
 /**
  * Chiffrement des secrets stockés en base (graines TOTP), par enveloppe et versionné
@@ -132,6 +139,33 @@ export class SecretBox {
       tag,
       ciphertext,
     ].join(':');
+  }
+
+  /**
+   * Ré-enveloppe CONTRÔLÉE (rotation, S3H-H2) : le chiffré d'origine doit se déchiffrer
+   * entièrement, le nouveau chiffré doit se déchiffrer avec la clé active et redonner
+   * exactement le même secret. Sinon : exception, et rien ne doit être écrit. Les valeurs
+   * déchiffrées restent en mémoire le temps de la comparaison, puis sont effacées.
+   */
+  rewrapVerified(payload: string, associatedData = ''): string {
+    const before = this.openPayload(payload, associatedData);
+    try {
+      const next = this.rewrap(payload, associatedData);
+      if (next.split(':')[1] !== this.active.id) {
+        throw new Error('Ré-enveloppe : le nouveau chiffré n’est pas sous la clé active');
+      }
+      const after = this.openPayload(next, associatedData);
+      try {
+        if (after.length !== before.length || !timingSafeEqual(after, before)) {
+          throw new Error('Ré-enveloppe : le secret relu diffère de l’original');
+        }
+      } finally {
+        after.fill(0);
+      }
+      return next;
+    } finally {
+      before.fill(0);
+    }
   }
 
   /**

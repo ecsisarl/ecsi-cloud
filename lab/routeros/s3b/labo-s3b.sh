@@ -14,7 +14,8 @@
 # (pnpm --filter @ecsi/api build), Docker. Secrets générés au premier « up » dans
 # $STATE/s3b (0600, ignoré par Git), jamais affichés.
 #
-# Usage : sudo ./labo-s3b.sh up | down
+# Usage : sudo ./labo-s3b.sh up | services | radius | down
+#   services : redémarrage sans la base ; radius : FreeRADIUS (lot B) dans le namespace gw
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/../../.." && pwd)"
@@ -25,14 +26,27 @@ ns() { ip netns exec "$1" "${@:2}"; }
 
 secrets() {
   mkdir -p "$S3B" && chmod 700 "$S3B"
-  [[ -f "$S3B/env" ]] && return
   rnd() { openssl rand -hex 24; }
+  # Lot B : rôle ecsi_radius (exigé par la migration 0008) et clé RADIUS_NAS_KEY du worker,
+  # ajoutés à un fichier d'un labo antérieur.
+  if [[ -f "$S3B/env" ]]; then
+    (
+      umask 077
+      grep -q '^PGR=' "$S3B/env" || echo "PGR=$(rnd)" >>"$S3B/env"
+      grep -q '^NAS=' "$S3B/env" || echo "NAS=$(openssl rand -hex 32)" >>"$S3B/env"
+      grep -q '^VCK=' "$S3B/env" || echo "VCK=$(openssl rand -hex 32)" >>"$S3B/env"
+      grep -q '^VLK=' "$S3B/env" || echo "VLK=$(openssl rand -hex 32)" >>"$S3B/env"
+    )
+    return
+  fi
   (
     umask 077
     {
       echo "PGM=$(rnd)"; echo "PGA=$(rnd)"; echo "PGU=$(rnd)"; echo "PGW=$(rnd)"
       echo "PGS=$(rnd)"; echo "RDS=$(rnd)"; echo "JWT=$(rnd)$(rnd)"
       echo "KEY=$(openssl rand -base64 32)"
+      echo "PGR=$(rnd)"; echo "NAS=$(openssl rand -hex 32)"
+      echo "VCK=$(openssl rand -hex 32)"; echo "VLK=$(openssl rand -hex 32)"
     } >"$S3B/env"
     rnd >"$S3B/seed.pass"
   )
@@ -47,6 +61,7 @@ up() {
     -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD="$PGS" -e POSTGRES_DB=ecsi \
     -e ECSI_DB_MIGRATOR_PASSWORD="$PGM" -e ECSI_DB_APP_PASSWORD="$PGA" \
     -e ECSI_DB_AUTH_PASSWORD="$PGU" -e ECSI_DB_WORKER_PASSWORD="$PGW" \
+    -e ECSI_DB_RADIUS_PASSWORD="$PGR" \
     -v "$ROOT/infra/postgres/init:/docker-entrypoint-initdb.d:ro" postgres:18-alpine >/dev/null
   docker run -d --name ecsi-s3b-redis -p 16379:6379 redis:8-alpine \
     redis-server --requirepass "$RDS" >/dev/null
@@ -56,6 +71,22 @@ up() {
   done
   sleep 3
 
+  local db="postgres://%s:%s@%s:15432/ecsi"
+  export NODE_ENV=development LOG_LEVEL=info
+  export DATABASE_MIGRATOR_URL
+  DATABASE_MIGRATOR_URL="$(printf "$db" ecsi_migrator "$PGM" 127.0.0.1)"
+  SEED_PASSWORD="$(cat "$S3B/seed.pass")" node "$API/dist/database/migrate.js" >"$S3B/migrate.log" 2>&1
+  SEED_PASSWORD="$(cat "$S3B/seed.pass")" node "$API/dist/database/seed.js" >"$S3B/seed.log" 2>&1
+  services
+}
+
+# (Re)démarre l'API, le front HTTPS, l'agent passerelle et le worker SANS toucher à la base :
+# après une recompilation (lot B), le routeur enrôlé et la base sont conservés.
+services() {
+  secrets
+  # shellcheck disable=SC1091
+  source "$S3B/env"
+  stop_services
   # Liens hôte <-> namespaces (le labo simulé n'a pas d'accès à l'hôte).
   ip link del s3b-cloud 2>/dev/null || true
   ip link del s3b-gw 2>/dev/null || true
@@ -68,10 +99,6 @@ up() {
 
   local db="postgres://%s:%s@%s:15432/ecsi"
   export NODE_ENV=development LOG_LEVEL=info
-  export DATABASE_MIGRATOR_URL
-  DATABASE_MIGRATOR_URL="$(printf "$db" ecsi_migrator "$PGM" 127.0.0.1)"
-  SEED_PASSWORD="$(cat "$S3B/seed.pass")" node "$API/dist/database/migrate.js" >"$S3B/migrate.log" 2>&1
-  SEED_PASSWORD="$(cat "$S3B/seed.pass")" node "$API/dist/database/seed.js" >"$S3B/seed.log" 2>&1
 
   local gw_public
   gw_public="$(cat "$STATE/gw/public")"
@@ -89,17 +116,18 @@ up() {
       ROUTER_ENROLL_PUBLIC_URL=https://203.0.113.30:8443/api/v1/routers/enroll \
       ROUTER_ENROLL_CA_URL=https://203.0.113.30:8443/ca.pem ROUTER_ENROLL_CA_FINGERPRINT="$ca_fp" \
       WG_GATEWAY_PUBLIC_KEY="$gw_public" WG_GATEWAY_ENDPOINT=203.0.113.10 WG_GATEWAY_PORT=51820 \
-      setsid node "$API/dist/main.js" >"$S3B/api.log" 2>&1 &
+      VOUCHER_CODE_KEY="$VCK" RADIUS_VOUCHER_LOOKUP_KEY="$VLK" \
+      setsid node "$API/dist/main.js" >>"$S3B/api.log" 2>&1 &
   )
   ns cloud setsid node "$HERE/front-https.mjs" "$STATE/pki" 10.99.0.1 14000 203.0.113.30 8443 \
-    >"$S3B/front.log" 2>&1 &
+    >>"$S3B/front.log" 2>&1 &
   (
     export DATABASE_WORKER_URL
     DATABASE_WORKER_URL="$(printf "$db" ecsi_worker "$PGW" 10.99.1.1)"
     export ENCRYPTION_KEY="$KEY" ENCRYPTION_KEY_ID=k2
     WG_INTERFACE=wg-gw GATEWAY_SYNC_INTERVAL_SECONDS=3 \
-      ns gw setsid node "$API/dist/gateway.js" >"$S3B/gateway.log" 2>&1 &
-    ROUTER_POLL_INTERVAL_SECONDS=15 ns gw setsid node "$API/dist/worker.js" >"$S3B/worker.log" 2>&1 &
+      ns gw setsid node "$API/dist/gateway.js" >>"$S3B/gateway.log" 2>&1 &
+    RADIUS_NAS_KEY="$NAS" ROUTER_POLL_INTERVAL_SECONDS=15 ns gw setsid node "$API/dist/worker.js" >>"$S3B/worker.log" 2>&1 &
   )
   for _ in $(seq 60); do
     curl -sf http://127.0.0.1:14000/api/v1/health >/dev/null 2>&1 && break
@@ -108,11 +136,66 @@ up() {
   echo "API, front HTTPS, agent passerelle et worker démarrés (journaux : $S3B/*.log)"
 }
 
-down() {
+# FreeRADIUS du lot B (image infra/radius) dans le namespace gw, à l'écoute de 10.200.0.1.
+# Sur un VPS, le service Compose « radius » (network_mode: host) écoute l'adresse de wg-gw
+# du système hôte. Ici la passerelle vit dans un namespace ip netns que Docker ne sait pas
+# rejoindre : le système de fichiers de l'image (mêmes binaires, configuration et point
+# d'entrée) est exécuté par chroot dans ce namespace, sous l'utilisateur de l'image.
+radius() {
+  # shellcheck disable=SC1091
+  source "$S3B/env"
+  stop_radius
+  local image="${RADIUS_IMAGE:-ecsi-cloud/radius:lab}" root="$S3B/radius-rootfs" cid
+  rm -rf "$root" && mkdir -p "$root"
+  cid="$(docker create "$image")"
+  docker export "$cid" | tar -x -C "$root"
+  docker rm "$cid" >/dev/null
+  mount --bind /dev "$root/dev"
+  mount -t proc proc "$root/proc"
+  local gid
+  gid="$(awk -F: '$1 == "ecsiradius" { print $4 }' "$root/etc/passwd")"
+  (
+    # Valeurs transmises par l'environnement (jamais en argument : ps).
+    export ECSI_ENV=development RADIUS_LISTEN_ADDRESS=10.200.0.1 \
+      RADIUS_CLIENT_CIDR=10.200.0.0/24 RADIUS_DB_HOST=10.99.1.1 RADIUS_DB_PORT=15432 \
+      RADIUS_DB_NAME=ecsi RADIUS_DB_PASSWORD="${PGR_VPS:-$PGR}" \
+      RADIUS_VOUCHER_LOOKUP_KEY="$VLK" RADIUS_NAS_KEY="$NAS"
+    ns gw setsid chroot --userspec="10812:$gid" "$root" /usr/local/bin/ecsi-radius-entrypoint \
+      >>"$S3B/radius.log" 2>&1 &
+    echo $! >"$S3B/radius.pid"
+  )
+  sleep 3
+  ns gw ss -lun | grep -E '10\.200\.0\.1:181[23]' || { echo "FreeRADIUS n'écoute pas" >&2; return 1; }
+}
+
+stop_radius() {
+  # Seul le processus lancé ici (racine = radius-rootfs) : jamais un FreeRADIUS de conteneur.
+  # Le pid enregistré est celui de l'enveloppe (ip netns exec) ; FreeRADIUS en est un
+  # descendant : on cherche donc tout processus dont la racine est radius-rootfs.
+  local root
+  for root in /proc/[0-9]*/root; do
+    if [[ "$(readlink "$root" 2>/dev/null)" == "$S3B/radius-rootfs" ]]; then
+      root="${root#/proc/}"
+      kill "${root%/root}" 2>/dev/null || true
+    fi
+  done
+  rm -f "$S3B/radius.pid"
+  sleep 1
+  umount "$S3B/radius-rootfs/proc" 2>/dev/null || true
+  umount "$S3B/radius-rootfs/dev" 2>/dev/null || true
+}
+
+stop_services() {
   pkill -f "$API/dist/main.js" 2>/dev/null || true
   pkill -f "$API/dist/gateway.js" 2>/dev/null || true
   pkill -f "$API/dist/worker.js" 2>/dev/null || true
   pkill -f "$HERE/front-https.mjs" 2>/dev/null || true
+  sleep 1
+}
+
+down() {
+  stop_services
+  stop_radius
   ip link del s3b-cloud 2>/dev/null || true
   ip link del s3b-gw 2>/dev/null || true
   docker rm -f ecsi-s3b-pg ecsi-s3b-redis >/dev/null 2>&1 || true
@@ -120,6 +203,8 @@ down() {
 
 case "${1:-}" in
   up) up ;;
+  services) services ;;
+  radius) radius ;;
   down) down ;;
-  *) echo "usage: $0 up | down" >&2; exit 1 ;;
+  *) echo "usage: $0 up | services | radius | down" >&2; exit 1 ;;
 esac

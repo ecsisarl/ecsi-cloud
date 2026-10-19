@@ -26,6 +26,9 @@
   --color-danger: var(--ecsi-danger);
   --color-danger-soft: var(--ecsi-danger-soft);
 
+  --color-chart-1: var(--ecsi-chart-1);
+  --color-chart-2: var(--ecsi-chart-2);
+
   --color-sidebar: var(--ecsi-sidebar);
   --color-sidebar-foreground: var(--ecsi-sidebar-foreground);
   --color-sidebar-muted: var(--ecsi-sidebar-muted);
@@ -64,6 +67,10 @@
   --ecsi-danger: #b91c1c;
   --ecsi-danger-soft: #fee2e2;
 
+  /* Séries de graphiques (distinctes des couleurs d'état ; paire validée daltonisme). */
+  --ecsi-chart-1: #1d4ed8;
+  --ecsi-chart-2: #db2777;
+
   --ecsi-sidebar: #0b1730;
   --ecsi-sidebar-foreground: #e6ecf7;
   --ecsi-sidebar-muted: #8fa0bf;
@@ -91,6 +98,8 @@
     --ecsi-warning-soft: #451a03;
     --ecsi-danger: #f87171;
     --ecsi-danger-soft: #450a0a;
+    --ecsi-chart-1: #3b82f6;
+    --ecsi-chart-2: #ec4899;
     --ecsi-sidebar: #070e1d;
     --ecsi-sidebar-active: #172554;
     color-scheme: dark;

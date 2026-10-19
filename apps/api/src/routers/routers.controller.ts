@@ -36,6 +36,7 @@ import { ZodValidationPipe } from '../common/zod-validation.pipe.js';
 import { Grants } from '../tenancy/access.service.js';
 import { RequireSitePermission } from '../tenancy/permissions.guard.js';
 import { tenantContextOf } from '../tenancy/tenant-database.js';
+import { ConfigAccessService } from './config-access.service.js';
 import { EnrollmentService } from './enrollment.service.js';
 import { RoutersService } from './routers.service.js';
 
@@ -53,6 +54,7 @@ export class RoutersController {
   constructor(
     private readonly routers: RoutersService,
     private readonly enrollment: EnrollmentService,
+    private readonly configAccess: ConfigAccessService,
   ) {}
 
   @RequireSitePermission('routers.read')
@@ -74,6 +76,33 @@ export class RoutersController {
     @Param('id', new ParseUUIDPipe()) id: string,
   ) {
     return this.routers.get(tenantContextOf(auth), grantsOf(request), id);
+  }
+
+  /** Compte d'écriture ecsi-cfg (lot B) : état, sans secret. */
+  @RequireSitePermission('routers.read')
+  @Get(':id/config-access')
+  getConfigAccess(
+    @CurrentAuth() auth: AuthContext,
+    @Req() request: FastifyRequest,
+    @Param('id', new ParseUUIDPipe()) id: string,
+  ) {
+    return this.configAccess.get(tenantContextOf(auth), grantsOf(request), id);
+  }
+
+  /**
+   * Script d'activation configuration (jeton à usage unique, affiché une fois) : crée sur le
+   * routeur le compte d'écriture ecsi-cfg. Audité sans le script ni le jeton.
+   */
+  @RequireSitePermission('routers.command.dangerous')
+  @Audited({ action: 'routers.config_access.create', resourceType: 'router' })
+  @Post(':id/config-access')
+  @HttpCode(HttpStatus.CREATED)
+  createConfigAccess(
+    @CurrentAuth() auth: AuthContext,
+    @Req() request: FastifyRequest,
+    @Param('id', new ParseUUIDPipe()) id: string,
+  ) {
+    return this.configAccess.issue(tenantContextOf(auth), grantsOf(request), id);
   }
 
   /** « Ajouter un routeur » : adresse tunnel attribuée, jeton et script (affichés une fois). */

@@ -1,0 +1,11 @@
+# Tampon d'accounting : chaque Accounting-Request est d'abord écrit sur disque (volume
+# radacct), puis rejoué vers PostgreSQL par le serveur buffered-sql (indisponibilité de la
+# base sans perte). Le code saisi n'y figure jamais : User-Name est remplacé par son
+# empreinte avant l'écriture (sites-enabled/ecsi, preacct).
+detail acct_buffer {
+	filename = ${radacctdir}/detail-%Y%m%d%H
+	escape_filenames = no
+	permissions = 0600
+	header = "%t"
+	locking = yes
+}

@@ -11,6 +11,7 @@ import { drizzle } from 'drizzle-orm/node-postgres';
 import { migrate } from 'drizzle-orm/node-postgres/migrator';
 import pg from 'pg';
 import { syncCatalog } from './catalog.js';
+import { safeErrorMessage } from '../common/safe-error.js';
 
 export const MIGRATIONS_FOLDER = join(dirname(fileURLToPath(import.meta.url)), 'migrations');
 
@@ -37,9 +38,7 @@ if (isEntrypoint) {
       process.stdout.write('Migrations appliquées.\n');
     })
     .catch((error: unknown) => {
-      process.stderr.write(
-        `Échec des migrations : ${error instanceof Error ? error.message : String(error)}\n`,
-      );
+      process.stderr.write(`Échec des migrations : ${safeErrorMessage(error)}\n`);
       process.exit(1);
     });
 }

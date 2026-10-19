@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { InvalidEnvironmentError, isApiDocsEnabled, isCookieSecure, parseEnv } from './env.js';
+import {
+  InvalidEnvironmentError,
+  isApiDocsEnabled,
+  isCookieSecure,
+  isSmtpTlsRequired,
+  parseEnv,
+} from './env.js';
 
 const base = {
   DATABASE_URL: 'postgres://ecsi_app:secret@localhost:5432/ecsi',
@@ -60,9 +66,31 @@ describe('parseEnv', () => {
     ).toThrow(/CORS_ORIGINS[\s\S]*|S3_AUTO_CREATE_BUCKET/);
   });
 
-  it('désactive la documentation OpenAPI par défaut en production', () => {
+  it('désactive la documentation OpenAPI en production (et refuse de l’activer : CSP)', () => {
     expect(isApiDocsEnabled(parseEnv(production))).toBe(false);
-    expect(isApiDocsEnabled(parseEnv({ ...production, API_DOCS_ENABLED: 'true' }))).toBe(true);
+    expect(() => parseEnv({ ...production, API_DOCS_ENABLED: 'true' })).toThrow(/API_DOCS_ENABLED/);
+    expect(isApiDocsEnabled(parseEnv({ ...base, API_DOCS_ENABLED: 'false' }))).toBe(false);
+  });
+
+  it('production : origines CORS https uniquement, proxy de confiance obligatoire', () => {
+    expect(parseEnv({ ...production, CORS_ORIGINS: 'https://app.ecsi.test' }).CORS_ORIGINS).toEqual(
+      ['https://app.ecsi.test'],
+    );
+    expect(() =>
+      parseEnv({ ...production, CORS_ORIGINS: 'https://app.ecsi.test,http://localhost:3000' }),
+    ).toThrow(/CORS_ORIGINS/);
+    expect(() => parseEnv({ ...production, TRUST_PROXY_HOPS: '0' })).toThrow(/TRUST_PROXY_HOPS/);
+    expect(parseEnv({ ...base, TRUST_PROXY_HOPS: '0' }).TRUST_PROXY_HOPS).toBe(0);
+  });
+
+  it('SMTP : STARTTLS exigé en production sauf TLS implicite, jamais d’envoi en clair', () => {
+    expect(isSmtpTlsRequired(parseEnv(production))).toBe(true);
+    expect(isSmtpTlsRequired(parseEnv({ ...production, SMTP_SECURE: 'true' }))).toBe(false);
+    expect(isSmtpTlsRequired(parseEnv(base))).toBe(false);
+    expect(isSmtpTlsRequired(parseEnv({ ...base, SMTP_REQUIRE_TLS: 'true' }))).toBe(true);
+    expect(() => parseEnv({ ...production, SMTP_REQUIRE_TLS: 'false' })).toThrow(
+      /SMTP_REQUIRE_TLS/,
+    );
   });
 
   it('exige des secrets d’authentification valides', () => {
