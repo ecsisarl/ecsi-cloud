@@ -37,6 +37,8 @@ export interface ApiOptions {
   body?: unknown;
   /** false pour les routes publiques (connexion…) : pas de rafraîchissement automatique. */
   retryOnUnauthorized?: boolean;
+  /** « no-store » pour une réponse sensible (impression des tickets) : jamais en cache. */
+  cache?: RequestCache;
 }
 
 export async function api<T = unknown>(
@@ -53,6 +55,7 @@ export async function api<T = unknown>(
       method,
       headers,
       credentials: 'same-origin',
+      ...(options.cache ? { cache: options.cache } : {}),
       ...(options.body !== undefined ? { body: JSON.stringify(options.body) } : {}),
     });
   };
