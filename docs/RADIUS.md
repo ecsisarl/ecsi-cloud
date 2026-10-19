@@ -69,6 +69,7 @@ Motifs de refus (`radius_postauth.reason`, `Reply-Message` en français pour la 
 
 - **CoA / Disconnect différé** : désactiver un ticket n'interrompt pas une session déjà ouverte ; elle s'arrête au plus tard à son `Session-Timeout` (fin du temps ou de la validité restants calculés à la connexion) ou à l'inactivité, et toute reconnexion est refusée. Un ticket sans limite de temps ni de validité (quota seul) n'a pas de `Session-Timeout`.
 - Ticket à code unique : le code est l'identifiant, il circule en clair sur le Wi-Fi ouvert entre le téléphone et le routeur (comme pour tout ticket à code unique) ; CHAP protège le mot de passe, pas l'identifiant. Mode identifiant + code secret : envisageable plus tard.
+- Le code étant le nom d'utilisateur, RouterOS l'affiche en clair à qui a un accès en lecture au routeur (`/ip/hotspot/active`, nom de la file dynamique, `/log` rubrique hotspot) : constaté sur CHR 7.24.5. Le compte de supervision `ecsi-svc` et `ecsi-cfg` y ont accès ; ECSI CLOUD n'en recopie rien.
 - Plusieurs appareils sur un même ticket (`max_devices > 1`) : chaque session reçoit le temps restant au moment de sa connexion.
 - Un client dynamique reste en cache 300 s : un routeur dont le hotspot est désactivé n'obtient plus aucune acceptation (la décision SQL le refuse aussitôt), mais ses paquets sont encore traités pendant ce délai.
 - FreeRADIUS unique sur une passerelle unique ; pas de RADIUS secondaire (prévu plus tard).
