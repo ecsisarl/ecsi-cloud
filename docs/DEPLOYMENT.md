@@ -121,13 +121,18 @@ Variables (`openssl rand -hex 32`, trois valeurs **distinctes**, jamais dans Git
 Un volume PostgreSQL neuf le crée à l'initialisation (`infra/postgres/init/01-roles.sh`, si `ECSI_DB_RADIUS_PASSWORD` est fourni). Sur une base **existante** (VPS déjà en service), la migration 0008 refuse de s'appliquer tant qu'il n'existe pas ; le créer une fois, avec le même SQL, avant `migrate` :
 
 ```sh
-# 1. Secret ajouté au .env (0600) ; valeur jamais affichée.
-umask 077; printf 'ECSI_DB_RADIUS_PASSWORD=%s\n' "$(openssl rand -hex 24)" >> .env
-# 2. Rôle : mot de passe lu par psql dans l'environnement (\getenv), jamais en argument,
-#    journalisation des requêtes coupée pour la session.
-set -a; . ./.env; set +a
-docker compose exec -T -e ECSI_DB_RADIUS_PASSWORD postgres \
-  psql -v ON_ERROR_STOP=1 -U postgres -d "${POSTGRES_DB:-ecsi}" <<'SQL'
+# Avec VOS options habituelles de Compose : PROD="docker compose -f docker-compose.yml -f docker-compose.prod.yml"
+# 1. Les quatre secrets du lot B ajoutés au .env (0600), valeurs jamais affichées. La surcouche
+#    de production les exige toutes (« :? ») dès le premier appel de Compose, migrate compris.
+umask 077
+for v in ECSI_DB_RADIUS_PASSWORD RADIUS_VOUCHER_LOOKUP_KEY RADIUS_NAS_KEY VOUCHER_CODE_KEY; do
+  grep -q "^$v=" .env || printf '%s=%s\n' "$v" "$(openssl rand -hex 32)" >> .env
+done
+# 2. Rôle : seul ECSI_DB_RADIUS_PASSWORD est lu du .env (pas de « source » du fichier entier),
+#    passé à psql par l'environnement (\getenv), jamais en argument ; journalisation coupée.
+ECSI_DB_RADIUS_PASSWORD="$(sed -n 's/^ECSI_DB_RADIUS_PASSWORD=//p' .env)" \
+$PROD exec -T -e ECSI_DB_RADIUS_PASSWORD postgres \
+  psql -v ON_ERROR_STOP=1 -U postgres -d ecsi <<'SQL'
 SET log_statement = 'none';
 SET log_min_error_statement = 'panic';
 SET log_min_duration_statement = -1;
@@ -136,13 +141,13 @@ CREATE ROLE ecsi_radius LOGIN NOSUPERUSER NOCREATEROLE NOCREATEDB NOBYPASSRLS PA
 GRANT CONNECT ON DATABASE ecsi TO ecsi_radius;
 SQL
 # 3. Migrations 0008 et 0009 (service migrate), puis contrôle.
-docker compose run --rm migrate
-docker compose exec -T postgres psql -U postgres -d "${POSTGRES_DB:-ecsi}" -At \
+$PROD run --rm migrate
+$PROD exec -T postgres psql -U postgres -d ecsi -At \
   -c "select count(*) from drizzle.__drizzle_migrations" \
   -c "select count(*) from information_schema.role_table_grants where grantee = 'ecsi_radius'"
 ```
 
-Attendu : 10 migrations ; 0 droit de `ecsi_radius` sur les tables (seulement `EXECUTE` sur les fonctions `radius.*`). Rejoué sur une base de laboratoire remise en 0007 : [`lab/routeros/resultats/2026-10-19-lot-b-parcours-complet.md`](../lab/routeros/resultats/2026-10-19-lot-b-parcours-complet.md).
+Base nommée autrement que `ecsi` (`POSTGRES_DB`) : remplacer `ecsi` dans les trois commandes. Attendu : 10 migrations ; 0 droit de `ecsi_radius` sur les tables (seulement `EXECUTE` sur les fonctions `radius.*`). Rejoué sur une base de laboratoire remise en 0007 : [`lab/routeros/resultats/2026-10-19-lot-b-parcours-complet.md`](../lab/routeros/resultats/2026-10-19-lot-b-parcours-complet.md).
 
 #### FreeRADIUS sur l'hôte de la passerelle
 
