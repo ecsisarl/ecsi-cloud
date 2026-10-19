@@ -21,6 +21,7 @@ import { SitesModule } from './sites/sites.module.js';
 import { PlatformModule } from './platform/platform.module.js';
 import { RoutersModule } from './routers/routers.module.js';
 import { MonitoringModule } from './monitoring/monitoring.module.js';
+import { HotspotModule } from './hotspot/hotspot.module.js';
 import { safeError } from './common/safe-error.js';
 
 export interface AppOptions {
@@ -81,6 +82,7 @@ export class AppModule {
         SitesModule,
         RoutersModule,
         MonitoringModule,
+        HotspotModule,
         PlatformModule,
         HealthModule,
       ],
