@@ -81,6 +81,20 @@ async function main() {
         expiresAt: created.expiresAt,
       }),
     );
+  } else if (command === 'config-acces') {
+    // Lot B : script d'activation configuration (jeton : fichier 0600, jamais affiché).
+    const [id, scriptPath] = args;
+    const r = await call('POST', `/routers/${id}/config-access`);
+    const created = expectStatus(r, 201, 'config-acces');
+    writeFileSync(scriptPath, created.script, { mode: 0o600 });
+    console.log(JSON.stringify({ status: r.status, expiresAt: created.expiresAt }));
+  } else if (command === 'config-etat') {
+    const state = expectStatus(
+      await call('GET', `/routers/${args[0]}/config-access`),
+      200,
+      'config-etat',
+    );
+    console.log(JSON.stringify(state));
   } else if (command === 'voir') {
     const router = expectStatus(await call('GET', `/routers/${args[0]}`), 200, 'voir');
     console.log(JSON.stringify(routerView(router), null, 2));
