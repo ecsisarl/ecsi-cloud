@@ -1,11 +1,8 @@
-import { createHash } from 'node:crypto';
-import { request } from 'node:http';
-import { connect as tlsConnect, type TLSSocket } from 'node:tls';
-import { fromNetworkError, RouterOsError, sanitizeDetail } from './errors.js';
+import { RouterOsError, sanitizeDetail } from './errors.js';
+import { assertFingerprint, pinnedRequest } from './pinned-https.js';
 import {
   assertProplist,
   DEFAULT_TIMEOUTS,
-  MAX_RESPONSE_BYTES,
   type RouterOsCredentials,
   type RouterOsMenu,
   type RouterOsRecord,
@@ -34,9 +31,7 @@ export class RestTransport implements RouterOsTransport {
     credentials: RouterOsCredentials,
     private readonly timeouts: TransportTimeouts = DEFAULT_TIMEOUTS,
   ) {
-    if (!/^[0-9a-f]{64}$/.test(fingerprint)) {
-      throw new RouterOsError('TLS_PINNING', 'Empreinte TLS absente ou invalide : REST refusé');
-    }
+    assertFingerprint(fingerprint);
     this.authorization = `Basic ${Buffer.from(`${credentials.username}:${credentials.password}`, 'utf8').toString('base64')}`;
   }
 
@@ -46,8 +41,11 @@ export class RestTransport implements RouterOsTransport {
       assertProplist(proplist);
       path += `?.proplist=${proplist.join(',')}`;
     }
-    const socket = await this.connectPinned();
-    const { status, body } = await this.get(socket, path);
+    const { status, body } = await pinnedRequest(this.target, this.fingerprint, this.timeouts, {
+      method: 'GET',
+      path,
+      authorization: this.authorization,
+    });
     if (status === 401)
       throw new RouterOsError('AUTH', 'Identifiants refusés par RouterOS (HTTP 401)');
     if (status === 403) {
@@ -77,110 +75,9 @@ export class RestTransport implements RouterOsTransport {
   close(): Promise<void> {
     return Promise.resolve();
   }
-
-  private connectPinned(): Promise<TLSSocket> {
-    return new Promise((resolve, reject) => {
-      let settled = false;
-      const socket = tlsConnect({
-        host: this.target.host,
-        port: this.target.port,
-        // Remplacé par l'épinglage ci-dessous (aucune AC ne signe le certificat RouterOS).
-        rejectUnauthorized: false,
-      });
-      const timer = setTimeout(() => {
-        settled = true;
-        socket.destroy();
-        reject(fromNetworkError(undefined, true));
-      }, this.timeouts.connectMs);
-      socket.once('secureConnect', () => {
-        clearTimeout(timer);
-        if (settled) return;
-        settled = true;
-        const der = socket.getPeerCertificate(false).raw as Buffer | undefined;
-        const presented = der ? createHash('sha256').update(der).digest('hex') : '';
-        if (presented !== this.fingerprint) {
-          socket.destroy();
-          reject(
-            new RouterOsError(
-              'TLS_PINNING',
-              `Certificat inattendu (empreinte ${presented.slice(0, 16) || 'absente'}…) : connexion coupée`,
-            ),
-          );
-          return;
-        }
-        resolve(socket);
-      });
-      socket.once('error', (error) => {
-        clearTimeout(timer);
-        if (settled) return;
-        settled = true;
-        const code = (error as NodeJS.ErrnoException).code ?? '';
-        reject(
-          code.startsWith('ERR_SSL') || code.startsWith('EPROTO')
-            ? new RouterOsError('PROTOCOL', 'Échec de la négociation TLS')
-            : fromNetworkError(error, false),
-        );
-      });
-    });
-  }
-
-  private get(socket: TLSSocket, path: string): Promise<{ status: number; body: Buffer }> {
-    return new Promise((resolve, reject) => {
-      let done = false;
-      const finish = (error: RouterOsError | null, value?: { status: number; body: Buffer }) => {
-        if (done) return;
-        done = true;
-        clearTimeout(timer);
-        socket.destroy();
-        if (error) reject(error);
-        else if (value) resolve(value);
-      };
-      const timer = setTimeout(() => {
-        finish(fromNetworkError(undefined, true));
-      }, this.timeouts.requestMs);
-      const req = request({
-        host: this.target.host,
-        port: this.target.port,
-        method: 'GET',
-        path,
-        headers: { authorization: this.authorization, accept: 'application/json' },
-        // Connexion déjà établie ET vérifiée : rien n'est envoyé avant l'épinglage. (Ne pas
-        // ajouter « agent: false » : Node ouvrirait alors sa propre connexion TCP, sans TLS.)
-        createConnection: () => socket,
-      });
-      req.on('socket', (used) => {
-        if (used !== socket) {
-          req.destroy();
-          finish(new RouterOsError('PROTOCOL', 'Connexion non épinglée refusée'));
-        }
-      });
-      req.on('response', (res) => {
-        const chunks: Buffer[] = [];
-        let size = 0;
-        res.on('data', (chunk: Buffer) => {
-          size += chunk.length;
-          if (size > MAX_RESPONSE_BYTES) {
-            finish(new RouterOsError('PROTOCOL', 'Réponse REST trop volumineuse'));
-            return;
-          }
-          chunks.push(chunk);
-        });
-        res.on('end', () => {
-          finish(null, { status: res.statusCode ?? 0, body: Buffer.concat(chunks) });
-        });
-        res.on('error', (error) => {
-          finish(fromNetworkError(error, false));
-        });
-      });
-      req.on('error', (error) => {
-        finish(fromNetworkError(error, false));
-      });
-      req.end();
-    });
-  }
 }
 
-function toRecord(item: unknown): RouterOsRecord {
+export function toRecord(item: unknown): RouterOsRecord {
   if (!item || typeof item !== 'object' || Array.isArray(item)) {
     throw new RouterOsError('PROTOCOL', 'Réponse REST inattendue (objet attendu)');
   }

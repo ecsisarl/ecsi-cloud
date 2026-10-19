@@ -227,3 +227,165 @@ export async function startFakeRest(
       }),
   };
 }
+
+export interface FakeRestStore extends FakeServer {
+  /** Objets par menu (« ip/address »…), au format REST (booléens en true/false). */
+  readonly menus: Map<string, Record<string, string>[]>;
+  /** Secrets écrits (propriété secret), par « menu/.id » : jamais renvoyés en lecture. */
+  readonly secrets: Map<string, string>;
+  /** Ajoute un objet préexistant (d'un autre propriétaire, par exemple) ; renvoie son .id. */
+  seed(menu: string, record: Record<string, string>): string;
+  /** Requêtes d'écriture reçues (PUT, PATCH, DELETE), « MÉTHODE /rest/... ». */
+  writes(): string[];
+}
+
+/** Menus servis par le faux routeur à état (ceux du provisionnement Hotspot). */
+const STORE_MENUS = [
+  'interface',
+  'ip/route',
+  'ip/address',
+  'ip/pool',
+  'ip/dhcp-server/network',
+  'ip/dhcp-server',
+  'radius',
+  'ip/hotspot/profile',
+  'ip/hotspot',
+  'ip/firewall/nat',
+  'ip/firewall/filter',
+];
+
+/** Menus sans propriété comment sur CHR 7.24.5 (« bad parameter comment », constaté au lot B). */
+const NO_COMMENT_MENUS = new Set(['ip/hotspot', 'ip/hotspot/profile']);
+
+/**
+ * Faux routeur REST À ÉTAT (SIMULATION) : print (GET, .proplist), add (PUT), set (PATCH),
+ * remove (DELETE), comme la page REST API de la documentation et le comportement observé sur
+ * CHR 7.24.5 au lot B : PUT renvoie l'objet créé avec son .id, yes/no deviennent true/false,
+ * la propriété secret n'est pas renvoyée à un compte sans politique sensitive, comment est
+ * refusé sur /ip/hotspot et /ip/hotspot/profile.
+ */
+export async function startFakeRestStore(
+  options: FakeRouterOptions & { certificate: TestCertificate },
+): Promise<FakeRestStore> {
+  const received: string[] = [];
+  const raw: string[] = [];
+  const menus = new Map<string, Record<string, string>[]>(STORE_MENUS.map((m) => [m, []]));
+  const secrets = new Map<string, string>();
+  let next = 1;
+  const newId = () => `*${(next++).toString(16).toUpperCase()}`;
+  const toRest = (value: unknown) => {
+    const text = String(value);
+    return text === 'yes' ? 'true' : text === 'no' ? 'false' : text;
+  };
+  const seed = (menu: string, record: Record<string, string>) => {
+    const id = newId();
+    const list = menus.get(menu);
+    if (!list) throw new Error(`menu ${menu} non simulé`);
+    list.push({ '.id': id, ...record });
+    return id;
+  };
+  const expected = `Basic ${Buffer.from(`${options.username}:${options.password}`).toString('base64')}`;
+  const server = createHttpsServer(
+    { key: options.certificate.key, cert: options.certificate.cert },
+    (req, res) => {
+      const chunks: Buffer[] = [];
+      req.on('data', (chunk: Buffer) => chunks.push(chunk));
+      req.on('end', () => {
+        const body = Buffer.concat(chunks).toString('utf8');
+        const method = req.method ?? '';
+        const url = req.url ?? '';
+        received.push(`${method} ${url.split('?')[0] ?? ''}`);
+        raw.push(JSON.stringify(req.headers), url, body);
+        const send = (status: number, payload?: unknown) => {
+          if (payload === undefined) {
+            res.writeHead(status);
+            res.end();
+            return;
+          }
+          res.writeHead(status, { 'content-type': 'application/json' });
+          res.end(JSON.stringify(payload));
+        };
+        const bad = (detail: string) => {
+          send(400, { detail, error: 400, message: 'Bad Request' });
+        };
+        if (req.headers.authorization !== expected) {
+          send(401, { error: 401, message: 'Unauthorized' });
+          return;
+        }
+        const [path = '', query = ''] = url.split('?');
+        const segments = path.replace(/^\/rest\//, '').split('/');
+        const last = segments[segments.length - 1] ?? '';
+        const id = /^\*[0-9A-F]+$/.test(last) ? last : null;
+        const menu = (id ? segments.slice(0, -1) : segments).join('/');
+        const list = menus.get(menu);
+        if (!path.startsWith('/rest/') || !list) {
+          bad('no such command');
+          return;
+        }
+        const proplist = new URLSearchParams(query).get('.proplist')?.split(',') ?? null;
+        const view = (record: Record<string, string>) =>
+          proplist
+            ? Object.fromEntries(Object.entries(record).filter(([k]) => proplist.includes(k)))
+            : record;
+        const index = id ? list.findIndex((r) => r['.id'] === id) : -1;
+        if (id && index < 0) {
+          send(404, { error: 404, message: 'Not Found' });
+          return;
+        }
+        let values: Record<string, unknown> = {};
+        if (method === 'PUT' || method === 'PATCH') {
+          try {
+            values = JSON.parse(body) as Record<string, unknown>;
+          } catch {
+            bad('invalid JSON');
+            return;
+          }
+          if (NO_COMMENT_MENUS.has(menu) && 'comment' in values) {
+            bad('unknown parameter comment');
+            return;
+          }
+        }
+        const apply = (record: Record<string, string>) => {
+          for (const [key, value] of Object.entries(values)) {
+            if (key === 'secret') secrets.set(`${menu}/${record['.id'] ?? ''}`, String(value));
+            else record[key] = toRest(value);
+          }
+          return record;
+        };
+        if (method === 'GET') {
+          if (id) send(200, view(list[index] ?? {}));
+          else send(200, list.map(view));
+        } else if (method === 'PUT' && !id) {
+          const record = apply({ '.id': newId() });
+          list.push(record);
+          send(201, record);
+        } else if (method === 'PATCH' && id) {
+          send(200, apply(list[index] ?? {}));
+        } else if (method === 'DELETE' && id) {
+          list.splice(index, 1);
+          secrets.delete(`${menu}/${id}`);
+          send(204);
+        } else {
+          bad('unsupported');
+        }
+      });
+    },
+  );
+  const port = await listen(server);
+  return {
+    port,
+    received,
+    menus,
+    secrets,
+    seed,
+    writes: () => received.filter((line) => !line.startsWith('GET ')),
+    raw: () => raw.join('\n'),
+    close: () =>
+      new Promise((resolve) => {
+        server.closeAllConnections();
+        server.close(() => {
+          resolve();
+        });
+      }),
+  };
+}
