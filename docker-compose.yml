@@ -239,6 +239,7 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-info}
       APP_VERSION: ${APP_VERSION:-0.1.0-dev}
       DATABASE_WORKER_URL: postgres://ecsi_worker:${ECSI_DB_WORKER_PASSWORD:-devonly-worker-password}@postgres:5432/${POSTGRES_DB:-ecsi}
+      RADIUS_NAS_KEY: ${RADIUS_NAS_KEY:-devonly-radius-nas-key}
       ENCRYPTION_KEY: ${ENCRYPTION_KEY:-devonlydevonlydevonlydevonlydevonlydevonlyA=}
       ENCRYPTION_KEY_ID: ${ENCRYPTION_KEY_ID:-k1}
       ENCRYPTION_PREVIOUS_KEYS: ${ENCRYPTION_PREVIOUS_KEYS:-}
@@ -300,6 +301,48 @@ services:
       migrate:
         condition: service_completed_successfully
     # Pas de no-new-privileges : wg porte la capacité de fichier cap_net_admin (Dockerfile).
+    logging: *logging
+    mem_limit: 256m
+    pids_limit: 128
+
+  # FreeRADIUS (lot B, infra/radius, docs/RADIUS.md) : sur l'hôte de la passerelle, à côté de
+  # l'agent, écoute UNIQUEMENT sur l'adresse WireGuard (RADIUS_LISTEN_ADDRESS, 10.200.0.1) :
+  # jamais sur une interface publique. Réseau de l'hôte (adresse tunnel), aucune capacité,
+  # utilisateur non root, système de fichiers en lecture seule sauf le tampon d'accounting
+  # (volume radius-spool). PostgreSQL est joint sur 127.0.0.1 avec le rôle ecsi_radius
+  # (EXECUTE sur radius.* seulement). Reçoit SEULEMENT ses deux clés (empreinte des tickets,
+  # secrets des routeurs), jamais la clé de dérivation des codes ni ENCRYPTION_KEY.
+  radius:
+    profiles: ['gateway']
+    build:
+      context: infra/radius
+    image: ecsi-cloud/radius:dev
+    restart: unless-stopped
+    network_mode: host
+    cap_drop: ['ALL']
+    security_opt: ['no-new-privileges:true']
+    read_only: true
+    tmpfs: ['/run/radiusd:size=8m,uid=10812,mode=0700']
+    volumes:
+      - radius-spool:/var/spool/radacct
+    environment:
+      ECSI_ENV: development
+      RADIUS_LISTEN_ADDRESS: ${ROUTER_TUNNEL_GATEWAY:-10.200.0.1}
+      RADIUS_CLIENT_CIDR: ${ROUTER_TUNNEL_CIDR:-10.200.0.0/24}
+      RADIUS_DB_HOST: 127.0.0.1
+      RADIUS_DB_PORT: '5432'
+      RADIUS_DB_NAME: ${POSTGRES_DB:-ecsi}
+      RADIUS_DB_PASSWORD: ${ECSI_DB_RADIUS_PASSWORD:-devonly-radius-password}
+      RADIUS_VOUCHER_LOOKUP_KEY: ${RADIUS_VOUCHER_LOOKUP_KEY:-devonly-voucher-lookup-key}
+      RADIUS_NAS_KEY: ${RADIUS_NAS_KEY:-devonly-radius-nas-key}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ['CMD', 'pgrep', '-x', 'freeradius']
+      interval: 10s
+      timeout: 3s
+      retries: 3
     logging: *logging
     mem_limit: 256m
     pids_limit: 128
@@ -397,6 +440,7 @@ services:
     pids_limit: 128
 
 volumes:
+  radius-spool:
   postgres-data:
   redis-data:
   s3-data:

@@ -99,8 +99,16 @@ services:
     environment:
       NODE_ENV: production
       DATABASE_WORKER_URL: postgres://ecsi_worker:${ECSI_DB_WORKER_PASSWORD:?ECSI_DB_WORKER_PASSWORD obligatoire}@postgres:5432/${POSTGRES_DB:-ecsi}
+      RADIUS_NAS_KEY: ${RADIUS_NAS_KEY:?RADIUS_NAS_KEY obligatoire}
       ENCRYPTION_KEY: ${ENCRYPTION_KEY:?ENCRYPTION_KEY obligatoire}
       ENCRYPTION_KEY_ID: ${ENCRYPTION_KEY_ID:?ENCRYPTION_KEY_ID obligatoire}
+
+  radius:
+    environment:
+      ECSI_ENV: production
+      RADIUS_DB_PASSWORD: ${ECSI_DB_RADIUS_PASSWORD:?ECSI_DB_RADIUS_PASSWORD obligatoire}
+      RADIUS_VOUCHER_LOOKUP_KEY: ${RADIUS_VOUCHER_LOOKUP_KEY:?RADIUS_VOUCHER_LOOKUP_KEY obligatoire}
+      RADIUS_NAS_KEY: ${RADIUS_NAS_KEY:?RADIUS_NAS_KEY obligatoire}
 
   gateway:
     environment:

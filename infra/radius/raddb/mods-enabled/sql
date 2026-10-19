@@ -1,0 +1,65 @@
+# PostgreSQL, rôle ecsi_radius : EXECUTE sur les fonctions radius.* SEULEMENT (migration 0008,
+# aucune table lisible). Les valeurs réseau sont échappées par rlm_sql puis revalidées et
+# retypées par les fonctions.
+sql {
+	dialect = "postgresql"
+	driver = "rlm_sql_postgresql"
+	server = "$ENV{RADIUS_DB_HOST}"
+	port = $ENV{RADIUS_DB_PORT}
+	login = "ecsi_radius"
+	password = "$ENV{RADIUS_DB_PASSWORD}"
+	radius_db = "$ENV{RADIUS_DB_NAME}"
+
+	postgresql {
+		send_application_name = yes
+	}
+
+	read_groups = no
+	read_profiles = no
+	read_clients = no
+	delete_stale_sessions = no
+
+	# Identifiant transmis aux requêtes : l'empreinte du code (authorize), ou User-Name
+	# déjà remplacé par l'empreinte (accounting).
+	sql_user_name = "%{%{control:Tmp-String-0}:-%{User-Name}}"
+
+	# Requêtes rlm_sql (lignes id, username, attribute, value, op).
+	authorize_check_query = "SELECT id, username, attribute, value, op FROM radius.authorize_check('%{Packet-Src-IP-Address}', '%{SQL-User-Name}', '%{Calling-Station-Id}')"
+	authorize_reply_query = "SELECT id, username, attribute, value, op FROM radius.authorize_reply('%{Packet-Src-IP-Address}', '%{SQL-User-Name}', '%{Calling-Station-Id}')"
+
+	# Accounting : exécuté par buffered-sql, où NAS-IP-Address porte l'adresse source
+	# authentifiée (sites-enabled/ecsi, preacct).
+	accounting {
+		reference = "%{tolower:type.%{%{Acct-Status-Type}:-none}.query}"
+		type {
+			accounting-on {
+				query = "SELECT radius.accounting_nas('%{NAS-IP-Address}', 'Accounting-On')"
+			}
+			accounting-off {
+				query = "SELECT radius.accounting_nas('%{NAS-IP-Address}', 'Accounting-Off')"
+			}
+			start {
+				query = "SELECT radius.accounting('%{NAS-IP-Address}', 'Start', '%{SQL-User-Name}', '%{Acct-Session-Id}', '%{Acct-Unique-Session-Id}', '%{Calling-Station-Id}', '%{Framed-IP-Address}', '%{%{Acct-Session-Time}:-0}', '%{%{Acct-Input-Octets}:-0}', '%{%{Acct-Input-Gigawords}:-0}', '%{%{Acct-Output-Octets}:-0}', '%{%{Acct-Output-Gigawords}:-0}', '')"
+			}
+			interim-update {
+				query = "SELECT radius.accounting('%{NAS-IP-Address}', 'Interim-Update', '%{SQL-User-Name}', '%{Acct-Session-Id}', '%{Acct-Unique-Session-Id}', '%{Calling-Station-Id}', '%{Framed-IP-Address}', '%{%{Acct-Session-Time}:-0}', '%{%{Acct-Input-Octets}:-0}', '%{%{Acct-Input-Gigawords}:-0}', '%{%{Acct-Output-Octets}:-0}', '%{%{Acct-Output-Gigawords}:-0}', '')"
+			}
+			stop {
+				query = "SELECT radius.accounting('%{NAS-IP-Address}', 'Stop', '%{SQL-User-Name}', '%{Acct-Session-Id}', '%{Acct-Unique-Session-Id}', '%{Calling-Station-Id}', '%{Framed-IP-Address}', '%{%{Acct-Session-Time}:-0}', '%{%{Acct-Input-Octets}:-0}', '%{%{Acct-Input-Gigawords}:-0}', '%{%{Acct-Output-Octets}:-0}', '%{%{Acct-Output-Gigawords}:-0}', '%{Acct-Terminate-Cause}')"
+			}
+		}
+	}
+
+	pool {
+		# 0 : FreeRADIUS démarre même si PostgreSQL est momentanément indisponible.
+		start = 0
+		min = 1
+		max = ${thread[pool].max_servers}
+		spare = 4
+		uses = 0
+		retry_delay = 5
+		lifetime = 0
+		idle_timeout = 60
+		max_retries = 3
+	}
+}

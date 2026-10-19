@@ -102,6 +102,8 @@ const VALUES: Record<string, string> = {
   ECSI_DB_AUTH_PASSWORD: random(),
   ECSI_DB_WORKER_PASSWORD: random(),
   ECSI_DB_RADIUS_PASSWORD: random(),
+  RADIUS_VOUCHER_LOOKUP_KEY: random(32),
+  RADIUS_NAS_KEY: random(32),
   REDIS_PASSWORD: random(),
   S3_BUCKET: 'ecsi-prod-test',
   S3_ACCESS_KEY_ID: `ecsi-${random(8)}`,

@@ -1,0 +1,110 @@
+# Authentification Hotspot (HTTP-CHAP) et accounting des routeurs ECSI.
+# Écoute UNIQUEMENT sur l'adresse WireGuard de la passerelle (RADIUS_LISTEN_ADDRESS, ex.
+# 10.200.0.1) : jamais sur une interface publique.
+#
+# Ticket à code unique : identifiant = mot de passe = code. Le code n'est stocké nulle part ;
+# FreeRADIUS calcule son empreinte HMAC (RADIUS_VOUCHER_LOOKUP_KEY), PostgreSQL décide
+# (radius.authorize_check / authorize_reply) et CHAP vérifie que le mot de passe saisi est
+# bien le code (Cleartext-Password := User-Name).
+server ecsi {
+	listen {
+		type = auth
+		ipaddr = $ENV{RADIUS_LISTEN_ADDRESS}
+		port = 1812
+	}
+	listen {
+		type = acct
+		ipaddr = $ENV{RADIUS_LISTEN_ADDRESS}
+		port = 1813
+	}
+
+	authorize {
+		# HTTP-CHAP seulement (pas de PAP : mot de passe en clair).
+		if (!&CHAP-Password) {
+			update control {
+				&Tmp-String-6 := "PAP_REFUSED"
+			}
+			reject
+		}
+		if (!&User-Name || &User-Name !~ /^[A-Za-z0-9]{4,32}$/) {
+			update control {
+				&Tmp-String-6 := "INVALID"
+			}
+			reject
+		}
+		update request {
+			&Tmp-String-3 := "%{tolower:%{User-Name}}"
+			&Tmp-String-4 := "$ENV{RADIUS_VOUCHER_LOOKUP_KEY}"
+		}
+		update control {
+			&Tmp-String-0 := "%{hmacsha1:&Tmp-String-3 &Tmp-String-4}"
+		}
+		update request {
+			&Tmp-String-3 !* ANY
+			&Tmp-String-4 !* ANY
+		}
+		sql
+		if (!ok) {
+			update control {
+				&Tmp-String-6 := "DB_UNAVAILABLE"
+			}
+			reject
+		}
+		if (&control:Tmp-String-6 != "ACCEPT") {
+			reject
+		}
+		update control {
+			&Cleartext-Password := "%{User-Name}"
+		}
+		chap
+	}
+
+	authenticate {
+		Auth-Type CHAP {
+			chap
+		}
+	}
+
+	preacct {
+		# Le code saisi ne quitte jamais la mémoire : User-Name est remplacé par son empreinte
+		# AVANT l'écriture dans le tampon disque.
+		if (&User-Name) {
+			update request {
+				&Tmp-String-3 := "%{tolower:%{User-Name}}"
+				&Tmp-String-4 := "$ENV{RADIUS_VOUCHER_LOOKUP_KEY}"
+			}
+			update request {
+				&User-Name := "%{hmacsha1:&Tmp-String-3 &Tmp-String-4}"
+			}
+			update request {
+				&Tmp-String-3 !* ANY
+				&Tmp-String-4 !* ANY
+			}
+		}
+		# Le rejeu du tampon (buffered-sql) ne connaît plus l'adresse source du paquet :
+		# NAS-IP-Address est REMPLACÉ par l'adresse source authentifiée (WireGuard + secret
+		# du routeur), jamais la valeur envoyée par le routeur.
+		update request {
+			&NAS-IP-Address := "%{Packet-Src-IP-Address}"
+		}
+		# Identifiant de session stable entre Start, Interim-Update et Stop.
+		update request {
+			&Acct-Unique-Session-Id := "%{md5:%{Acct-Session-Id}|%{Calling-Station-Id}|%{NAS-Port}|%{NAS-Port-Id}}"
+		}
+	}
+
+	accounting {
+		acct_buffer
+	}
+
+	post-auth {
+		update control {
+			&Tmp-String-7 := "%{sql:SELECT radius.postauth('%{Packet-Src-IP-Address}', '%{control:Tmp-String-0}', 'ACCEPT', '', '%{Calling-Station-Id}')}"
+		}
+		Post-Auth-Type REJECT {
+			update control {
+				&Tmp-String-7 := "%{sql:SELECT radius.postauth('%{Packet-Src-IP-Address}', '%{control:Tmp-String-0}', 'REJECT', '%{%{control:Tmp-String-6}:-AUTH_FAILED}', '%{Calling-Station-Id}')}"
+			}
+		}
+	}
+}
