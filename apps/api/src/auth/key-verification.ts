@@ -17,7 +17,7 @@
  */
 import type pg from 'pg';
 import { type KeyMaterial, SecretBox } from './crypto/secret-box.js';
-import { routerSecretAad } from '../routers/router-secret.js';
+import { routerConfigSecretAad, routerSecretAad } from '../routers/router-secret.js';
 
 export interface SecretFamilyReport {
   total: number;
@@ -127,10 +127,16 @@ export async function verifyEncryptionKeys(
   const full = new SecretBox(keys.active.base64, { id: keys.active.id, previous: keys.previous });
   const activeOnly = new SecretBox(keys.active.base64, { id: keys.active.id });
 
+  // Mots de passe RouterOS : compte de supervision (routers) ET compte d'écriture ecsi-cfg
+  // (router_config_accounts, lot B, AAD distincte) ; une clé n'est retirable que si aucun
+  // des deux n'en dépend.
   const routerRows = (
-    await pool.query<{ company_id: string; id: string; payload: string }>(
-      `select company_id, id, routeros_password_encrypted as payload
-         from routers where routeros_password_encrypted is not null`,
+    await pool.query<{ company_id: string; id: string; payload: string; config: boolean }>(
+      `select company_id, id, routeros_password_encrypted as payload, false as config
+         from routers where routeros_password_encrypted is not null
+       union all
+       select company_id, router_id, password_encrypted, true
+         from router_config_accounts where password_encrypted is not null`,
     )
   ).rows;
   const mfaRows = (
@@ -150,7 +156,10 @@ export async function verifyEncryptionKeys(
     full,
     activeOnly,
     routerRows.map((r) => ({
-      aad: routerSecretAad({ companyId: r.company_id, routerId: r.id }),
+      aad: (r.config ? routerConfigSecretAad : routerSecretAad)({
+        companyId: r.company_id,
+        routerId: r.id,
+      }),
       payload: r.payload,
     })),
   );

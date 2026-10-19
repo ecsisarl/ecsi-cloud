@@ -157,3 +157,23 @@ export interface PlatformRouter {
   activatedAt: string | null;
   createdAt: string;
 }
+
+/**
+ * Compte d'écriture RouterOS « ecsi-cfg » (lot B, provisionnement Hotspot) :
+ * GET /routers/:id/config-access et POST /routers/:id/config-access. NONE : jamais activé ;
+ * PENDING : script émis, pas encore exécuté ; ACTIVE : compte activé (un nouveau script peut
+ * être en attente, expiresAt non nul). Le script (avec son jeton) n'apparaît qu'une fois.
+ */
+export const ROUTER_CONFIG_ACCESS_STATUSES = ['NONE', 'PENDING', 'ACTIVE'] as const;
+export type RouterConfigAccessStatus = (typeof ROUTER_CONFIG_ACCESS_STATUSES)[number];
+
+export interface RouterConfigAccess {
+  status: RouterConfigAccessStatus;
+  activatedAt: string | null;
+  expiresAt: string | null;
+}
+
+export interface RouterConfigAccessScript {
+  script: string;
+  expiresAt: string;
+}
