@@ -35,6 +35,9 @@ x-prod-env: &prod-env
   ENCRYPTION_KEY: ${ENCRYPTION_KEY:?ENCRYPTION_KEY obligatoire}
   # Explicite en production : un identifiant erroné rendrait la rotation des clés incohérente.
   ENCRYPTION_KEY_ID: ${ENCRYPTION_KEY_ID:?ENCRYPTION_KEY_ID obligatoire}
+  # Tickets Hotspot (lot B) : 64 caractères hexadécimaux chacune, distinctes.
+  VOUCHER_CODE_KEY: ${VOUCHER_CODE_KEY:?VOUCHER_CODE_KEY obligatoire}
+  RADIUS_VOUCHER_LOOKUP_KEY: ${RADIUS_VOUCHER_LOOKUP_KEY:?RADIUS_VOUCHER_LOOKUP_KEY obligatoire}
   COOKIE_SECURE: 'true'
   LOG_PRETTY: 'false'
   WEB_PUBLIC_URL: ${WEB_PUBLIC_URL:?WEB_PUBLIC_URL obligatoire}

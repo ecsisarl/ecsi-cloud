@@ -26,7 +26,7 @@ describe('navigation', () => {
     expect(isActive('/', '/')).toBe(true);
     expect(isActive('/ventes', '/')).toBe(false);
     expect(isActive('/reseau/routeurs/abc', '/reseau/routeurs')).toBe(true);
-    expect(findNavItem('/tickets')?.plannedSprint).toBe('S6');
+    expect(findNavItem('/ventes')?.plannedSprint).toBe('S8');
   });
 });
 
@@ -52,6 +52,19 @@ describe('navigation selon les permissions', () => {
     expect(keys(['monitoring.read'])).toContain('monitoring');
     expect(keys(['routers.read'])).not.toContain('monitoring');
     expect(findNavItem('/reseau/monitoring')?.plannedSprint).toBeUndefined();
+  });
+
+  it('lot B : Forfaits, Tickets et Hotspots livrés, selon leur permission', () => {
+    expect(keys(['plans.read'])).toContain('plans');
+    expect(keys(['vouchers.read'])).toContain('tickets');
+    expect(keys(['hotspots.read'])).toContain('hotspots');
+    for (const key of ['plans', 'tickets', 'hotspots'])
+      expect(keys(['sites.read'])).not.toContain(key);
+    for (const href of ['/forfaits', '/tickets', '/reseau/hotspots']) {
+      expect(findNavItem(href)?.plannedSprint, href).toBeUndefined();
+    }
+    // Les autres modules restent annoncés comme à venir.
+    expect(findNavItem('/clients')?.plannedSprint).toBe('S7');
   });
 
   it('affiche les modules du Sprint 2 à un administrateur', () => {

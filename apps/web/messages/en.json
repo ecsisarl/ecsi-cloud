@@ -706,5 +706,314 @@
       "confirm": "Reset",
       "done": "2FA reset for {email}."
     }
+  },
+  "plans": {
+    "title": "Plans",
+    "subtitle": "Offers sold to your customers: price, duration, speed and data volume.",
+    "add": "New plan",
+    "createTitle": "New plan",
+    "editTitle": "Edit “{name}”",
+    "create": "Create plan",
+    "invalidNumber": "Check the numbers entered (positive values).",
+    "limitRequired": "Set at least one limit: validity, connection time or data volume.",
+    "limitsIntro": "Leave empty what is not limited. Set at least the validity, the connection time or the data volume.",
+    "editNotice": "Vouchers already generated keep the plan conditions from the time they were created.",
+    "units": {
+      "minutes": "minutes",
+      "hours": "hours",
+      "days": "days"
+    },
+    "fields": {
+      "name": "Plan name",
+      "price": "Price ({currency})",
+      "description": "Description (optional)",
+      "validity": "Validity",
+      "sessionTime": "Connection time",
+      "quota": "Data volume",
+      "rateUp": "Upload speed (sending)",
+      "rateDown": "Download speed (receiving)",
+      "maxDevices": "Simultaneous devices",
+      "idle": "Disconnect after inactivity (minutes)"
+    },
+    "hints": {
+      "validity": "Counted from the first connection (e.g. 1 day).",
+      "sessionTime": "Total connection time allowed (e.g. 2 hours).",
+      "quota": "Total volume sent and received.",
+      "rate": "Empty: unlimited speed.",
+      "maxDevices": "1 to 10 devices at the same time.",
+      "idle": "The customer is disconnected when the connection is no longer used (5 minutes by default)."
+    },
+    "deleteTitle": "Delete plan “{name}”?",
+    "deleteDescription": "It will no longer be offered. Vouchers already generated remain usable until they end.",
+    "deleteConfirm": "Delete plan",
+    "deleted": "Plan deleted.",
+    "emptyTitle": "No plans",
+    "emptyDescription": "Create a first plan (for example “1 hour — 200 FCFA”) to generate vouchers.",
+    "columns": {
+      "name": "Plan",
+      "price": "Price",
+      "validity": "Validity",
+      "sessionTime": "Connection time",
+      "quota": "Data",
+      "rate": "Speed",
+      "devices": "Devices",
+      "status": "Status",
+      "actions": "Actions"
+    },
+    "none": "No date limit",
+    "unlimited": "Unlimited",
+    "statuses": {
+      "ACTIVE": "Offered",
+      "DISABLED": "Suspended"
+    },
+    "disabled": "Plan suspended: vouchers can no longer be generated with it.",
+    "enabled": "Plan offered again.",
+    "disable": "Suspend",
+    "enable": "Reactivate"
+  },
+  "tickets": {
+    "title": "Vouchers",
+    "subtitle": "Generate, print and follow WiFi access vouchers.",
+    "print": "Print",
+    "serial": "Voucher #{serial}",
+    "states": {
+      "AVAILABLE": "Available",
+      "ACTIVE": "In use",
+      "EXHAUSTED": "Used up",
+      "EXPIRED": "Expired",
+      "DISABLED": "Disabled"
+    },
+    "generate": {
+      "open": "Generate vouchers",
+      "title": "Generate vouchers",
+      "intro": "Vouchers are valid only on the chosen site and use the current plan conditions.",
+      "plan": "Plan",
+      "choosePlan": "Choose a plan",
+      "site": "Site",
+      "chooseSite": "Choose a site",
+      "quantity": "Number of vouchers",
+      "quantityHint": "1 to {max} vouchers.",
+      "label": "Label (optional)",
+      "labelHint": "To find the batch again, for example “Market kiosk”.",
+      "pending": "Generating…",
+      "submit": "Generate",
+      "done": "{count, plural, one {# voucher generated} other {# vouchers generated}} for “{plan}”. Use “Print” to print them."
+    },
+    "batches": {
+      "title": "Voucher batches",
+      "emptyTitle": "No vouchers generated",
+      "emptyDescription": "Generate a first batch from a plan.",
+      "columns": {
+        "created": "Created",
+        "label": "Label",
+        "plan": "Plan",
+        "site": "Site",
+        "quantity": "Vouchers",
+        "states": "Status",
+        "actions": "Actions"
+      },
+      "showVouchers": "Show vouchers"
+    },
+    "list": {
+      "title": "Vouchers",
+      "state": "Status",
+      "allStates": "All statuses",
+      "plan": "Plan",
+      "allPlans": "All plans",
+      "site": "Site",
+      "allSites": "All sites",
+      "batch": "Batch",
+      "allBatches": "All batches",
+      "serial": "Voucher #",
+      "empty": "No voucher matches these filters.",
+      "columns": {
+        "serial": "Voucher",
+        "plan": "Plan",
+        "site": "Site",
+        "state": "Status",
+        "created": "Created",
+        "activated": "First use",
+        "expires": "Expires"
+      },
+      "range": "{from} to {to} of {total}"
+    },
+    "detail": {
+      "back": "Back to vouchers",
+      "notFoundTitle": "Voucher not found",
+      "notFoundDescription": "This voucher does not exist or is outside your scope.",
+      "disable": "Disable voucher",
+      "disableTitle": "Disable voucher #{serial}?",
+      "disableDescription": "The voucher can no longer be used to connect. This is permanent. A connection already open ends at its next check.",
+      "reason": "Reason",
+      "disableConfirm": "Disable permanently",
+      "disabledDone": "Voucher disabled.",
+      "status": "Status",
+      "state": "Status",
+      "created": "Created",
+      "activated": "First use",
+      "notUsed": "Not used yet",
+      "expires": "Expires",
+      "lastUsed": "Last use",
+      "disabledAt": "Disabled on",
+      "disabledBy": "Disabled by",
+      "usage": "Usage",
+      "price": "Price",
+      "timeUsed": "Time used",
+      "timeLeft": "Time left",
+      "dataUsed": "Data used",
+      "validity": "Validity",
+      "validityFromFirstUse": "{duration} from the first connection",
+      "validityLeft": "{duration} left",
+      "rate": "Speed",
+      "devices": "Simultaneous devices",
+      "unlimited": "unlimited",
+      "sessions": "Connections",
+      "noSessions": "No connection yet.",
+      "attempts": "Recent attempts",
+      "noAttempts": "No attempt recorded.",
+      "accepted": "Accepted",
+      "rejected": "Rejected"
+    },
+    "sessions": {
+      "started": "Start",
+      "router": "Access point",
+      "device": "Device",
+      "duration": "Duration",
+      "data": "Data",
+      "end": "End",
+      "ongoing": "Ongoing"
+    },
+    "reasons": {
+      "UNKNOWN": "Rejected: unknown code",
+      "WRONG_SITE": "Rejected: other site",
+      "DISABLED": "Rejected: voucher disabled",
+      "EXPIRED": "Rejected: voucher expired",
+      "EXHAUSTED": "Rejected: plan used up",
+      "TOO_MANY_DEVICES": "Rejected: too many devices",
+      "INVALID": "Rejected: invalid input",
+      "NAS_UNKNOWN": "Rejected: unknown access point",
+      "AUTH_FAILED": "Rejected: wrong code"
+    },
+    "printSheet": {
+      "pageTitle": "Voucher printing",
+      "back": "Back",
+      "title": "“{plan}” vouchers — {site}",
+      "warning": "Each code gives Internet access: do not leave printed sheets lying around and do not share this page.",
+      "print": "Print",
+      "onlyAvailable": "Only available vouchers",
+      "count": "{count, plural, =0 {No vouchers} one {# voucher} other {# vouchers}}",
+      "serial": "#{serial}",
+      "codeLabel": "WiFi code",
+      "validity": "Valid {duration}",
+      "sessionTime": "{duration} of connection",
+      "quota": "{volume}",
+      "state": {
+        "AVAILABLE": "Available",
+        "ACTIVE": "In use",
+        "EXHAUSTED": "Used up",
+        "EXPIRED": "Expired",
+        "DISABLED": "Disabled"
+      }
+    }
+  },
+  "hotspots": {
+    "title": "Hotspots",
+    "subtitle": "Hotspot configuration of each router (RADIUS HTTP-CHAP authentication) and synchronisation status.",
+    "add": "Configure a hotspot",
+    "createTitle": "New hotspot",
+    "editTitle": "Edit hotspot “{name}”",
+    "create": "Create hotspot",
+    "formIntro": "The configuration is applied to the router by ECSI CLOUD (configuration account). One hotspot per router.",
+    "chooseRouter": "Choose a router",
+    "invalidInterface": "Invalid RouterOS interface (letters, digits, “.”, “_”, “-”).",
+    "chapOnly": "Customer authentication: HTTP-CHAP over RADIUS only (the password never travels in clear text).",
+    "fields": {
+      "router": "Router",
+      "name": "Name",
+      "interface": "Customer-side interface",
+      "gatewayAddress": "Router address (CIDR)",
+      "poolStart": "DHCP range start",
+      "poolEnd": "DHCP range end",
+      "dnsName": "Portal DNS name (optional)"
+    },
+    "hints": {
+      "interface": "RouterOS interface or bridge, e.g. ether2 or bridge-hotspot.",
+      "gatewayAddress": "Private network, /16 to /30 mask, e.g. 10.5.50.1/24.",
+      "dnsName": "E.g. wifi.example.net (lowercase, at least two labels)."
+    },
+    "saved": "Configuration saved: it will be applied to the router.",
+    "deleteTitle": "Delete hotspot “{name}”?",
+    "deleteDescription": "The worker will remove the configuration from the router; customers will no longer connect through this hotspot.",
+    "deleteConfirm": "Delete hotspot",
+    "emptyTitle": "No hotspots",
+    "emptyDescription": "Configure a hotspot on an enrolled router to sell vouchers.",
+    "columns": {
+      "router": "Router",
+      "name": "Hotspot",
+      "network": "Network",
+      "state": "Desired state",
+      "sync": "Synchronisation",
+      "actions": "Actions"
+    },
+    "desired": {
+      "ENABLED": "Enabled",
+      "DISABLED": "Disabled"
+    },
+    "sync": {
+      "PENDING": "Pending",
+      "APPLYING": "Applying",
+      "SYNCED": "Synchronised",
+      "ERROR": "Error"
+    },
+    "versions": "Applied version {applied} / desired {wanted}",
+    "lastSync": "Last synchronisation: {at}",
+    "disable": "Disable",
+    "enable": "Enable",
+    "syncNow": "Synchronise",
+    "done": {
+      "enable": "Hotspot “{name}” enabled: waiting to be applied.",
+      "disable": "Hotspot “{name}” disabled: waiting to be applied.",
+      "sync": "New synchronisation of “{name}” requested.",
+      "delete": "Hotspot “{name}” deleted: the configuration will be removed from the router."
+    },
+    "access": {
+      "toggle": "Configuration access",
+      "routersTitle": "Configuration access of routers without a hotspot",
+      "routersIntro": "Before the first hotspot, allow ECSI CLOUD to configure the router (script to paste once in the RouterOS terminal).",
+      "title": "Configuration access",
+      "unavailable": "Not available",
+      "unavailableDescription": "Configuration access management is not available yet for this router.",
+      "statuses": {
+        "NONE": "None",
+        "PENDING": "Pending",
+        "ACTIVE": "Active"
+      },
+      "descriptions": {
+        "NONE": "ECSI CLOUD cannot change the configuration of this router yet.",
+        "PENDING": "Script generated: paste it in the RouterOS terminal before it expires.",
+        "ACTIVE": "ECSI CLOUD can apply the Hotspot configuration on this router."
+      },
+      "activatedAt": "Activated on {at}",
+      "expiresAt": "Script valid until {at}",
+      "generate": "Generate access script",
+      "regenerate": "Generate a new script",
+      "scriptOnce": "Script shown only once, to paste in the RouterOS terminal before {expiresAt}. It contains a secret: do not share or save it.",
+      "copy": "Copy script",
+      "copied": "Copied",
+      "done": "I pasted the script"
+    },
+    "sessions": {
+      "title": "Active sessions",
+      "empty": "No active session.",
+      "voucher": "Voucher",
+      "router": "Router",
+      "mac": "MAC address",
+      "ip": "IP address",
+      "started": "Start",
+      "duration": "Duration",
+      "up": "Upload",
+      "down": "Download",
+      "serial": "#{serial}"
+    }
   }
 }

@@ -706,5 +706,314 @@
       "confirm": "Réinitialiser",
       "done": "2FA réinitialisée pour {email}."
     }
+  },
+  "plans": {
+    "title": "Forfaits",
+    "subtitle": "Les offres vendues à vos clients : prix, durée, vitesse et volume de données.",
+    "add": "Nouveau forfait",
+    "createTitle": "Nouveau forfait",
+    "editTitle": "Modifier « {name} »",
+    "create": "Créer le forfait",
+    "invalidNumber": "Vérifiez les nombres saisis (valeurs positives).",
+    "limitRequired": "Indiquez au moins une limite : validité, durée de connexion ou volume de données.",
+    "limitsIntro": "Laissez vide ce qui n’est pas limité. Indiquez au moins la validité, la durée de connexion ou le volume de données.",
+    "editNotice": "Les tickets déjà générés gardent les conditions du forfait au moment de leur création.",
+    "units": {
+      "minutes": "minutes",
+      "hours": "heures",
+      "days": "jours"
+    },
+    "fields": {
+      "name": "Nom du forfait",
+      "price": "Prix ({currency})",
+      "description": "Description (facultative)",
+      "validity": "Validité",
+      "sessionTime": "Durée de connexion",
+      "quota": "Volume de données",
+      "rateUp": "Débit montant (envoi)",
+      "rateDown": "Débit descendant (réception)",
+      "maxDevices": "Appareils simultanés",
+      "idle": "Déconnexion après inactivité (minutes)"
+    },
+    "hints": {
+      "validity": "Compte à partir de la première connexion (ex. 1 jour).",
+      "sessionTime": "Temps total de connexion autorisé (ex. 2 heures).",
+      "quota": "Volume total envoyé et reçu.",
+      "rate": "Vide : vitesse non limitée.",
+      "maxDevices": "De 1 à 10 appareils en même temps.",
+      "idle": "Le client est déconnecté s’il n’utilise plus la connexion (5 minutes par défaut)."
+    },
+    "deleteTitle": "Supprimer le forfait « {name} » ?",
+    "deleteDescription": "Il ne sera plus proposé. Les tickets déjà générés restent utilisables jusqu’à leur fin.",
+    "deleteConfirm": "Supprimer le forfait",
+    "deleted": "Forfait supprimé.",
+    "emptyTitle": "Aucun forfait",
+    "emptyDescription": "Créez un premier forfait (par exemple « 1 heure — 200 FCFA ») pour générer des tickets.",
+    "columns": {
+      "name": "Forfait",
+      "price": "Prix",
+      "validity": "Validité",
+      "sessionTime": "Durée de connexion",
+      "quota": "Données",
+      "rate": "Vitesse",
+      "devices": "Appareils",
+      "status": "État",
+      "actions": "Actions"
+    },
+    "none": "Sans limite de date",
+    "unlimited": "Illimité",
+    "statuses": {
+      "ACTIVE": "Proposé",
+      "DISABLED": "Suspendu"
+    },
+    "disabled": "Forfait suspendu : il n’est plus possible de générer des tickets avec.",
+    "enabled": "Forfait de nouveau proposé.",
+    "disable": "Suspendre",
+    "enable": "Réactiver"
+  },
+  "tickets": {
+    "title": "Tickets",
+    "subtitle": "Générez, imprimez et suivez les tickets de connexion WiFi.",
+    "print": "Imprimer",
+    "serial": "Ticket n° {serial}",
+    "states": {
+      "AVAILABLE": "Disponible",
+      "ACTIVE": "En cours d’utilisation",
+      "EXHAUSTED": "Épuisé",
+      "EXPIRED": "Expiré",
+      "DISABLED": "Désactivé"
+    },
+    "generate": {
+      "open": "Générer des tickets",
+      "title": "Générer des tickets",
+      "intro": "Les tickets sont valables uniquement sur le site choisi et reprennent les conditions actuelles du forfait.",
+      "plan": "Forfait",
+      "choosePlan": "Choisir un forfait",
+      "site": "Site",
+      "chooseSite": "Choisir un site",
+      "quantity": "Nombre de tickets",
+      "quantityHint": "De 1 à {max} tickets.",
+      "label": "Libellé (facultatif)",
+      "labelHint": "Pour retrouver le lot, par exemple « Kiosque marché ».",
+      "pending": "Génération…",
+      "submit": "Générer",
+      "done": "{count, plural, one {# ticket généré} other {# tickets générés}} pour « {plan} ». Utilisez « Imprimer » pour les sortir."
+    },
+    "batches": {
+      "title": "Lots de tickets",
+      "emptyTitle": "Aucun ticket généré",
+      "emptyDescription": "Générez un premier lot à partir d’un forfait.",
+      "columns": {
+        "created": "Créé le",
+        "label": "Libellé",
+        "plan": "Forfait",
+        "site": "Site",
+        "quantity": "Tickets",
+        "states": "Situation",
+        "actions": "Actions"
+      },
+      "showVouchers": "Voir les tickets"
+    },
+    "list": {
+      "title": "Tickets",
+      "state": "État",
+      "allStates": "Tous les états",
+      "plan": "Forfait",
+      "allPlans": "Tous les forfaits",
+      "site": "Site",
+      "allSites": "Tous les sites",
+      "batch": "Lot",
+      "allBatches": "Tous les lots",
+      "serial": "N° de ticket",
+      "empty": "Aucun ticket ne correspond à ces filtres.",
+      "columns": {
+        "serial": "Ticket",
+        "plan": "Forfait",
+        "site": "Site",
+        "state": "État",
+        "created": "Créé le",
+        "activated": "Première utilisation",
+        "expires": "Expire le"
+      },
+      "range": "{from} à {to} sur {total}"
+    },
+    "detail": {
+      "back": "Retour aux tickets",
+      "notFoundTitle": "Ticket introuvable",
+      "notFoundDescription": "Ce ticket n’existe pas ou n’est pas dans votre périmètre.",
+      "disable": "Désactiver le ticket",
+      "disableTitle": "Désactiver le ticket n° {serial} ?",
+      "disableDescription": "Le ticket ne pourra plus servir à se connecter. Cette action est définitive. Une connexion déjà ouverte se termine à sa prochaine vérification.",
+      "reason": "Motif",
+      "disableConfirm": "Désactiver définitivement",
+      "disabledDone": "Ticket désactivé.",
+      "status": "Situation",
+      "state": "État",
+      "created": "Créé le",
+      "activated": "Première utilisation",
+      "notUsed": "Pas encore utilisé",
+      "expires": "Expire le",
+      "lastUsed": "Dernière utilisation",
+      "disabledAt": "Désactivé le",
+      "disabledBy": "Désactivé par",
+      "usage": "Consommation",
+      "price": "Prix",
+      "timeUsed": "Temps utilisé",
+      "timeLeft": "Temps restant",
+      "dataUsed": "Données utilisées",
+      "validity": "Validité",
+      "validityFromFirstUse": "{duration} à partir de la première connexion",
+      "validityLeft": "Encore {duration}",
+      "rate": "Vitesse",
+      "devices": "Appareils simultanés",
+      "unlimited": "illimité",
+      "sessions": "Connexions",
+      "noSessions": "Aucune connexion pour l’instant.",
+      "attempts": "Tentatives récentes",
+      "noAttempts": "Aucune tentative enregistrée.",
+      "accepted": "Accepté",
+      "rejected": "Refusé"
+    },
+    "sessions": {
+      "started": "Début",
+      "router": "Point d’accès",
+      "device": "Appareil",
+      "duration": "Durée",
+      "data": "Données",
+      "end": "Fin",
+      "ongoing": "En cours"
+    },
+    "reasons": {
+      "UNKNOWN": "Refusé : code inconnu",
+      "WRONG_SITE": "Refusé : autre site",
+      "DISABLED": "Refusé : ticket désactivé",
+      "EXPIRED": "Refusé : ticket expiré",
+      "EXHAUSTED": "Refusé : forfait épuisé",
+      "TOO_MANY_DEVICES": "Refusé : trop d’appareils",
+      "INVALID": "Refusé : saisie invalide",
+      "NAS_UNKNOWN": "Refusé : point d’accès inconnu",
+      "AUTH_FAILED": "Refusé : code incorrect"
+    },
+    "printSheet": {
+      "pageTitle": "Impression des tickets",
+      "back": "Retour",
+      "title": "Tickets « {plan} » — {site}",
+      "warning": "Chaque code donne accès à Internet : ne laissez pas traîner les feuilles imprimées et ne partagez pas cette page.",
+      "print": "Imprimer",
+      "onlyAvailable": "Seulement les tickets disponibles",
+      "count": "{count, plural, =0 {Aucun ticket} one {# ticket} other {# tickets}}",
+      "serial": "N° {serial}",
+      "codeLabel": "Code WiFi",
+      "validity": "Valable {duration}",
+      "sessionTime": "{duration} de connexion",
+      "quota": "{volume}",
+      "state": {
+        "AVAILABLE": "Disponible",
+        "ACTIVE": "En cours d’utilisation",
+        "EXHAUSTED": "Épuisé",
+        "EXPIRED": "Expiré",
+        "DISABLED": "Désactivé"
+      }
+    }
+  },
+  "hotspots": {
+    "title": "Hotspots",
+    "subtitle": "Configuration Hotspot de chaque routeur (authentification RADIUS HTTP-CHAP) et état de synchronisation.",
+    "add": "Configurer un hotspot",
+    "createTitle": "Nouveau hotspot",
+    "editTitle": "Modifier le hotspot « {name} »",
+    "create": "Créer le hotspot",
+    "formIntro": "La configuration est appliquée au routeur par ECSI CLOUD (compte de configuration). Un seul hotspot par routeur.",
+    "chooseRouter": "Choisir un routeur",
+    "invalidInterface": "Interface RouterOS invalide (lettres, chiffres, « . », « _ », « - »).",
+    "chapOnly": "Authentification des clients : HTTP-CHAP par RADIUS uniquement (le mot de passe ne circule jamais en clair).",
+    "fields": {
+      "router": "Routeur",
+      "name": "Nom",
+      "interface": "Interface côté clients",
+      "gatewayAddress": "Adresse du routeur (CIDR)",
+      "poolStart": "Début de plage DHCP",
+      "poolEnd": "Fin de plage DHCP",
+      "dnsName": "Nom DNS du portail (facultatif)"
+    },
+    "hints": {
+      "interface": "Interface ou pont RouterOS, ex. ether2 ou bridge-hotspot.",
+      "gatewayAddress": "Réseau privé, masque /16 à /30, ex. 10.5.50.1/24.",
+      "dnsName": "Ex. wifi.example.net (minuscules, au moins deux parties)."
+    },
+    "saved": "Configuration enregistrée : elle sera appliquée au routeur.",
+    "deleteTitle": "Supprimer le hotspot « {name} » ?",
+    "deleteDescription": "La configuration sera retirée du routeur par le worker ; les clients ne pourront plus se connecter par ce hotspot.",
+    "deleteConfirm": "Supprimer le hotspot",
+    "emptyTitle": "Aucun hotspot",
+    "emptyDescription": "Configurez un hotspot sur un routeur enrôlé pour vendre des tickets.",
+    "columns": {
+      "router": "Routeur",
+      "name": "Hotspot",
+      "network": "Réseau",
+      "state": "État voulu",
+      "sync": "Synchronisation",
+      "actions": "Actions"
+    },
+    "desired": {
+      "ENABLED": "Activé",
+      "DISABLED": "Désactivé"
+    },
+    "sync": {
+      "PENDING": "En attente",
+      "APPLYING": "En cours",
+      "SYNCED": "Synchronisé",
+      "ERROR": "Erreur"
+    },
+    "versions": "Version appliquée {applied} / voulue {wanted}",
+    "lastSync": "Dernière synchronisation : {at}",
+    "disable": "Désactiver",
+    "enable": "Activer",
+    "syncNow": "Synchroniser",
+    "done": {
+      "enable": "Hotspot « {name} » activé : en attente d’application.",
+      "disable": "Hotspot « {name} » désactivé : en attente d’application.",
+      "sync": "Nouvelle synchronisation de « {name} » demandée.",
+      "delete": "Hotspot « {name} » supprimé : la configuration sera retirée du routeur."
+    },
+    "access": {
+      "toggle": "Accès de configuration",
+      "routersTitle": "Accès de configuration des routeurs sans hotspot",
+      "routersIntro": "Avant le premier hotspot, autorisez ECSI CLOUD à configurer le routeur (script à coller une fois dans le terminal RouterOS).",
+      "title": "Accès de configuration",
+      "unavailable": "Non disponible",
+      "unavailableDescription": "La gestion de l’accès de configuration n’est pas encore disponible pour ce routeur.",
+      "statuses": {
+        "NONE": "Aucun",
+        "PENDING": "En attente",
+        "ACTIVE": "Actif"
+      },
+      "descriptions": {
+        "NONE": "ECSI CLOUD ne peut pas encore modifier la configuration de ce routeur.",
+        "PENDING": "Script généré : collez-le dans le terminal RouterOS avant son expiration.",
+        "ACTIVE": "ECSI CLOUD peut appliquer la configuration Hotspot sur ce routeur."
+      },
+      "activatedAt": "Activé le {at}",
+      "expiresAt": "Script valable jusqu’au {at}",
+      "generate": "Générer le script d’accès",
+      "regenerate": "Générer un nouveau script",
+      "scriptOnce": "Script affiché une seule fois, à coller dans le terminal RouterOS avant le {expiresAt}. Il contient un secret : ne le partagez pas et ne l’enregistrez pas.",
+      "copy": "Copier le script",
+      "copied": "Copié",
+      "done": "J’ai collé le script"
+    },
+    "sessions": {
+      "title": "Sessions actives",
+      "empty": "Aucune session active.",
+      "voucher": "Ticket",
+      "router": "Routeur",
+      "mac": "Adresse MAC",
+      "ip": "Adresse IP",
+      "started": "Début",
+      "duration": "Durée",
+      "up": "Montant",
+      "down": "Descendant",
+      "serial": "N° {serial}"
+    }
   }
 }

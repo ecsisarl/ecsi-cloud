@@ -47,8 +47,8 @@ export const NAVIGATION: NavGroup[] = [
     items: [
       { key: 'dashboard', href: '/', icon: LayoutDashboard },
       { key: 'sales', href: '/ventes', icon: Receipt, plannedSprint: 'S8' },
-      { key: 'tickets', href: '/tickets', icon: Ticket, plannedSprint: 'S6' },
-      { key: 'plans', href: '/forfaits', icon: CreditCard, plannedSprint: 'S6' },
+      { key: 'tickets', href: '/tickets', icon: Ticket, permission: 'vouchers.read' },
+      { key: 'plans', href: '/forfaits', icon: CreditCard, permission: 'plans.read' },
       { key: 'vendors', href: '/vendeurs', icon: Store, plannedSprint: 'S8' },
       { key: 'clients', href: '/clients', icon: UserSquare2, plannedSprint: 'S7' },
       { key: 'sites', href: '/sites', icon: MapPin, permission: 'sites.read' },
@@ -65,7 +65,7 @@ export const NAVIGATION: NavGroup[] = [
     key: 'network',
     items: [
       { key: 'routers', href: '/reseau/routeurs', icon: Router, permission: 'routers.read' },
-      { key: 'hotspots', href: '/reseau/hotspots', icon: Wifi, plannedSprint: 'S5' },
+      { key: 'hotspots', href: '/reseau/hotspots', icon: Wifi, permission: 'hotspots.read' },
       {
         key: 'monitoring',
         href: '/reseau/monitoring',

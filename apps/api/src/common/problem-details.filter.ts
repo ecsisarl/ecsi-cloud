@@ -56,7 +56,9 @@ export function toProblem(
     type: 'about:blank',
     title: TITLES[status] ?? 'Erreur',
     status,
-    ...(detail && status < 500 ? { detail } : {}),
+    // 503 volontaire (ServiceUnavailableException) : message métier rédigé pour l'utilisateur
+    // (ex. « Clés de tickets non configurées ») ; les autres erreurs 5xx restent muettes.
+    ...(detail && (status < 500 || status === 503) ? { detail } : {}),
     ...(errors ? { errors } : {}),
     ...(instance ? { instance } : {}),
     ...(requestId ? { requestId } : {}),
