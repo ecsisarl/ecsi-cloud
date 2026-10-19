@@ -13,7 +13,11 @@ import { createSecretBox } from '../../auth/secret-box.provider.js';
 import type { GatewayEnv } from '../../config/gateway-env.js';
 import { beat, heartbeatPath } from '../../health/heartbeat.js';
 import { formatIpv4, parseTunnelNetwork } from '../tunnel-ip.js';
-import { ActivationServer, type ActivationStore } from './activation-server.js';
+import {
+  ActivationServer,
+  type ActivationStore,
+  type ConfigActivationStore,
+} from './activation-server.js';
 import { GatewayPeerSync, type GatewayPeerRow } from './peer-sync.js';
 import { execWgClient } from './wg-client.js';
 import { safeError, safeErrorMessage } from '../../common/safe-error.js';
@@ -47,6 +51,38 @@ export function pgActivationStore(pool: pg.Pool): ActivationStore {
     },
     async denied(tunnelIp, reason) {
       await pool.query('select app.router_activation_denied($1::inet, $2)', [tunnelIp, reason]);
+    },
+  };
+}
+
+/** Fonctions de la migration 0009 (compte d'écriture ecsi-cfg), rôle ecsi_worker. */
+export function pgConfigActivationStore(pool: pg.Pool): ConfigActivationStore {
+  return {
+    async target(tunnelIp, tokenHash) {
+      const { rows } = await pool.query<{
+        outcome: 'OK' | 'UNKNOWN_SOURCE' | 'INVALID_TOKEN';
+        router_id: string | null;
+        company_id: string | null;
+      }>('select outcome, router_id, company_id from app.router_config_target($1::inet, $2)', [
+        tunnelIp,
+        tokenHash,
+      ]);
+      const row = rows[0];
+      return {
+        outcome: row?.outcome ?? 'UNKNOWN_SOURCE',
+        routerId: row?.router_id ?? null,
+        companyId: row?.company_id ?? null,
+      };
+    },
+    async activate(input) {
+      const { rows } = await pool.query<{ ok: boolean }>(
+        'select app.router_config_activate($1, $2, $3, $4, $5) as ok',
+        [input.routerId, input.companyId, input.tokenHash, input.username, input.passwordEncrypted],
+      );
+      return rows[0]?.ok === true;
+    },
+    async denied(tunnelIp, reason) {
+      await pool.query('select app.router_config_denied($1::inet, $2)', [tunnelIp, reason]);
     },
   };
 }
@@ -100,6 +136,8 @@ export class GatewayAgent implements OnApplicationBootstrap, OnApplicationShutdo
       createSecretBox(env),
       network,
       log,
+      Date.now,
+      pgConfigActivationStore(pool),
     );
   }
 

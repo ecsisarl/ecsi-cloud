@@ -15,6 +15,12 @@ import { beat, heartbeatPath } from '../../health/heartbeat.js';
 import type { WorkerEnv } from '../../config/worker-env.js';
 import * as schema from '../../database/schema/index.js';
 import { tunnelTransportFactory } from '../routeros/factory.js';
+import { tunnelWriterFactory } from '../routeros/writer.js';
+import { HotspotProvisioner } from '../provisioning/provisioner.js';
+import {
+  HOTSPOT_PROVISIONER,
+  ProvisioningScheduler,
+} from '../provisioning/provisioning.scheduler.js';
 import { parseTunnelNetwork } from '../tunnel-ip.js';
 import { databaseErrorMessage, MonitoringRecorder } from '../../monitoring/recorder.js';
 import { RouterSupervisor } from './supervisor.js';
@@ -196,7 +202,39 @@ export class WorkerModule {
             );
           },
         },
+        {
+          // Lot B : réconciliation Hotspot (compte ecsi-cfg) et entretien RADIUS.
+          provide: HOTSPOT_PROVISIONER,
+          inject: [WORKER_PG_POOL],
+          useFactory: (pool: pg.Pool) => {
+            const network = parseTunnelNetwork(env.ROUTER_TUNNEL_CIDR, env.ROUTER_TUNNEL_GATEWAY);
+            const logger = new Logger('Provisionnement');
+            const db = drizzle(pool, { schema, casing: 'snake_case' });
+            const provisioner = new HotspotProvisioner(
+              db,
+              createSecretBox(env),
+              tunnelWriterFactory(network),
+              network,
+              env.RADIUS_NAS_KEY ?? '',
+              undefined,
+              {
+                log: (m) => {
+                  logger.log(m);
+                },
+                warn: (m) => {
+                  logger.warn(m);
+                },
+              },
+            );
+            return {
+              enabled: Boolean(env.RADIUS_NAS_KEY),
+              runCycle: () => provisioner.runCycle(),
+              housekeeping: () => provisioner.housekeeping(),
+            };
+          },
+        },
         SupervisionScheduler,
+        ProvisioningScheduler,
         WorkerPoolCloser,
       ],
     };

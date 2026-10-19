@@ -64,6 +64,13 @@
       "when": 1792402696388,
       "tag": "0008_hotspot_radius",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1792404136205,
+      "tag": "0009_router_config_accounts",
+      "breakpoints": true
     }
   ]
 }

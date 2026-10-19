@@ -1,5 +1,10 @@
 'use client';
 
+import type {
+  RouterConfigAccess,
+  RouterConfigAccessScript,
+  RouterConfigAccessStatus,
+} from '@ecsi/shared';
 import { Badge, type BadgeTone, Button } from '@ecsi/ui';
 import { Check, Copy, KeyRound } from 'lucide-react';
 import { useFormatter, useTranslations } from 'next-intl';
@@ -9,21 +14,9 @@ import { useProblemMessage } from '@/components/admin/controls';
 import { usePermissions } from '@/components/me-context';
 import { api } from '@/lib/client-api';
 
-/**
- * Contrat du module routeurs (GET / POST /routers/:id/config-access) : mêmes formes que
- * RouterConfigAccess / RouterConfigAccessScript de @ecsi/shared (branche RouterOS) ; à
- * remplacer par l'import partagé lors de la fusion.
- */
-type ConfigAccessStatus = 'NONE' | 'PENDING' | 'ACTIVE';
-interface ConfigAccess {
-  status: ConfigAccessStatus;
-  activatedAt: string | null;
-  expiresAt: string | null;
-}
-interface ConfigAccessScript {
-  script: string;
-  expiresAt: string;
-}
+type ConfigAccessStatus = RouterConfigAccessStatus;
+type ConfigAccess = RouterConfigAccess;
+type ConfigAccessScript = RouterConfigAccessScript;
 
 const TONE: Record<ConfigAccessStatus, BadgeTone> = {
   NONE: 'neutral',

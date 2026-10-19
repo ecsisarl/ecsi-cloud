@@ -17,6 +17,20 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Ver
 - Migration 0008 (non déployée) : `ecsi_app` peut fournir `vouchers.id` (identifiant nécessaire à la dérivation du code avant l'insertion).
 - Réponses d'erreur : le détail d'un 503 volontaire est conservé (« Clés de tickets non configurées »).
 
+## [B4] — 2026-10-19 — Provisionnement RouterOS du Hotspot (non déployé)
+
+### Ajouté
+
+- Compte d'écriture RouterOS `ecsi-cfg` (groupe `ecsi-rw` : `read,write,api,rest-api`), distinct du compte de supervision : migration 0009 `router_config_accounts` (privilèges par colonne, RLS, fonctions `app.router_config_*`), API `GET`/`POST /api/v1/routers/:id/config-access` (permission `routers.command.dangerous`, audit sans jeton), script d'activation, `POST /activate-config` sur l'agent passerelle (par le tunnel uniquement, mot de passe chiffré aussitôt).
+- Transport RouterOS en écriture `RestWriter` (REST HTTPS épinglé, liste blanche stricte des menus, propriétés et valeurs, objets marqués `ecsi-cloud:hs:<id>` ou `ecsi-hs-<id>`, jamais d'écriture sur un objet non marqué).
+- Worker : réconciliation des Hotspots (`hotspots.sync_status`), contrôles préalables (WAN, tunnel, conflits), retrait complet à la désactivation, entretien `radius.housekeeping()` toutes les 5 minutes ; requiert `RADIUS_NAS_KEY`.
+- Laboratoire : deuxième carte Hotspot sur le CHR (`CHR_HOTSPOT=1`), client Hotspot (`lab/routeros/lotb/`), commande `services` de `labo-s3b.sh` ; résultats CHR 7.24.5 : `lab/routeros/resultats/2026-10-19-lot-b-provisioning.md`.
+
+### Modifié
+
+- Script de retrait `ecsi-retrait.rsc` : retire aussi le Hotspot, `ecsi-cfg` et `ecsi-rw`.
+- `rotate-encryption-keys` : ré-enveloppe et contrôle aussi les mots de passe `ecsi-cfg`.
+
 ## [E1] — 2026-10-18 — Monitoring et alertes dans l'application (non déployé)
 
 ### Ajouté

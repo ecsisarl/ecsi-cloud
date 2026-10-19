@@ -178,3 +178,43 @@ export const routerEnrollmentTokens = pgTable(
     check('router_enrollment_tokens_hash_check', sql`octet_length(${t.tokenHash}) = 32`),
   ],
 );
+
+/**
+ * Compte d'écriture RouterOS « ecsi-cfg » (lot B, provisionnement Hotspot), distinct du compte
+ * de supervision. Créé SUR le routeur par le script d'activation configuration (collé par son
+ * administrateur) : mot de passe tiré au hasard par le routeur, reçu par le tunnel et chiffré
+ * par l'agent passerelle (SecretBox, AAD router:<entreprise>:<routeur>:config-password).
+ * Jeton d'activation à usage unique, stocké haché (SHA-256), expirant. Une ligne par routeur.
+ * Droits : migration 0009 (ecsi_app ne lit jamais le chiffré ni l'empreinte du jeton).
+ */
+export const routerConfigAccounts = pgTable(
+  'router_config_accounts',
+  {
+    routerId: uuid('router_id').primaryKey(),
+    companyId: uuid('company_id').notNull(),
+    username: text('username'),
+    passwordEncrypted: text('password_encrypted'),
+    activatedAt: timestamp('activated_at', { withTimezone: true }),
+    tokenHash: bytea('token_hash'),
+    tokenExpiresAt: timestamp('token_expires_at', { withTimezone: true }),
+    tokenCreatedBy: uuid('token_created_by'),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    foreignKey({
+      name: 'router_config_accounts_router_fk',
+      columns: [t.companyId, t.routerId],
+      foreignColumns: [routers.companyId, routers.id],
+    }).onDelete('cascade'),
+    uniqueIndex('router_config_accounts_token_hash_key').on(t.tokenHash),
+    check(
+      'router_config_accounts_token_check',
+      sql`(${t.tokenHash} is null) = (${t.tokenExpiresAt} is null) and (${t.tokenHash} is null or octet_length(${t.tokenHash}) = 32)`,
+    ),
+    check(
+      'router_config_accounts_password_check',
+      sql`(${t.passwordEncrypted} is null) = (${t.activatedAt} is null) and (${t.passwordEncrypted} is null) = (${t.username} is null) and (${t.passwordEncrypted} is null or ${t.passwordEncrypted} like 'v2:%') and (${t.username} is null or ${t.username} ~ '^[A-Za-z0-9._-]{1,64}$')`,
+    ),
+  ],
+);

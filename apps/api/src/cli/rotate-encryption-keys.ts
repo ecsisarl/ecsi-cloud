@@ -14,8 +14,9 @@
  * Variables : ENCRYPTION_KEY / ENCRYPTION_KEY_ID (clé ACTIVE, la nouvelle) et
  * ENCRYPTION_PREVIOUS_KEYS (anciennes clés, id:base64,…) ; DATABASE_MIGRATOR_URL (propriétaire
  * des tables : voit tous les routeurs, y compris supprimés ; contrôle et mots de passe
- * RouterOS) ; DATABASE_AUTH_URL (secrets 2FA, rôle ecsi_auth) ; DATABASE_WORKER_URL (repli
- * pour les mots de passe RouterOS sans DATABASE_MIGRATOR_URL : routeurs actifs seulement).
+ * RouterOS, y compris ceux du compte ecsi-cfg du lot B) ; DATABASE_AUTH_URL (secrets 2FA,
+ * rôle ecsi_auth) ; DATABASE_WORKER_URL (repli pour les mots de passe RouterOS sans
+ * DATABASE_MIGRATOR_URL : routeurs actifs seulement, comptes ecsi-cfg non traités).
  *
  * Chaque secret est ré-enveloppé avec la clé active seulement s'il se déchiffre avant ET
  * après, à l'identique (SecretBox.rewrapVerified) ; l'écriture est conditionnelle (un secret
@@ -42,7 +43,11 @@ import {
   verifyEncryptionKeys,
 } from '../auth/key-verification.js';
 import { KEY_ID_PATTERN, parseKeyList, SecretBox } from '../auth/crypto/secret-box.js';
-import { type RouterRotationReport, rotateRouterSecrets } from '../routers/router-secret.js';
+import {
+  type RouterRotationReport,
+  rotateRouterConfigSecrets,
+  rotateRouterSecrets,
+} from '../routers/router-secret.js';
 import { safeErrorMessage } from '../common/safe-error.js';
 
 const { values } = parseArgs({
@@ -124,6 +129,7 @@ async function rotate(url: string): Promise<boolean> {
     `Clé active : ${box.activeKeyId} (clés connues : ${box.keyIds.join(', ')})${dryRun ? ' — SIMULATION, rien n’est écrit' : ''}`,
   ]);
   let routerReport: RouterRotationReport | null = null;
+  let configReport: RouterRotationReport | null = null;
   const routersUrl = migratorUrl ?? config.DATABASE_WORKER_URL;
   if (routersUrl) {
     const routersPool = pool(routersUrl);
@@ -137,6 +143,18 @@ async function rotate(url: string): Promise<boolean> {
             process.stderr.write(`Routeur ${id} : ${safeErrorMessage(error)}\n`),
         },
       );
+      // Compte d'écriture ecsi-cfg (lot B) : propriétaire de la table seulement.
+      if (migratorUrl) {
+        configReport = await rotateRouterConfigSecrets(
+          drizzle(routersPool, { casing: 'snake_case' }),
+          box,
+          {
+            dryRun,
+            onError: (id, error) =>
+              process.stderr.write(`Routeur ${id} (ecsi-cfg) : ${safeErrorMessage(error)}\n`),
+          },
+        );
+      }
     } finally {
       await routersPool.end();
     }
@@ -154,8 +172,16 @@ async function rotate(url: string): Promise<boolean> {
       routerReport
         ? `Mots de passe RouterOS : ${routerReport.total} au total, ${routerReport.rewrapped} ${verb}, ${routerReport.skipped} modifiés pendant la rotation, ${routerReport.failed} en échec${migratorUrl ? '' : ' (routeurs actifs seulement : DATABASE_MIGRATOR_URL absent)'}.`
         : 'Mots de passe RouterOS : non traités (DATABASE_MIGRATOR_URL et DATABASE_WORKER_URL absents).',
+      configReport
+        ? `Mots de passe ecsi-cfg : ${configReport.total} au total, ${configReport.rewrapped} ${verb}, ${configReport.skipped} modifiés pendant la rotation, ${configReport.failed} en échec.`
+        : 'Mots de passe ecsi-cfg : non traités (DATABASE_MIGRATOR_URL absent).',
     ]);
-    return report.failed === 0 && (routerReport?.failed ?? 0) === 0 && routerReport !== null;
+    return (
+      report.failed === 0 &&
+      (routerReport?.failed ?? 0) === 0 &&
+      (configReport?.failed ?? 0) === 0 &&
+      routerReport !== null
+    );
   } finally {
     await authPool.end();
   }

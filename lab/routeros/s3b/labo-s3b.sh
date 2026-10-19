@@ -14,7 +14,7 @@
 # (pnpm --filter @ecsi/api build), Docker. Secrets générés au premier « up » dans
 # $STATE/s3b (0600, ignoré par Git), jamais affichés.
 #
-# Usage : sudo ./labo-s3b.sh up | down
+# Usage : sudo ./labo-s3b.sh up | services | down   (services : redémarrage sans la base)
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/../../.." && pwd)"
@@ -25,14 +25,24 @@ ns() { ip netns exec "$1" "${@:2}"; }
 
 secrets() {
   mkdir -p "$S3B" && chmod 700 "$S3B"
-  [[ -f "$S3B/env" ]] && return
   rnd() { openssl rand -hex 24; }
+  # Lot B : rôle ecsi_radius (exigé par la migration 0008) et clé RADIUS_NAS_KEY du worker,
+  # ajoutés à un fichier d'un labo antérieur.
+  if [[ -f "$S3B/env" ]]; then
+    (
+      umask 077
+      grep -q '^PGR=' "$S3B/env" || echo "PGR=$(rnd)" >>"$S3B/env"
+      grep -q '^NAS=' "$S3B/env" || echo "NAS=$(openssl rand -hex 32)" >>"$S3B/env"
+    )
+    return
+  fi
   (
     umask 077
     {
       echo "PGM=$(rnd)"; echo "PGA=$(rnd)"; echo "PGU=$(rnd)"; echo "PGW=$(rnd)"
       echo "PGS=$(rnd)"; echo "RDS=$(rnd)"; echo "JWT=$(rnd)$(rnd)"
       echo "KEY=$(openssl rand -base64 32)"
+      echo "PGR=$(rnd)"; echo "NAS=$(openssl rand -hex 32)"
     } >"$S3B/env"
     rnd >"$S3B/seed.pass"
   )
@@ -47,6 +57,7 @@ up() {
     -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD="$PGS" -e POSTGRES_DB=ecsi \
     -e ECSI_DB_MIGRATOR_PASSWORD="$PGM" -e ECSI_DB_APP_PASSWORD="$PGA" \
     -e ECSI_DB_AUTH_PASSWORD="$PGU" -e ECSI_DB_WORKER_PASSWORD="$PGW" \
+    -e ECSI_DB_RADIUS_PASSWORD="$PGR" \
     -v "$ROOT/infra/postgres/init:/docker-entrypoint-initdb.d:ro" postgres:18-alpine >/dev/null
   docker run -d --name ecsi-s3b-redis -p 16379:6379 redis:8-alpine \
     redis-server --requirepass "$RDS" >/dev/null
@@ -56,6 +67,21 @@ up() {
   done
   sleep 3
 
+  local db="postgres://%s:%s@%s:15432/ecsi"
+  export NODE_ENV=development LOG_LEVEL=info
+  export DATABASE_MIGRATOR_URL
+  DATABASE_MIGRATOR_URL="$(printf "$db" ecsi_migrator "$PGM" 127.0.0.1)"
+  SEED_PASSWORD="$(cat "$S3B/seed.pass")" node "$API/dist/database/migrate.js" >"$S3B/migrate.log" 2>&1
+  SEED_PASSWORD="$(cat "$S3B/seed.pass")" node "$API/dist/database/seed.js" >"$S3B/seed.log" 2>&1
+  services
+}
+
+# (Re)démarre l'API, le front HTTPS, l'agent passerelle et le worker SANS toucher à la base :
+# après une recompilation (lot B), le routeur enrôlé et la base sont conservés.
+services() {
+  # shellcheck disable=SC1091
+  source "$S3B/env"
+  stop_services
   # Liens hôte <-> namespaces (le labo simulé n'a pas d'accès à l'hôte).
   ip link del s3b-cloud 2>/dev/null || true
   ip link del s3b-gw 2>/dev/null || true
@@ -68,10 +94,6 @@ up() {
 
   local db="postgres://%s:%s@%s:15432/ecsi"
   export NODE_ENV=development LOG_LEVEL=info
-  export DATABASE_MIGRATOR_URL
-  DATABASE_MIGRATOR_URL="$(printf "$db" ecsi_migrator "$PGM" 127.0.0.1)"
-  SEED_PASSWORD="$(cat "$S3B/seed.pass")" node "$API/dist/database/migrate.js" >"$S3B/migrate.log" 2>&1
-  SEED_PASSWORD="$(cat "$S3B/seed.pass")" node "$API/dist/database/seed.js" >"$S3B/seed.log" 2>&1
 
   local gw_public
   gw_public="$(cat "$STATE/gw/public")"
@@ -89,17 +111,17 @@ up() {
       ROUTER_ENROLL_PUBLIC_URL=https://203.0.113.30:8443/api/v1/routers/enroll \
       ROUTER_ENROLL_CA_URL=https://203.0.113.30:8443/ca.pem ROUTER_ENROLL_CA_FINGERPRINT="$ca_fp" \
       WG_GATEWAY_PUBLIC_KEY="$gw_public" WG_GATEWAY_ENDPOINT=203.0.113.10 WG_GATEWAY_PORT=51820 \
-      setsid node "$API/dist/main.js" >"$S3B/api.log" 2>&1 &
+      setsid node "$API/dist/main.js" >>"$S3B/api.log" 2>&1 &
   )
   ns cloud setsid node "$HERE/front-https.mjs" "$STATE/pki" 10.99.0.1 14000 203.0.113.30 8443 \
-    >"$S3B/front.log" 2>&1 &
+    >>"$S3B/front.log" 2>&1 &
   (
     export DATABASE_WORKER_URL
     DATABASE_WORKER_URL="$(printf "$db" ecsi_worker "$PGW" 10.99.1.1)"
     export ENCRYPTION_KEY="$KEY" ENCRYPTION_KEY_ID=k2
     WG_INTERFACE=wg-gw GATEWAY_SYNC_INTERVAL_SECONDS=3 \
-      ns gw setsid node "$API/dist/gateway.js" >"$S3B/gateway.log" 2>&1 &
-    ROUTER_POLL_INTERVAL_SECONDS=15 ns gw setsid node "$API/dist/worker.js" >"$S3B/worker.log" 2>&1 &
+      ns gw setsid node "$API/dist/gateway.js" >>"$S3B/gateway.log" 2>&1 &
+    RADIUS_NAS_KEY="$NAS" ROUTER_POLL_INTERVAL_SECONDS=15 ns gw setsid node "$API/dist/worker.js" >>"$S3B/worker.log" 2>&1 &
   )
   for _ in $(seq 60); do
     curl -sf http://127.0.0.1:14000/api/v1/health >/dev/null 2>&1 && break
@@ -108,11 +130,16 @@ up() {
   echo "API, front HTTPS, agent passerelle et worker démarrés (journaux : $S3B/*.log)"
 }
 
-down() {
+stop_services() {
   pkill -f "$API/dist/main.js" 2>/dev/null || true
   pkill -f "$API/dist/gateway.js" 2>/dev/null || true
   pkill -f "$API/dist/worker.js" 2>/dev/null || true
   pkill -f "$HERE/front-https.mjs" 2>/dev/null || true
+  sleep 1
+}
+
+down() {
+  stop_services
   ip link del s3b-cloud 2>/dev/null || true
   ip link del s3b-gw 2>/dev/null || true
   docker rm -f ecsi-s3b-pg ecsi-s3b-redis >/dev/null 2>&1 || true
@@ -120,6 +147,7 @@ down() {
 
 case "${1:-}" in
   up) up ;;
+  services) services ;;
   down) down ;;
-  *) echo "usage: $0 up | down" >&2; exit 1 ;;
+  *) echo "usage: $0 up | services | down" >&2; exit 1 ;;
 esac

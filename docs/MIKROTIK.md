@@ -235,6 +235,49 @@ Garde-fou : si le routeur porte encore une configuration ECSI CLOUD dont l'adres
 
 Résultats sur CHR 7.24.5 : [`resultats/2026-10-04-S3B-chr-enrolement-ecsi-cloud.md`](../lab/routeros/resultats/2026-10-04-S3B-chr-enrolement-ecsi-cloud.md), régression S3B-RC2 : [`resultats/2026-10-05-S3B-RC2-chr-regression.md`](../lab/routeros/resultats/2026-10-05-S3B-RC2-chr-regression.md).
 
+## Provisionnement Hotspot (lot B)
+
+Code : `apps/api/src/routers/routeros/writer.ts` (transport d'écriture), `apps/api/src/routers/provisioning/` (configuration voulue, réconciliation, worker), `config-access-script.ts` et `config-access.service.ts` (compte ecsi-cfg), migration 0009. Résultats sur CHR 7.24.5 : [`resultats/2026-10-19-lot-b-provisioning.md`](../lab/routeros/resultats/2026-10-19-lot-b-provisioning.md).
+
+### Compte d'écriture ecsi-cfg
+
+Décision du propriétaire : un compte **séparé** ; le compte de supervision `ecsi-svc` (`read,api,rest-api`) n'est jamais élevé.
+
+1. `POST /api/v1/routers/:id/config-access` (permission `routers.command.dangerous`, routeur enrôlé et activé) renvoie `{script, expiresAt}` : jeton de 256 bits à usage unique (empreinte SHA-256 seule en base, durée `ROUTER_ENROLL_TOKEN_TTL_MINUTES`), audit `routers.config_access.create` sans jeton ni script. `GET` renvoie `{status: NONE | PENDING | ACTIVE, activatedAt, expiresAt}`.
+2. Le script, collé dans le terminal du routeur, vérifie d'abord que le routeur est enrôlé auprès de **cette** instance (interface `ecsi-wg`, adresse tunnel, clé de la passerelle, compte `ecsi-svc`) et s'arrête sans rien modifier sinon ; il crée ou remet à jour le groupe `ecsi-rw` (`read,write,api,rest-api`) et le compte `ecsi-cfg` restreint à `10.200.0.1/32`, avec un mot de passe tiré **par le routeur** (`:rndstr`).
+3. Le mot de passe part **uniquement par le tunnel** vers l'agent passerelle (`POST http://10.200.0.1:8081/activate-config`), qui identifie le routeur par l'adresse source ET le jeton, chiffre aussitôt (SecretBox, AAD `router:<entreprise>:<routeur>:config-password`, distincte de celle de ecsi-svc) et enregistre par `app.router_config_activate` (audit `router.config_access.activated` ; refus audités `router.config_access.activation`). Jeton refusé : le script retire `ecsi-cfg` et s'arrête. Relancer un nouveau script remplace le mot de passe.
+4. Privilèges (migration 0009) : `ecsi_app` ne lit jamais le chiffré ni l'empreinte du jeton ; `ecsi_worker` lit le chiffré des seuls routeurs actifs non `PROVISIONING`, sans aucun droit d'écriture ; la rotation des clés (`rotate-encryption-keys`) ré-enveloppe aussi ces mots de passe et les compte dans le verdict de retrait.
+
+Politiques (page **User**, `help.mikrotik.com/docs/spaces/ROS/pages/8978504`) : `write` donne l'écriture de la configuration « except for user management » ; `policy` (gestion des comptes) et `sensitive` (affichage des valeurs sensibles) ne sont **pas** accordées. Constat CHR 7.24.5 : l'écriture de `secret` sur `/radius` réussit sans `sensitive`, mais ecsi-cfg ne le relit pas ; il est donc réaffirmé à chaque synchronisation.
+
+### Objets écrits
+
+Transport : REST HTTPS seulement (page **REST API**, `pages/47579162` : `GET` liste avec `.proplist`, `PUT` = add, `PATCH` = set, `DELETE` = remove), même épinglage TLS et même validation d'adresse tunnel que la lecture. Ordre d'application (retrait dans l'ordre inverse) :
+
+| Menu                      | Propriétés écrites (valeurs imposées en gras)                                                                                                                                                                                                                      | Documentation (`help.mikrotik.com/docs/spaces/ROS/pages/…`) |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------- |
+| `/ip/address`             | `address` (adresse du Hotspot/nn), `interface`, `comment`                                                                                                                                                                                                          | IP Addressing (vérifié sur CHR)                             |
+| `/ip/pool`                | `name`, `ranges`, `comment`                                                                                                                                                                                                                                        | IP Pools, `129531938`                                       |
+| `/ip/dhcp-server/network` | `address` (réseau), `gateway`, `dns-server` (adresse du Hotspot), `comment`                                                                                                                                                                                        | DHCP, `24805500`                                            |
+| `/ip/dhcp-server`         | `name`, `interface`, `address-pool`, **`disabled=no`**, `comment`                                                                                                                                                                                                  | DHCP, `24805500`                                            |
+| `/radius`                 | **`service=hotspot`**, `address` = passerelle tunnel, `src-address` = adresse tunnel du routeur, `secret` (dérivé, jamais stocké), **1812 / 1813**, **`protocol=udp`**, `comment` ; `require-message-auth` contrôlé (**`yes-for-request-resp`**, défaut documenté) | RADIUS, `328097`                                            |
+| `/ip/hotspot/profile`     | `name`, `hotspot-address`, `dns-name`, **`use-radius=yes`**, **`radius-accounting=yes`**, **`radius-interim-update=received`**, **`login-by=http-chap`**                                                                                                           | HotSpot, `56459266`                                         |
+| `/ip/hotspot`             | `name`, `interface`, `address-pool`, `profile`, **`addresses-per-mac=2`**, **`disabled=no`**                                                                                                                                                                       | HotSpot, `56459266`                                         |
+| `/ip/firewall/nat`        | **`chain=srcnat action=masquerade`**, `src-address` = réseau du Hotspot, **`out-interface=!ecsi-wg`**, `comment` ; seulement si aucune masquerade générale n'existe                                                                                                | NAT (même syntaxe que Filter, vérifié sur CHR)              |
+| `/ip/firewall/filter`     | **`chain=forward action=drop`**, `src-address` = réseau du Hotspot, **`out-interface=ecsi-wg`**, `comment`                                                                                                                                                         | Filter, `48660574`                                          |
+
+Le secret RADIUS est `nasSecret(RADIUS_NAS_KEY, routeur, nas_secret_version)` (40 hex) : recalculé à chaque passage, jamais en base ni dans un journal. CHAP seulement (décision du propriétaire) : jamais `http-pap`, `cookie`, `mac-cookie` ni `trial`. CoA / Disconnect différés : ni `/radius/incoming`, ni règle de pare-feu associée.
+
+### Garanties par construction
+
+- **Liste blanche** du transport d'écriture : menus ci-dessus seulement (aucun `/user`, `/ip/service`, `/interface/wireguard`, `/system/script`, `/execute`) ; chaque propriété est dans la liste du menu et sa valeur passe une expression stricte ou une valeur fixe, contrôlées **avant** l'envoi ; aucune adresse de la plage tunnel ne peut être posée, servie ou traduite ; `ecsi-wg` ne peut porter ni adresse, ni DHCP, ni Hotspot.
+- **Propriété** : chaque objet créé porte `comment=ecsi-cloud:hs:<identifiant du Hotspot>` ; `/ip/hotspot` et `/ip/hotspot/profile` n'acceptent pas `comment` sur 7.24.5 (« bad parameter comment ») et portent le nom réservé `ecsi-hs-<12 hex>`. `set` et `remove` relisent l'objet et refusent s'il ne porte pas la marque : un objet que nous n'avons pas créé n'est jamais modifié ni supprimé.
+- **Contrôles préalables** (rien n'est écrit en cas d'échec, Hotspot en `ERROR` avec un message lisible) : interface absente, WireGuard, ou portant la route par défaut (WAN) ; adresse d'un autre propriétaire sur l'interface ou réseau chevauchant une adresse existante (dont le tunnel) ; serveur DHCP ou Hotspot existant sur l'interface ; client RADIUS `hotspot` d'un autre propriétaire ; nom réservé déjà pris.
+- **Réconciliation** : seules les différences sont écrites, doublons étiquetés retirés, relecture de confirmation ; un Hotspot désactivé ou supprimé est entièrement retiré. Un seul job par routeur (`FOR UPDATE … SKIP LOCKED`), nouvelle tentative après 5 min en `ERROR`, job abandonné repris après 10 min ; `last_error` nettoyé de tout secret. Le worker exécute aussi `radius.housekeeping()` toutes les 5 minutes.
+- RouterOS ajoute lui-même deux règles désactivées `place hotspot rules here` (filtre et NAT) au premier Hotspot : elles ne nous appartiennent pas et restent en place.
+
+Retrait complet : `ecsi-retrait.rsc` retire aussi les objets du Hotspot, `ecsi-cfg` et `ecsi-rw`, avant le reste de la configuration ECSI CLOUD.
+
 ## Paliers de montée en charge
 
 | Palier       | Objectif                                       | Critère de passage                                                |

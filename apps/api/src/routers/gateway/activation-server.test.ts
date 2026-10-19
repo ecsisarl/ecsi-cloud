@@ -4,9 +4,16 @@ import { createServer, type Server } from 'node:http';
 import { PassThrough } from 'node:stream';
 import { describe, expect, it } from 'vitest';
 import { SecretBox } from '../../auth/crypto/secret-box.js';
-import { decryptRouterPassword } from '../router-secret.js';
+import { decryptRouterConfigPassword, decryptRouterPassword } from '../router-secret.js';
 import { parseTunnelNetwork } from '../tunnel-ip.js';
-import { ActivationServer, type ActivationStore, parseActivation } from './activation-server.js';
+import {
+  ActivationServer,
+  type ActivationStore,
+  type ConfigActivationStore,
+  hashConfigToken,
+  parseActivation,
+  parseConfigActivation,
+} from './activation-server.js';
 
 const network = parseTunnelNetwork('10.200.0.0/24', '10.200.0.1');
 const box = new SecretBox(randomBytes(32).toString('base64'), { id: 'k2' });
@@ -167,5 +174,128 @@ describe('activation par le tunnel (agent passerelle)', () => {
       await server.close();
       await new Promise((resolve) => squatter.close(resolve));
     }
+  });
+});
+
+describe('activation du compte de configuration ecsi-cfg (lot B)', () => {
+  const TOKEN = 'T'.repeat(43);
+  const CFG_PASSWORD = 'devonly-motdepasse-cfg-0123456789ab';
+  const config = { token: TOKEN, user: 'ecsi-cfg', password: CFG_PASSWORD };
+
+  /** Imite app.router_config_target / activate : jeton lié à une adresse source, usage unique. */
+  function fakeConfigStore(source: string, token: string) {
+    let tokenHash: Buffer | null = hashConfigToken(token);
+    const activated: Parameters<ConfigActivationStore['activate']>[0][] = [];
+    const denied: string[] = [];
+    const store: ConfigActivationStore = {
+      target: (ip, hash) => {
+        if (ip !== source) {
+          return Promise.resolve({ outcome: 'UNKNOWN_SOURCE', routerId: null, companyId: null });
+        }
+        if (!tokenHash?.equals(hash)) {
+          return Promise.resolve({ outcome: 'INVALID_TOKEN', routerId: null, companyId: null });
+        }
+        return Promise.resolve({ outcome: 'OK', ...ROUTER });
+      },
+      activate: (input) => {
+        activated.push(input);
+        const ok = tokenHash?.equals(input.tokenHash) ?? false;
+        tokenHash = null;
+        return Promise.resolve(ok);
+      },
+      denied: (ip, reason) => {
+        denied.push(`${ip} ${reason}`);
+        return Promise.resolve();
+      },
+    };
+    return { store, activated, denied };
+  }
+
+  const server = (configStore: ConfigActivationStore | null, warn?: (m: string) => void) =>
+    new ActivationServer(
+      fakeStore({}).store,
+      box,
+      network,
+      { log: () => undefined, warn: warn ?? (() => undefined) },
+      Date.now,
+      configStore,
+    );
+
+  it('chiffre le mot de passe pour CE routeur (AAD distincte de ecsi-svc), jeton à usage unique', async () => {
+    const f = fakeConfigStore('10.200.0.3', TOKEN);
+    const s = server(f.store);
+    const response = await call(s, '::ffff:10.200.0.3', config, { url: '/activate-config' });
+    expect(response.status).toBe(200);
+    expect(response.payload).not.toContain(CFG_PASSWORD);
+    const [input] = f.activated;
+    expect(input?.username).toBe('ecsi-cfg');
+    expect(input?.tokenHash.equals(hashConfigToken(TOKEN))).toBe(true);
+    expect(input?.passwordEncrypted).toMatch(/^v2:k2:/);
+    expect(decryptRouterConfigPassword(box, ROUTER, input?.passwordEncrypted ?? '')).toBe(
+      CFG_PASSWORD,
+    );
+    // Le chiffré du compte d'écriture n'est pas utilisable comme mot de passe ecsi-svc.
+    expect(() => decryptRouterPassword(box, ROUTER, input?.passwordEncrypted ?? '')).toThrow();
+    // Rejeu du même script : refusé.
+    expect((await call(s, '10.200.0.3', config, { url: '/activate-config' })).status).toBe(409);
+    expect(f.denied).toEqual(['10.200.0.3 INVALID_TOKEN']);
+  });
+
+  it('jeton d’un autre routeur ou source inconnue : 409, rien activé, rien journalisé du secret', async () => {
+    const warnings: string[] = [];
+    const f = fakeConfigStore('10.200.0.3', TOKEN);
+    const s = server(f.store, (m) => warnings.push(m));
+    expect((await call(s, '10.200.0.4', config, { url: '/activate-config' })).status).toBe(409);
+    expect(
+      (
+        await call(
+          s,
+          '10.200.0.3',
+          { ...config, token: 'U'.repeat(43) },
+          { url: '/activate-config' },
+        )
+      ).status,
+    ).toBe(409);
+    expect(f.activated).toEqual([]);
+    expect(f.denied).toEqual(['10.200.0.4 UNKNOWN_SOURCE', '10.200.0.3 INVALID_TOKEN']);
+    expect(warnings.join('\n')).not.toContain(CFG_PASSWORD);
+    expect(warnings.join('\n')).not.toContain(TOKEN);
+  });
+
+  it('source hors tunnel refusée, corps strict', async () => {
+    const f = fakeConfigStore('203.0.113.7', TOKEN);
+    const s = server(f.store);
+    expect((await call(s, '203.0.113.7', config, { url: '/activate-config' })).status).toBe(403);
+    for (const body of [
+      { ...config, user: 'ecsi-svc' },
+      { ...config, user: 'admin' },
+      { ...config, token: 'court' },
+      { ...config, password: 'court' },
+      { ...config, password: `${CFG_PASSWORD}\r` },
+      { ...config, extra: true },
+    ]) {
+      expect(parseConfigActivation(body)).toBeNull();
+    }
+    expect(parseConfigActivation(config)).toEqual({
+      token: TOKEN,
+      username: 'ecsi-cfg',
+      password: CFG_PASSWORD,
+    });
+    expect(f.activated).toEqual([]);
+  });
+
+  it('corps invalide : 400 et refus journalisé en base', async () => {
+    const f = fakeConfigStore('10.200.0.3', TOKEN);
+    const s = server(f.store);
+    expect(
+      (await call(s, '10.200.0.3', { ...config, user: 'admin' }, { url: '/activate-config' }))
+        .status,
+    ).toBe(400);
+    expect(f.denied).toEqual(['10.200.0.3 INVALID_BODY']);
+  });
+
+  it('agent sans le lot B (pas de magasin) : /activate-config inexistant', async () => {
+    const s = server(null);
+    expect((await call(s, '10.200.0.3', config, { url: '/activate-config' })).status).toBe(404);
   });
 });
