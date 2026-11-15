@@ -4,7 +4,30 @@ import createNextIntlPlugin from 'next-intl/plugin';
 
 const withNextIntl = createNextIntlPlugin('./src/i18n/request.ts');
 
+/**
+ * CSP du dashboard (build de production : `next build`, donc aussi l'image Docker).
+ * Next.js insère des scripts en ligne (amorçage, flight data) : 'unsafe-inline' reste nécessaire
+ * sans nonce par requête. La politique bloque néanmoins tout script, style, image, police ou
+ * connexion venant d'une autre origine, les plugins, l'encadrement et les formulaires externes.
+ * `pnpm dev` (HMR : eval + websocket) n'en reçoit pas.
+ */
+const contentSecurityPolicy = [
+  "default-src 'self'",
+  "script-src 'self' 'unsafe-inline'",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: blob:",
+  "font-src 'self' data:",
+  "connect-src 'self'",
+  "object-src 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+  "frame-ancestors 'none'",
+].join('; ');
+
 const securityHeaders = [
+  ...(process.env.NODE_ENV === 'development'
+    ? []
+    : [{ key: 'Content-Security-Policy', value: contentSecurityPolicy }]),
   { key: 'X-Content-Type-Options', value: 'nosniff' },
   { key: 'X-Frame-Options', value: 'DENY' },
   { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },

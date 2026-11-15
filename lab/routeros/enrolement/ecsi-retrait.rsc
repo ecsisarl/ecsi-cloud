@@ -4,6 +4,16 @@
 # commentees "ecsi-cloud" sont retirees. Cote cloud, le pair est retire de la passerelle
 # (etat REVOKED) : sans lui, plus aucun trafic ne passe, meme si ce script n'est pas execute.
 {
+/ip/hotspot/remove [find where name~"^ecsi-hs-"]
+/ip/hotspot/profile/remove [find where name~"^ecsi-hs-"]
+/ip/firewall/nat/remove [find where comment~"^ecsi-cloud:hs:"]
+/radius/remove [find where comment~"^ecsi-cloud:hs:"]
+/ip/dhcp-server/remove [find where comment~"^ecsi-cloud:hs:"]
+/ip/dhcp-server/network/remove [find where comment~"^ecsi-cloud:hs:"]
+/ip/pool/remove [find where comment~"^ecsi-cloud:hs:"]
+/ip/address/remove [find where comment~"^ecsi-cloud:hs:"]
+/user/remove [find where name="ecsi-cfg"]
+/user/group/remove [find where name="ecsi-rw"]
 /user/remove [find where name="ecsi-svc"]
 /user/group/remove [find where name="ecsi-ro"]
 :local ver [/system/resource/get version]

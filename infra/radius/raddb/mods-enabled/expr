@@ -1,0 +1,4 @@
+# %{tolower:…}, %{md5:…}, %{hmacsha1:&donnée &clé}.
+expr {
+	safe_characters = "@abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.-_: /"
+}

@@ -37,6 +37,8 @@ export interface ApiOptions {
   body?: unknown;
   /** false pour les routes publiques (connexion…) : pas de rafraîchissement automatique. */
   retryOnUnauthorized?: boolean;
+  /** « no-store » pour une réponse sensible (impression des tickets) : jamais en cache. */
+  cache?: RequestCache;
 }
 
 export async function api<T = unknown>(
@@ -53,6 +55,7 @@ export async function api<T = unknown>(
       method,
       headers,
       credentials: 'same-origin',
+      ...(options.cache ? { cache: options.cache } : {}),
       ...(options.body !== undefined ? { body: JSON.stringify(options.body) } : {}),
     });
   };
@@ -87,10 +90,27 @@ export async function api<T = unknown>(
   };
 }
 
-/** Navigation interne sûre après connexion : uniquement un chemin relatif du dashboard. */
+/** Origine fictive servant uniquement à résoudre `next` comme le ferait le navigateur. */
+const NEXT_BASE = 'https://ecsi.invalid';
+
+/**
+ * Navigation interne sûre après connexion : uniquement un chemin relatif du dashboard.
+ * Le navigateur retire tabulations et retours à la ligne et lit « \\ » comme « / » :
+ * `/\t/hote` ou `/\\hote` deviendraient `//hote` (autre site). On refuse donc tout caractère
+ * de contrôle ou antislash, puis on vérifie que la résolution reste sur la même origine.
+ */
 export function safeNextPath(next: string | null | undefined): string {
-  if (!next || !next.startsWith('/') || next.startsWith('//') || next.startsWith('/\\')) return '/';
-  return next;
+  if (!next || !next.startsWith('/') || next.length > 2048) return '/';
+  // eslint-disable-next-line no-control-regex -- refus volontaire des caractères de contrôle
+  if (/[\u0000-\u001f\u007f\\]/.test(next)) return '/';
+  let url: URL;
+  try {
+    url = new URL(next, NEXT_BASE);
+  } catch {
+    return '/';
+  }
+  if (url.origin !== NEXT_BASE || url.pathname.startsWith('//')) return '/';
+  return `${url.pathname}${url.search}${url.hash}`;
 }
 
 /**

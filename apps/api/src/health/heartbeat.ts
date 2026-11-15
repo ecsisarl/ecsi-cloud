@@ -1,6 +1,7 @@
 import { readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { safeErrorMessage } from '../common/safe-error.js';
 
 /**
  * Battement de cœur des processus sans serveur HTTP (worker de supervision, agent
@@ -34,9 +35,7 @@ export function beat(path: string, logger: { warn: (message: string) => void }):
   try {
     writeHeartbeat(path);
   } catch (error) {
-    logger.warn(
-      `Battement de cœur non écrit (${path}) : ${error instanceof Error ? error.message : String(error)}`,
-    );
+    logger.warn(`Battement de cœur non écrit (${path}) : ${safeErrorMessage(error)}`);
   }
 }
 

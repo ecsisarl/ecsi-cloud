@@ -9,8 +9,9 @@ import {
   StatCard,
 } from '@ecsi/ui';
 import type { HealthStatus } from '@ecsi/shared';
-import { Activity, AlertTriangle, Banknote, Router, Ticket, Users, Wallet } from 'lucide-react';
+import { Activity, Banknote, Ticket, Users, Wallet } from 'lucide-react';
 import { getTranslations } from 'next-intl/server';
+import { MonitoringKpis } from '@/components/monitoring/monitoring-kpis';
 import { PageHeader } from '@/components/page-header';
 import { fetchHealth } from '@/lib/api';
 
@@ -28,13 +29,12 @@ export default async function DashboardPage() {
   const health = await fetchHealth();
 
   // Aucun chiffre n'est simulé : chaque indicateur affiche « — » jusqu'à la livraison de son module.
+  // Routeurs en ligne et alertes ouvertes : supervision (lot E1), MonitoringKpis.
   const kpis = [
     { key: 'revenueToday', icon: <Banknote className="size-5" />, sprint: '9' },
     { key: 'revenueMonth', icon: <Wallet className="size-5" />, sprint: '9' },
     { key: 'ticketsSold', icon: <Ticket className="size-5" />, sprint: '8' },
     { key: 'connectedClients', icon: <Users className="size-5" />, sprint: '7' },
-    { key: 'routersOnline', icon: <Router className="size-5" />, sprint: '4' },
-    { key: 'openAlerts', icon: <AlertTriangle className="size-5" />, sprint: '4' },
   ] as const;
 
   return (
@@ -51,6 +51,7 @@ export default async function DashboardPage() {
             hint={t('availableAt', { sprint: kpi.sprint })}
           />
         ))}
+        <MonitoringKpis />
       </section>
 
       <section className="mt-6">

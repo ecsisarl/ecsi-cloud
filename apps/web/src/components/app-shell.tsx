@@ -2,16 +2,44 @@
 
 import type { MeResponse } from '@ecsi/shared';
 import { cn, Logo } from '@ecsi/ui';
-import { Menu, X } from 'lucide-react';
+import { Bell, Menu, X } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { type ReactNode, useState } from 'react';
 import { isActive, visibleNavigation } from '@/lib/navigation';
 import { MeProvider } from './me-context';
+import { useAlertSummary } from './monitoring/use-alert-summary';
 import { UserPanel } from './user-panel';
 
-function Sidebar({ permissions, onNavigate }: { permissions: string[]; onNavigate?: () => void }) {
+/** Pastille du nombre d'alertes non acquittées (indicateur de l'entrée Monitoring). */
+function AlertCount({ count, className }: { count: number; className?: string }) {
+  const t = useTranslations('nav');
+  if (count <= 0) return null;
+  return (
+    <span
+      data-testid="alerts-indicator"
+      aria-label={t('alertsBadge', { count })}
+      title={t('alertsBadge', { count })}
+      className={cn(
+        'ml-auto inline-flex min-w-5 items-center justify-center rounded-full bg-danger px-1.5 text-xs leading-5 font-semibold text-white tabular-nums',
+        className,
+      )}
+    >
+      {count > 99 ? '99+' : count}
+    </span>
+  );
+}
+
+function Sidebar({
+  permissions,
+  alerts,
+  onNavigate,
+}: {
+  permissions: string[];
+  alerts: number;
+  onNavigate?: () => void;
+}) {
   const t = useTranslations('nav');
   const pathname = usePathname();
 
@@ -44,6 +72,7 @@ function Sidebar({ permissions, onNavigate }: { permissions: string[]; onNavigat
                   >
                     <Icon className="size-4 shrink-0" aria-hidden />
                     {t(item.key)}
+                    {item.key === 'monitoring' ? <AlertCount count={alerts} /> : null}
                   </Link>
                 </li>
               );
@@ -58,6 +87,8 @@ function Sidebar({ permissions, onNavigate }: { permissions: string[]; onNavigat
 export function AppShell({ me, children }: { me: MeResponse; children: ReactNode }) {
   const t = useTranslations('nav');
   const [open, setOpen] = useState(false);
+  const summary = useAlertSummary(me.permissions.includes('monitoring.read'));
+  const alerts = summary?.unacknowledged ?? 0;
 
   return (
     <div className="min-h-dvh lg:pl-64">
@@ -66,7 +97,7 @@ export function AppShell({ me, children }: { me: MeResponse; children: ReactNode
         <div className="flex h-16 items-center px-6">
           <Logo className="text-white" />
         </div>
-        <Sidebar permissions={me.permissions} />
+        <Sidebar permissions={me.permissions} alerts={alerts} />
         <UserPanel me={me} />
       </aside>
 
@@ -97,6 +128,7 @@ export function AppShell({ me, children }: { me: MeResponse; children: ReactNode
             </div>
             <Sidebar
               permissions={me.permissions}
+              alerts={alerts}
               onNavigate={() => {
                 setOpen(false);
               }}
@@ -118,6 +150,16 @@ export function AppShell({ me, children }: { me: MeResponse; children: ReactNode
           <Menu className="size-5" aria-hidden />
         </button>
         <Logo />
+        {alerts > 0 ? (
+          <Link
+            href="/reseau/monitoring"
+            className="ml-auto flex items-center gap-1 rounded-md p-2 text-danger hover:bg-surface-muted"
+            aria-label={t('alertsBadge', { count: alerts })}
+          >
+            <Bell className="size-5" aria-hidden />
+            <AlertCount count={alerts} className="ml-0" />
+          </Link>
+        ) : null}
       </header>
 
       <main className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8 lg:py-8">

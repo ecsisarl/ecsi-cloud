@@ -1,0 +1,22 @@
+# ECSI CLOUD - renouvellement du certificat HTTPS Let's Encrypt (Sprint S3H, étape H4).
+# Déclenché par ecsi-tls-renew.timer. Voir docs/DEPLOYMENT.md (« HTTPS public, étape H4 »).
+# certbot ne renouvelle qu'à moins de 30 jours de l'expiration ; Nginx n'est rechargé qu'après
+# un nginx -t réussi.
+#
+# Installation (en root), APRÈS la validation de H4, dépôt dans /opt/ecsi-cloud (adapter sinon) :
+#   cp ecsi-tls-renew.service ecsi-tls-renew.timer /etc/systemd/system/ && systemctl daemon-reload
+#   && systemctl enable --now ecsi-tls-renew.timer
+#   essai : systemctl start ecsi-tls-renew.service ; journalctl -u ecsi-tls-renew.service
+[Unit]
+Description=ECSI CLOUD - renouvellement du certificat HTTPS
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/ecsi-cloud/ops/tls/certificat.sh renouveler
+# root : accès au démon Docker (conteneur certbot, rechargement de Nginx).
+UMask=0077
+NoNewPrivileges=yes
+PrivateTmp=yes
+TimeoutStartSec=15min

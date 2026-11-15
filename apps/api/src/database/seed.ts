@@ -28,6 +28,7 @@ import {
   userCredentials,
   users,
 } from './schema/index.js';
+import { safeErrorMessage } from '../common/safe-error.js';
 
 export const SEED_COMPANIES = {
   A: { slug: 'entreprise-a', name: 'ENTREPRISE_A' },
@@ -261,7 +262,7 @@ if (isEntrypoint) {
       );
     })
     .catch((error: unknown) => {
-      process.stderr.write(`Échec : ${error instanceof Error ? error.message : String(error)}\n`);
+      process.stderr.write(`Échec : ${safeErrorMessage(error)}\n`);
       process.exitCode = 1;
     })
     .finally(() => void pool.end());

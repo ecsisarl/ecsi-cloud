@@ -5,6 +5,9 @@
 #   Internet (inet) ── cgn (CGNAT) ── cpe (box 4G/Starlink) ── br-lan ── tap-chr ── CHR ether1
 #
 # Usage : sudo ./start-chr.sh <image-disque-officielle> [nom]
+#   - CHR_HOTSPOT=1 (lot B) : 2e carte réseau (ether2 du CHR, côté clients Hotspot) reliée au
+#     pont br-hs du namespace cpe, SANS adresse ni routage côté Linux ; un client simulé s'y
+#     branche avec lab/routeros/lotb/client-hotspot.sh up ;
 #   - l'image d'origine n'est jamais modifiée : un disque de travail qcow2 est créé par-dessus ;
 #   - console série : socket UNIX $LAB_STATE/chr-<nom>.sock (voir console.py) ;
 #   - prérequis : lab/sim/topology.sh up (namespace cpe et pont br-lan).
@@ -26,6 +29,8 @@ MEM="${CHR_MEM_MB:-256}"
 # Une adresse MAC distincte par CHR branché sur le même LAN (ex. CHR_MAC=52:54:00:ec:51:02).
 MAC="${CHR_MAC:-52:54:00:ec:51:01}"
 TAP="tap-$NAME"
+HS_TAP="hs-$NAME"
+HS_MAC="${CHR_HS_MAC:-52:54:00:ec:52:01}"
 DISK="$STATE/$NAME.qcow2"
 SOCK="$STATE/$NAME.sock"
 
@@ -49,6 +54,22 @@ ip netns exec cpe ip tuntap add dev "$TAP" mode tap 2>/dev/null || true
 ip netns exec cpe ip link set "$TAP" master br-lan
 ip netns exec cpe ip link set "$TAP" up
 
+HS_ARGS=()
+if [[ "${CHR_HOTSPOT:-0}" == 1 ]]; then
+  # Pont dédié au réseau Hotspot : la box ne l'adresse pas et ne le route pas. La règle
+  # FORWARD évite que le filtrage du pont (bridge-nf) bloque en silence le trafic client.
+  ip netns exec cpe ip link show br-hs >/dev/null 2>&1 || {
+    ip netns exec cpe ip link add br-hs type bridge
+    ip netns exec cpe ip link set br-hs up
+    ip netns exec cpe iptables -A FORWARD -i br-hs -o br-hs -j ACCEPT
+  }
+  ip netns exec cpe ip tuntap add dev "$HS_TAP" mode tap 2>/dev/null || true
+  ip netns exec cpe ip link set "$HS_TAP" master br-hs
+  ip netns exec cpe ip link set "$HS_TAP" up
+  HS_ARGS=(-netdev tap,id=hs,ifname="$HS_TAP",script=no,downscript=no
+    -device "$NIC_MODEL",netdev=hs,mac="$HS_MAC")
+fi
+
 ACCEL=tcg
 [[ -e /dev/kvm ]] && ACCEL=kvm
 
@@ -58,6 +79,7 @@ ip netns exec cpe setsid qemu-system-x86_64 \
   -drive file="$DISK",if="$DISK_IF",format=qcow2 \
   -netdev tap,id=wan,ifname="$TAP",script=no,downscript=no \
   -device "$NIC_MODEL",netdev=wan,mac="$MAC" \
+  "${HS_ARGS[@]}" \
   -display none -serial unix:"$SOCK",server,nowait -monitor none \
   >"$STATE/$NAME.qemu.log" 2>&1 &
 echo "CHR « $NAME » démarré (accélération : $ACCEL). Console : python3 $HERE/console.py $SOCK"

@@ -1,0 +1,55 @@
+# ECSI CLOUD — surcouche d'ESSAI de Nginx HTTPS (Sprint S3H, étape H4), utilisée seulement par
+# ops/tls/tests/https-e2e.sh, après docker-compose.yml et docker-compose.prod.yml, avec un nom
+# de projet dédié (ecsi-tlstest) : volumes et réseau propres à l'essai, jamais ceux de la
+# production. Exécutable à côté d'une pile en service (ports de test sur 127.0.0.1).
+#
+#  - le VRAI Nginx de production (même image, même configuration infra/nginx/production/) ;
+#  - API et tableau de bord remplacés par un service amont factice (upstream-echo.mjs) ;
+#  - noms app/enroll.mytikcentral.com résolus vers Nginx DANS le réseau de l'essai seulement ;
+#  - Pebble (serveur ACME de test de Let's Encrypt, profil « pebble ») : aucun appel à
+#    Let's Encrypt, aucun DNS public.
+
+services:
+  api:
+    image: ${ECSI_STUB_IMAGE:-node:22-alpine}
+    entrypoint: ['node', '/stub/upstream-echo.mjs']
+    command: []
+    user: node
+    read_only: true
+    environment: !override
+      STUB_NAME: api
+      STUB_PORT: '4000'
+    volumes:
+      - ./ops/tls/tests/upstream-echo.mjs:/stub/upstream-echo.mjs:ro
+    depends_on: !reset {}
+
+  web:
+    image: ${ECSI_STUB_IMAGE:-node:22-alpine}
+    entrypoint: ['node', '/stub/upstream-echo.mjs']
+    command: []
+    user: node
+    read_only: true
+    environment: !override
+      STUB_NAME: web
+      STUB_PORT: '3000'
+    volumes:
+      - ./ops/tls/tests/upstream-echo.mjs:/stub/upstream-echo.mjs:ro
+    depends_on: !reset []
+
+  nginx:
+    ports: !override
+      - '127.0.0.1:${ECSI_HTTP_PORT:-18080}:8080'
+      - '127.0.0.1:${ECSI_HTTPS_PORT:-18443}:8443'
+    networks:
+      default:
+        aliases: ['app.mytikcentral.com', 'enroll.mytikcentral.com']
+
+  pebble:
+    profiles: ['pebble']
+    image: ghcr.io/letsencrypt/pebble:2.10.1
+    command: ['-config', '/pebble/pebble-config.json']
+    environment:
+      PEBBLE_VA_NOSLEEP: '1'
+      PEBBLE_WFE_NONCEREJECT: '0'
+    volumes:
+      - ./ops/tls/tests/pebble-config.json:/pebble/pebble-config.json:ro

@@ -1,7 +1,21 @@
 'use client';
 
-import type { EnrollmentCreated, RouterDetail as RouterDetailView, Site } from '@ecsi/shared';
-import { Badge, Button, Card, CardContent, CardHeader, CardTitle, EmptyState } from '@ecsi/ui';
+import type {
+  EnrollmentCreated,
+  EnrollmentResume,
+  RouterDetail as RouterDetailView,
+  Site,
+} from '@ecsi/shared';
+import {
+  Badge,
+  Button,
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+  EmptyState,
+} from '@ecsi/ui';
 import { ArrowLeft, RouterIcon } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -18,9 +32,10 @@ import {
   useProblemMessage,
 } from '@/components/admin/controls';
 import { usePermissions } from '@/components/me-context';
+import { RouterHistory } from '@/components/monitoring/router-history';
 import { PageHeader } from '@/components/page-header';
 import { api } from '@/lib/client-api';
-import { EnrollmentScript, RemovalScript } from './enrollment-panel';
+import { EnrollmentScript, RemovalScript, ResumeEnrollmentScript } from './enrollment-panel';
 import { formatBytes, formatMemory, formatUptime, ROUTER_STATUS_TONE } from './format';
 
 function Row({ label, value }: { label: string; value: string | null | undefined }) {
@@ -52,6 +67,7 @@ export function RouterDetail({ id }: { id: string }) {
   const [missing, setMissing] = useState(false);
   const [panel, setPanel] = useState<Panel>(null);
   const [enrollment, setEnrollment] = useState<EnrollmentCreated | null>(null);
+  const [resumeEnrollment, setResumeEnrollment] = useState<EnrollmentResume | null>(null);
   const [message, setMessage] = useState<{ tone: 'error' | 'success'; text: string } | null>(null);
 
   const load = useCallback(async () => {
@@ -114,6 +130,18 @@ export function RouterDetail({ id }: { id: string }) {
     else setMessage({ tone: 'error', text: problemMessage(result.status, result.problem) });
   }
 
+  async function resume() {
+    const result = await api<EnrollmentResume>(`/routers/${id}/enrollment/resume`, {
+      method: 'POST',
+    });
+    if (result.ok) {
+      setEnrollment(null);
+      setResumeEnrollment(result.data);
+    } else {
+      setMessage({ tone: 'error', text: problemMessage(result.status, result.problem) });
+    }
+  }
+
   async function remove() {
     const result = await api(`/routers/${id}`, { method: 'DELETE' });
     if (result.ok) navigation.push('/reseau/routeurs');
@@ -173,6 +201,11 @@ export function RouterDetail({ id }: { id: string }) {
                 {t('enroll.renew')}
               </Button>
             ) : null}
+            {permissions.any('routers.create') && provisioning && router.wgPublicKey ? (
+              <Button variant="secondary" onClick={() => void resume()}>
+                {t('enroll.resume')}
+              </Button>
+            ) : null}
             {permissions.any('routers.delete') ? (
               <Button
                 variant="danger"
@@ -192,6 +225,16 @@ export function RouterDetail({ id }: { id: string }) {
           enrollment={enrollment}
           onDone={() => {
             setEnrollment(null);
+            void load();
+          }}
+        />
+      ) : null}
+
+      {resumeEnrollment ? (
+        <ResumeEnrollmentScript
+          enrollment={resumeEnrollment}
+          onDone={() => {
+            setResumeEnrollment(null);
             void load();
           }}
         />
@@ -448,6 +491,18 @@ export function RouterDetail({ id }: { id: string }) {
           )}
         </CardContent>
       </Card>
+
+      {!provisioning && permissions.any('monitoring.read') ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>{t('historyTitle')}</CardTitle>
+            <CardDescription>{t('historyDescription')}</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <RouterHistory routerId={router.id} />
+          </CardContent>
+        </Card>
+      ) : null}
     </div>
   );
 }

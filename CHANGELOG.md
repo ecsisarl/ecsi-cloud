@@ -2,6 +2,112 @@
 
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Versions par sprint.
 
+## [B5] — 2026-10-19 — Forfaits, tickets et hotspots dans l'application (non déployé)
+
+### Ajouté
+
+- Types et schémas partagés (`packages/shared/src/hotspot.ts`) : forfaits, lots et tickets, hotspots (contrôles réseau RFC 1918), sessions RADIUS.
+- API : `/plans`, `/voucher-batches` (génération et impression), `/vouchers` (détail, réimpression, désactivation), `/hotspots` (création, modification versionnée, activation, synchronisation, suppression logique), `/radius-sessions`. Codes jamais stockés ni journalisés : empreinte seule en base, code re-dérivé à l'impression (audit `vouchers.export` avec le nombre seulement, `Cache-Control: no-store`). Clés absentes : 503.
+- Dashboard : pages Forfaits, Tickets (lots, filtres, détail, désactivation), impression A4 des tickets (sans menu), Réseau → Hotspots (configuration HTTP-CHAP, synchronisation, accès de configuration, sessions actives).
+- Environnement : `VOUCHER_CODE_KEY` et `RADIUS_VOUCHER_LOOKUP_KEY` pour l'API (valeurs `devonly` en développement, obligatoires dans la surcouche de production).
+- Tests : schémas partagés, intégration `test/hotspot.int.test.ts` (RLS, portée par site, codes, audit, hotspots, RADIUS simulé), E2E `e2e/tests/lot-b.spec.ts`.
+
+### Modifié
+
+- Migration 0008 (non déployée) : `ecsi_app` peut fournir `vouchers.id` (identifiant nécessaire à la dérivation du code avant l'insertion).
+- Réponses d'erreur : le détail d'un 503 volontaire est conservé (« Clés de tickets non configurées »).
+
+## [B4] — 2026-10-19 — Provisionnement RouterOS du Hotspot (non déployé)
+
+### Ajouté
+
+- Compte d'écriture RouterOS `ecsi-cfg` (groupe `ecsi-rw` : `read,write,api,rest-api`), distinct du compte de supervision : migration 0009 `router_config_accounts` (privilèges par colonne, RLS, fonctions `app.router_config_*`), API `GET`/`POST /api/v1/routers/:id/config-access` (permission `routers.command.dangerous`, audit sans jeton), script d'activation, `POST /activate-config` sur l'agent passerelle (par le tunnel uniquement, mot de passe chiffré aussitôt).
+- Transport RouterOS en écriture `RestWriter` (REST HTTPS épinglé, liste blanche stricte des menus, propriétés et valeurs, objets marqués `ecsi-cloud:hs:<id>` ou `ecsi-hs-<id>`, jamais d'écriture sur un objet non marqué).
+- Worker : réconciliation des Hotspots (`hotspots.sync_status`), contrôles préalables (WAN, tunnel, conflits), retrait complet à la désactivation, entretien `radius.housekeeping()` toutes les 5 minutes ; requiert `RADIUS_NAS_KEY`.
+- Laboratoire : deuxième carte Hotspot sur le CHR (`CHR_HOTSPOT=1`), client Hotspot (`lab/routeros/lotb/`), commande `services` de `labo-s3b.sh` ; résultats CHR 7.24.5 : `lab/routeros/resultats/2026-10-19-lot-b-provisioning.md`.
+
+### Modifié
+
+- Script de retrait `ecsi-retrait.rsc` : retire aussi le Hotspot, `ecsi-cfg` et `ecsi-rw`.
+- `rotate-encryption-keys` : ré-enveloppe et contrôle aussi les mots de passe `ecsi-cfg`.
+
+## [E1] — 2026-10-18 — Monitoring et alertes dans l'application (non déployé)
+
+### Ajouté
+
+- Migration 0007 (additive) : `router_metrics` (une mesure par collecte, conservation bornée) et `alerts` (une seule alerte ouverte par routeur et par type), RLS et privilèges minimaux pour `ecsi_app`, `ecsi_worker` ; aucun accès pour `ecsi_auth`.
+- Worker : mesures à chaque collecte, ouverture et résolution automatiques des alertes `ROUTER_OFFLINE`, `ROUTER_DEGRADED`, `CPU_HIGH`, `MEMORY_HIGH` (seuils, mesures soutenues, hystérésis), purge horaire ; réglages `MONITORING_*` avec valeurs par défaut. Aucune nouvelle commande RouterOS.
+- API `/api/v1/monitoring` : vue d'ensemble, alertes, compteurs, historique d'un routeur, acquittement audité ; permission `monitoring.acknowledge` (Administrateur, Gérant, Technicien, Support).
+- Dashboard : page Réseau → Monitoring (compteurs, alertes avec acquittement, routeurs supervisés, historique CPU / mémoire / disponibilité), indicateur d'alertes non acquittées dans la navigation, historique sur le détail d'un routeur, indicateurs « Routeurs en ligne » et « Alertes ouvertes » du tableau de bord.
+- Tests : règles d'alerte (unitaires), intégration `test/monitoring.int.test.ts` (migration, RLS entre entreprises, droits des rôles, worker contre un faux service RouterOS, purge, routes HTTP et audit).
+
+## [S3H-H4] — 2026-10-11 — HTTPS public de production (livré, non déployé)
+
+### Ajouté
+
+- Nginx de production `infra/nginx/production/` : `app.mytikcentral.com` (tableau de bord, `/api/*`, WebSocket), `enroll.mytikcentral.com` (uniquement `POST /api/v1/routers/enroll`, ligne de requête exacte), HTTP limité au défi ACME et à la redirection 301, hôtes inconnus refusés, TLS 1.2/1.3, HSTS et en-têtes de sécurité sur HTTPS seulement, limitation de débit, journal sans chaîne de requête. Mode `acme-bootstrap` pour le premier certificat. Aucune dépendance au portail.
+- `docker-compose.prod.yml` : Nginx sur 80 et 443 (`ECSI_NGINX_MODE`), volumes `letsencrypt` et `acme-webroot`, service `certbot` (profil `tls`, image figée), portail en profil `portail`, `LOG_PRETTY=false` imposé, AC privée d'enrôlement neutralisée.
+- `ops/tls/certificat.sh` (Let's Encrypt staging `--dry-run` puis production, idempotent ; activation, renouvellement avec `nginx -t` et rechargement), `ops/tls/preflight.sh` et `ops/tls/compose-check.mjs` (configuration Compose fusionnée contrôlée sans afficher de valeur, `k2` exigée), `infra/systemd/ecsi-tls-renew.{service,timer}`.
+- Tests : essai Docker `ops/tls/tests/https-e2e.sh` (vrai Nginx, Let's Encrypt simulé par Pebble, en CI) ; tests de la surcouche (`compose-prod.test.ts`).
+
+### Modifié
+
+- CI : l'étape « Pile de production » démarre Nginx en mode `acme-bootstrap` (pas de certificat) et vérifie l'API depuis son conteneur ; ports attendus 80 et 443.
+
+## [S3H-H3-outillage] — 2026-10-08 — Outillage de rotation des secrets (aucune rotation réelle)
+
+### Ajouté
+
+- `rotate-encryption-keys --verify` : verdict de retrait **par clé** (active / retirable / encore nécessaire, avec ses dépendances ; clé absente dont dépendent des données signalée ECHEC) et option `--retirable <id>` (code de sortie 3 si la clé n'est pas retirable). Permet de retirer `k3` après la rotation vers `k4` tout en conservant `k2` pour les codes de récupération.
+- `ops/rotation/check-env.sh` : contrôle d'un fichier d'environnement sans afficher de valeur (présence, unicité, `devonly`, formats, clés de 32 octets distinctes, droits), empreintes courtes (KCV), comparaison entre fichiers (coffre, `gateway.env`) et avec les valeurs chargées par les conteneurs.
+- `ops/rotation/pg-role-password.sh` : rotation contrôlée du mot de passe d'un rôle PostgreSQL (simulation, idempotence, retour arrière), valeur transmise uniquement par l'entrée standard, journalisation PostgreSQL neutralisée pour la session, contrôle SCRAM nouvelle valeur acceptée / ancienne refusée.
+- Runbook « Rotation des secrets (S3H-H3) » dans `docs/SECURITY.md`.
+- Tests : intégration `test/key-rotation-three-keys.int.test.ts` (k2/k3/k4) ; essais Docker `ops/keys/tests/key-rotation-three-keys-e2e.sh` et `ops/rotation/tests/secrets-tools-e2e.sh` (PostgreSQL journalisant tout, échantillonnage `ps` continu, témoins positifs) ; `ops/rotation/tests/check-env.test.sh` ; tous en CI.
+
+### Corrigé
+
+- Redis : le mot de passe était passé en argument (`--requirepass`, contrôle de santé `redis-cli -a`), donc visible dans `ps aux`, `docker ps --no-trunc` et la commande du conteneur. Il est désormais écrit par le shell du conteneur dans une configuration sur tmpfs (0600), retiré de l'environnement de `redis-server`, et le contrôle de santé utilise `REDISCLI_AUTH`.
+- Initialisation PostgreSQL (`01-roles.sh`, volume neuf seulement) : mots de passe lus par `\getenv` au lieu d'arguments `psql -v`, journalisation neutralisée pour la session.
+
+## [S3H-H2] — 2026-10-07 — Rotation de la clé de chiffrement
+
+### Corrigé
+
+- Rotation : la commande documentée (`docker compose run --rm migrate …`) ne recevait pas de connexion permettant de ré-envelopper les mots de passe RouterOS, et les routeurs supprimés (invisibles pour `ecsi_worker`) n'étaient jamais traités. Service d'exploitation `keys-rotate` (profil `ops`, sans port ni dépendance) avec les seules connexions nécessaires ; mots de passe RouterOS traités par le propriétaire des tables (tous les routeurs).
+
+### Ajouté
+
+- Ré-enveloppe contrôlée (`SecretBox.rewrapVerified`) : chaque secret doit se déchiffrer avant et après, à l'identique, sinon rien n'est écrit ; écriture conditionnelle (un identifiant modifié pendant la rotation n'est pas écrasé).
+- `rotate-encryption-keys --verify` (lecture seule) : déchiffrement de chaque mot de passe RouterOS et secret 2FA avec la seule clé active, compteurs par clé, codes de récupération par clé ; l'ancienne clé n'est déclarée retirable qu'avec 0 restant et 0 illisible. Contrôle exécuté automatiquement après chaque rotation.
+- Procédure en 9 temps et retour arrière : `docs/SECURITY.md`.
+- Tests : intégration `test/key-rotation.int.test.ts` (11 tests) ; essai Docker complet `ops/keys/tests/key-rotation-e2e.sh` en CI ; tests du service Compose.
+
+## [S3H-H1] — 2026-10-06 — Sauvegarde PostgreSQL chiffrée et restauration testée
+
+### Ajouté
+
+- `ops/backup/pg-backup.sh` : sauvegarde en lecture seule (`pg_dump -Fc`, rôles sans mot de passe), restaurée et contrôlée à chaque exécution dans une pile jetable isolée, manifeste écrit depuis la copie restaurée, archive chiffrée avec age (clé publique seule sur le serveur), empreinte SHA-256, rétention 7/4/3 appliquée seulement après une sauvegarde vérifiée.
+- `ops/backup/pg-restore-test.sh` : restauration de test dans une pile jetable (jamais la production) : empreinte, déchiffrement, comparaison complète au manifeste (lignes, RLS, rôles, droits, migrations, audit, déchiffrement de chaque mot de passe RouterOS et secret 2FA), API saine sur la base restaurée ; mode `--reprise` pour l'exercice de reprise.
+- Commande `dist/cli/verify-restore.js` et module `apps/api/src/database/restore-check.ts` (compteurs seulement, aucune valeur affichée).
+- `infra/systemd/ecsi-backup.service` et `.timer` (quotidien) ; `docs/SAUVEGARDE.md`.
+- Tests : intégration `test/backup-restore.int.test.ts` (pg_dump / pg_restore entre deux PostgreSQL 18 réels) ; `ops/backup/tests/retention.test.sh` ; essai Docker complet `ops/backup/tests/backup-restore-e2e.sh` en CI avec cas négatifs (clé privée age sur le serveur, fichier corrompu, mauvaise clé age, mauvaise `ENCRYPTION_KEY`, projet de production, projet existant).
+
+### Modifié
+
+- `apps/api/test/helpers/infra.ts` : `startPostgres()` extrait de `startInfra()` (même conteneur, réutilisé comme cible de restauration).
+
+## [S3H-H0] — 2026-10-06 — Préparation du durcissement
+
+### Ajouté
+
+- `docker-compose.prod.yml` : surcouche de production. API, migrations, worker et passerelle en `NODE_ENV=production`, ce qui active les garde-fous existants du code. Secrets et URL publiques obligatoires (`${VAR:?…}`). Mailpit retiré. Seul Nginx :80 est publié, PostgreSQL restant sur 127.0.0.1. Le Compose de développement est inchangé.
+- `scripts/generate-prod-test-env.sh` : environnement de test pour la surcouche, avec secrets aléatoires et sans affichage.
+- Tests : `apps/api/src/config/compose-prod.test.ts`. Étape CI « Pile de production » : refus sans variables, santé, `/api/docs` fermé, ports publiés, refus d'une valeur `devonly` sans afficher la valeur.
+
+### Modifié
+
+- `docs/ROADMAP.md` à jour (S2, S3A, S3B validés ; S3H en cours) ; `docs/DEPLOYMENT.md` (section production).
+
 ## [S3B-RC2] — 2026-10-05 — Corrections de la validation indépendante S3B
 
 ### Corrigé

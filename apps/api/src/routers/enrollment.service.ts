@@ -8,7 +8,12 @@ import {
   NotFoundException,
   ServiceUnavailableException,
 } from '@nestjs/common';
-import type { CreateEnrollmentRequest, EnrollmentCreated, EnrollRequest } from '@ecsi/shared';
+import type {
+  CreateEnrollmentRequest,
+  EnrollmentCreated,
+  EnrollmentResume,
+  EnrollRequest,
+} from '@ecsi/shared';
 import { and, eq, isNull, sql } from 'drizzle-orm';
 import { AuditService } from '../audit/audit.service.js';
 import { RATE_LIMITS, RateLimiterService } from '../auth/rate-limiter.service.js';
@@ -22,6 +27,7 @@ import {
   TenantDatabase,
   type TenantTransaction,
 } from '../tenancy/tenant-database.js';
+import { buildEnrollmentResumeScript } from './enrollment-resume-script.js';
 import { buildEnrollmentScript } from './enrollment-script.js';
 import { hostOf, toRouter } from './router-view.js';
 import { isUniqueViolation, newId, RoutersService } from './routers.service.js';
@@ -164,6 +170,60 @@ export class EnrollmentService {
         router: toRouter(row, { id: row.siteId, name: row.siteName, code: row.siteCode }),
         script: this.script(issued.token, hostOf(row.tunnelIp), gateway),
         expiresAt: issued.expiresAt.toISOString(),
+      };
+    });
+  }
+
+  /**
+   * Reprend uniquement la finalisation d'un enrôlement interrompu APRÈS consommation
+   * du jeton. Aucun nouveau jeton, aucune nouvelle adresse tunnel et aucune nouvelle
+   * identité WireGuard ne sont créés.
+   */
+  resume(ctx: TenantContext, grants: Grants, routerId: string): Promise<EnrollmentResume> {
+    const gateway = this.gatewayConfig();
+
+    return this.tenantDb.run(ctx, async (tx) => {
+      const row = await this.routersService.inScope(tx, ctx, grants, routerId, 'routers.create');
+
+      if (row.status !== 'PROVISIONING') {
+        throw new ConflictException(
+          "La reprise est réservée à un routeur dont l'enrôlement est encore en cours",
+        );
+      }
+
+      if (row.wgPublicKey === null) {
+        throw new ConflictException("Le routeur n'a pas encore consommé son jeton d'enrôlement");
+      }
+
+      const tunnelIp = hostOf(row.tunnelIp);
+
+      await this.audit.write(tx, ctx.companyId, {
+        action: 'routers.enrollment.resume',
+        resourceType: 'router',
+        resourceId: routerId,
+        siteId: row.siteId,
+        details: {
+          name: row.name,
+          tunnelIp,
+        },
+      });
+
+      return {
+        router: toRouter(row, {
+          id: row.siteId,
+          name: row.siteName,
+          code: row.siteCode,
+        }),
+        script: buildEnrollmentResumeScript({
+          gatewayTunnelIp: formatIpv4(this.routersService.tunnelNetwork.gateway),
+          activationPort: this.env.ROUTER_ACTIVATION_PORT,
+          gatewayPublicKey: gateway.publicKey,
+          gatewayEndpoint: gateway.endpoint,
+          gatewayPort: this.env.WG_GATEWAY_PORT,
+          tunnelIp,
+          tunnelPrefix: this.routersService.tunnelNetwork.prefix,
+          routerPublicKey: row.wgPublicKey,
+        }),
       };
     });
   }

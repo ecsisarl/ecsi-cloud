@@ -1,6 +1,9 @@
 /**
- * Script de retrait RouterOS v7 (Sprint 3B-RC2) : retire d'un MikroTik la configuration créée
- * par le script d'enrôlement, avant un ré-enrôlement. Le corps (à partir de l'accolade
+ * Script de retrait RouterOS v7 (Sprint 3B-RC2, complété au lot B) : retire d'un MikroTik la
+ * configuration créée par le script d'enrôlement, le script d'activation configuration
+ * (ecsi-cfg, ecsi-rw) et le provisionnement Hotspot (objets étiquetés ecsi-cloud:hs:<id> et,
+ * pour /ip/hotspot et son profil qui n'ont pas de commentaire, nommés ecsi-hs-*), avant un
+ * ré-enrôlement. Les règles de filtrage Hotspot sont retirées par la ligne ecsi-cloud existante. Le corps (à partir de l'accolade
  * ouvrante) est REPRIS À L'IDENTIQUE du modèle validé sur CHR 7.24.5
  * (lab/routeros/enrolement/ecsi-retrait.rsc) ; un test vérifie l'égalité. Aucun secret.
  */
@@ -12,11 +15,21 @@ export const ROUTER_REMOVAL_SCRIPT_HEADER = String.raw`# ECSI CLOUD - retrait d'
 # nom ecsi-retrait.rsc, puis : /import file-name=ecsi-retrait.rsc
 # Il peut aussi etre colle dans le terminal du routeur (WinBox > New Terminal). Ne pas l'envoyer
 # brut sur l'entree standard d'une session SSH non interactive (erreurs d'analyse constatees).
-# Supprime UNIQUEMENT ce que le script d'enrolement a cree (objets "ecsi-*") ; le reste de la
+# Supprime UNIQUEMENT ce que ECSI CLOUD a cree (objets "ecsi-*", Hotspot compris) ; le reste de la
 # configuration et les regles de firewall existantes ne sont pas modifies.
 `;
 
 export const ROUTER_REMOVAL_SCRIPT_BODY = String.raw`{
+/ip/hotspot/remove [find where name~"^ecsi-hs-"]
+/ip/hotspot/profile/remove [find where name~"^ecsi-hs-"]
+/ip/firewall/nat/remove [find where comment~"^ecsi-cloud:hs:"]
+/radius/remove [find where comment~"^ecsi-cloud:hs:"]
+/ip/dhcp-server/remove [find where comment~"^ecsi-cloud:hs:"]
+/ip/dhcp-server/network/remove [find where comment~"^ecsi-cloud:hs:"]
+/ip/pool/remove [find where comment~"^ecsi-cloud:hs:"]
+/ip/address/remove [find where comment~"^ecsi-cloud:hs:"]
+/user/remove [find where name="ecsi-cfg"]
+/user/group/remove [find where name="ecsi-rw"]
 /user/remove [find where name="ecsi-svc"]
 /user/group/remove [find where name="ecsi-ro"]
 :local ver [/system/resource/get version]

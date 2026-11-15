@@ -1,0 +1,4 @@
+# HTTP-CHAP du Hotspot RouterOS (login-by=http-chap). Aucun module PAP n'est chargé : une
+# requête sans CHAP-Password est refusée.
+chap {
+}

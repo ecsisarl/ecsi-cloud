@@ -32,6 +32,7 @@ function loginUrl(request: NextRequest): URL {
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
+  // Toujours réécrit ici ; hors du matcher (chemins « statiques »), Nginx le vide aussi.
   const forwarded = new Headers(request.headers);
   forwarded.set('x-ecsi-pathname', pathname);
 

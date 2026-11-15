@@ -37,7 +37,7 @@ import { clearAuthCookies, setAuthCookies, setMfaChallengeCookie } from './cooki
 import { verifyAgainstDummy, verifyPassword } from './crypto/password.js';
 import type { SecretBox } from './crypto/secret-box.js';
 import { MfaService } from './mfa.service.js';
-import { RATE_LIMITS, RateLimiterService } from './rate-limiter.service.js';
+import { ipBucket, RateLimiterService } from './rate-limiter.service.js';
 import { SECRET_BOX } from './secret-box.provider.js';
 
 /**
@@ -73,11 +73,8 @@ export class PlatformAuthController {
     @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<LoginResponse> {
     const emailKey = this.secretBox.fingerprint(`platform:${body.email}`);
-    await this.rateLimiter.consume(`plogin:ip:${meta.ip}`, this.rateLimiter.loginPerIp);
-    await this.rateLimiter.assertNotLimited(
-      `plogin:fail:${emailKey}`,
-      RATE_LIMITS.loginFailuresPerEmail,
-    );
+    await this.rateLimiter.consume(`plogin:ip:${ipBucket(meta.ip)}`, this.rateLimiter.loginPerIp);
+    await this.rateLimiter.assertLoginAllowed('plogin', emailKey, meta.ip);
 
     const [admin] = await this.db
       .select({
@@ -91,7 +88,7 @@ export class PlatformAuthController {
       ? await verifyPassword(admin.hash, body.password)
       : await verifyAgainstDummy(body.password);
     if (!admin || !valid || admin.status !== 'ACTIVE') {
-      await this.rateLimiter.hit(`plogin:fail:${emailKey}`, RATE_LIMITS.loginFailuresPerEmail);
+      await this.rateLimiter.recordLoginFailure('plogin', emailKey, meta.ip);
       await this.audit.writeDirect(
         null,
         {
@@ -104,7 +101,7 @@ export class PlatformAuthController {
       );
       throw new UnauthorizedException(INVALID_CREDENTIALS);
     }
-    await this.rateLimiter.reset(`plogin:fail:${emailKey}`);
+    await this.rateLimiter.clearLoginFailures('plogin', emailKey, meta.ip);
     await this.db
       .update(platformAdmins)
       .set({ lastLoginAt: new Date() })

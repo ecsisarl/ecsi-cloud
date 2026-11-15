@@ -13,3 +13,21 @@
     -webkit-font-smoothing: antialiased;
   }
 }
+
+/* Feuilles de tickets (lot B) : A4, fond blanc, aucun ticket coupé entre deux pages. */
+@media print {
+  @page {
+    size: A4;
+    margin: 10mm;
+  }
+
+  html,
+  body {
+    background: #fff;
+    color: #000;
+  }
+
+  .voucher-ticket {
+    break-inside: avoid;
+  }
+}

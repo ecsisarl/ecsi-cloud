@@ -227,6 +227,7 @@ describe('isolation entre entreprises', () => {
     ).toBe(404);
     expect((await adminB.delete(`/routers/${chrLab.id}`)).statusCode).toBe(404);
     expect((await adminB.post(`/routers/${chrLab.id}/enrollment`, {})).statusCode).toBe(404);
+    expect((await adminB.post(`/routers/${chrLab.id}/enrollment/resume`, {})).statusCode).toBe(404);
     const row = await routerRow(chrLab.id);
     expect(row).toMatchObject({
       name: 'CHR-LAB',
@@ -380,6 +381,68 @@ describe('enrôlement', () => {
     expect((await adminA.post(`/routers/${created.router.id}/enrollment`, {})).statusCode).toBe(
       409,
     );
+  });
+
+  it('reprend une activation interrompue après consommation du jeton, sans réenrôlement', async () => {
+    const pending = await enrollment(adminA, site('A', 'SITE-A'), 'Reprise activation');
+    const publicKey = wgKey('Q');
+    const token = tokenOf(pending.script);
+
+    // Impossible de reprendre avant que le jeton ait été consommé et la clé publique enregistrée.
+    expect(
+      (await adminA.post(`/routers/${pending.router.id}/enrollment/resume`, {})).statusCode,
+    ).toBe(409);
+
+    const enrolled = await router.post('/routers/enroll', { token, publicKey });
+    expect(enrolled.statusCode, enrolled.body).toBe(200);
+
+    const before = await routerRow(pending.router.id);
+    expect(before?.status).toBe('PROVISIONING');
+    expect(before?.wg_public_key).toBe(publicKey);
+
+    // Un nouveau jeton reste interdit : la reprise ne doit jamais réenrôler le routeur.
+    expect((await adminA.post(`/routers/${pending.router.id}/enrollment`, {})).statusCode).toBe(
+      409,
+    );
+
+    const resumed = await adminA.post(`/routers/${pending.router.id}/enrollment/resume`, {});
+    expect(resumed.statusCode, resumed.body).toBe(200);
+
+    const body = resumed.json<{ router: Router; script: string }>();
+    expect(body.router.id).toBe(pending.router.id);
+    expect(body.router.tunnelIp).toBe(pending.router.tunnelIp);
+    expect(body.router.wgPublicKey).toBe(publicKey);
+
+    // Aucun jeton ni nouvelle identité WireGuard dans le script de reprise.
+    expect(body.script).not.toContain('ecsiToken');
+    expect(body.script).not.toContain('/routers/enroll');
+    expect(body.script).not.toContain('/interface/wireguard/add');
+    expect(body.script).not.toContain('/interface/wireguard/peers/add');
+
+    // La reprise vérifie le tunnel existant puis termine REST HTTPS + activation.
+    expect(body.script).toContain('ECSI 7/9');
+    expect(body.script).toContain('ECSI 8/9');
+    expect(body.script).toContain('ECSI 9/9');
+    expect(body.script).toContain('ecsi-svc');
+    expect(body.script).toContain('/activate');
+
+    const after = await routerRow(pending.router.id);
+    expect(after?.status).toBe('PROVISIONING');
+    expect(after?.wg_public_key).toBe(publicKey);
+
+    expect(await auditCount('routers.enrollment.resume', 'SUCCESS', pending.router.id)).toBe(1);
+
+    // Autre entreprise : le routeur est introuvable. Sans le droit routers.create sur aucun
+    // site : refus du garde avant toute recherche du routeur.
+    expect(
+      (await adminB.post(`/routers/${pending.router.id}/enrollment/resume`, {})).statusCode,
+    ).toBe(404);
+    expect(
+      (await vendeurSiteB.post(`/routers/${pending.router.id}/enrollment/resume`, {})).statusCode,
+    ).toBe(403);
+    // Routeur hors enrôlement (enregistré et supervisé) : aucune reprise possible.
+    expect((await routerRow(chrLab.id))?.status).not.toBe('PROVISIONING');
+    expect((await adminA.post(`/routers/${chrLab.id}/enrollment/resume`, {})).statusCode).toBe(409);
   });
 
   it('jeton expiré : refusé', async () => {

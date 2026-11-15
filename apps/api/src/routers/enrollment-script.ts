@@ -2,9 +2,10 @@
  * Script d'enrôlement RouterOS v7 (Sprint 3B), collé par l'administrateur dans le terminal du
  * routeur. Le corps est REPRIS À L'IDENTIQUE du modèle validé sur CHR 7.24.5 au laboratoire
  * (lab/routeros/enrolement/ecsi-enrolement.rsc.modele, résultats
- * lab/routeros/resultats/2026-10-04-S3A-chr-enrolement.md). Seule addition : le contrôle de
- * ré-enrôlement REENROLL_GUARD (S3B-RC2), inséré après l'étape 1 et validé sur CHR 7.24.5.
- * Un test unitaire vérifie l'égalité avec le modèle du laboratoire plus ce contrôle.
+ * lab/routeros/resultats/2026-10-04-S3A-chr-enrolement.md). Seules additions, insérées après
+ * l'étape 1 : le contrôle de version VERSION_GUARD (S3B, reprise) et le contrôle de
+ * ré-enrôlement REENROLL_GUARD (S3B-RC2, validé sur CHR 7.24.5). Un test unitaire vérifie
+ * l'égalité avec le modèle du laboratoire plus ces contrôles.
  *
  * Sans AC de laboratoire configurée, l'étape 2 (import de l'AC) est retirée : le certificat de
  * l'API est alors vérifié par le magasin intégré de RouterOS (AC publique). Cette variante
@@ -198,6 +199,25 @@ function integer(field: string, value: number, min: number, max: number): string
 const STEP1_END = ':put "ECSI 1/9: RouterOS $ver"\n';
 
 /**
+ * Contrôle de version ajouté au modèle (S3B, reprise d'enrôlement, anomalie R7) : le modèle ne
+ * vérifiait que la version majeure. Sous RouterOS 7.15, l'étape 5 échoue (propriété `name` des
+ * pairs WireGuard) APRÈS la création de l'interface et du pare-feu ; une version que l'étape 8
+ * ne sait pas analyser (préversion « 7.23rc1 », par exemple) faisait choisir `available-from`
+ * et échouer l'étape 8 APRÈS la consommation du jeton. Le script s'arrête désormais avant toute
+ * modification. Même analyse que l'étape 8 (noms de variables distincts). Partagé avec le
+ * script de reprise.
+ */
+export const VERSION_GUARD = String.raw`
+# 1a. Version minimale 7.15 et version lisible, verifiees AVANT toute modification
+:local ecsiVerNum [:pick $ver 0 [:find $ver " "]]
+:local ecsiMinorStr [:pick $ecsiVerNum ([:find $ecsiVerNum "."] + 1) [:len $ecsiVerNum]]
+:if ([:typeof [:find $ecsiMinorStr "."]] != "nil") do={ :set ecsiMinorStr [:pick $ecsiMinorStr 0 [:find $ecsiMinorStr "."]] }
+:local ecsiMinor [:tonum $ecsiMinorStr]
+:if ([:typeof $ecsiMinor] != "num") do={ :error "ECSI: version RouterOS non reconnue ($ver) : aucune modification effectuee" }
+:if ($ecsiMinor < 15) do={ :error "ECSI: RouterOS 7.15 minimum requis (version: $ver) : aucune modification effectuee" }
+`;
+
+/**
  * Contrôle ajouté au modèle S3A (Sprint 3B-RC2, rapport de validation §6.4) : un routeur
  * déjà enrôlé puis supprimé dans ECSI CLOUD garde son interface ecsi-wg, son adresse tunnel et
  * son pair passerelle ; le modèle les réutilise sans les remplacer, et le ré-enrôlement
@@ -238,7 +258,7 @@ export function buildEnrollmentScript(input: EnrollmentScriptInput): string {
   if (!ENROLLMENT_SCRIPT_BODY.includes(STEP1_END)) {
     throw new Error("Modèle d'enrôlement inattendu (étape 1)");
   }
-  let body = ENROLLMENT_SCRIPT_BODY.replace(STEP1_END, STEP1_END + REENROLL_GUARD);
+  let body = ENROLLMENT_SCRIPT_BODY.replace(STEP1_END, STEP1_END + VERSION_GUARD + REENROLL_GUARD);
   if (input.ca) {
     values.__CA_URL__ = check('ca.url', input.ca.url, HTTPS_URL);
     values.__CA_FINGERPRINT__ = check('ca.fingerprint', input.ca.fingerprint, SHA256);

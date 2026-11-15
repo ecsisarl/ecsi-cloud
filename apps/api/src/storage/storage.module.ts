@@ -17,6 +17,7 @@ import {
 } from '@nestjs/common';
 import { ENV } from '../config/config.module.js';
 import type { Env } from '../config/env.js';
+import { safeErrorMessage } from '../common/safe-error.js';
 
 export const S3 = Symbol('S3');
 
@@ -48,7 +49,7 @@ export class StorageService implements OnModuleInit {
         this.logger.log(`Bucket « ${this.bucket} » créé (développement)`);
       } catch (error) {
         // Le stockage n'est pas indispensable au démarrage : l'état est visible dans /health.
-        this.logger.warn(`Création du bucket impossible : ${(error as Error).message}`);
+        this.logger.warn(`Création du bucket impossible : ${safeErrorMessage(error)}`);
       }
     }
   }

@@ -52,7 +52,7 @@ import type { AuthContext, RequestMeta } from './auth.types.js';
 import { clearAuthCookies, setAuthCookies, setMfaChallengeCookie } from './cookies.js';
 import { MfaService } from './mfa.service.js';
 import { SessionService } from './session.service.js';
-import { RATE_LIMITS, RateLimiterService } from './rate-limiter.service.js';
+import { ipBucket, RATE_LIMITS, RateLimiterService } from './rate-limiter.service.js';
 
 /** Authentification des utilisateurs des entreprises : /api/v1/auth/*. */
 @ApiTags('auth')
@@ -119,7 +119,7 @@ export class AuthController {
     @ReqMeta() meta: RequestMeta,
     @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<void> {
-    await this.rateLimiter.consume(`refresh:ip:${meta.ip}`, RATE_LIMITS.refreshPerIp);
+    await this.rateLimiter.consume(`refresh:ip:${ipBucket(meta.ip)}`, RATE_LIMITS.refreshPerIp);
     const raw = request.cookies[AUTH_COOKIES.refresh];
     const result = raw ? await this.sessions.refresh(raw) : null;
     if (!result?.ok) {
@@ -135,8 +135,10 @@ export class AuthController {
   @HttpCode(HttpStatus.NO_CONTENT)
   async logout(
     @Req() request: FastifyRequest,
+    @ReqMeta() meta: RequestMeta,
     @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<void> {
+    await this.rateLimiter.consume(`logout:ip:${ipBucket(meta.ip)}`, RATE_LIMITS.logoutPerIp);
     const access = request.cookies[AUTH_COOKIES.access];
     const claims = access ? await this.accessTokens.verify(access) : null;
     if (claims) {

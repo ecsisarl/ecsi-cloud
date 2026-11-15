@@ -83,6 +83,14 @@ Après les migrations, `pnpm db:migrate` synchronise le catalogue des permission
 | `router_activation_denied(inet, text)`   | `ecsi_worker` | Audit d'une activation refusée                                                |
 | `platform_company_routers(uuid)`         | `ecsi_auth`   | Console plateforme : colonnes non sensibles des routeurs d'une entreprise     |
 
+### Migration 0007 : historique de supervision et alertes (lot E1, générée par Drizzle, complétée à la main, additive)
+
+- `router_metrics` : une mesure par collecte du worker (`status`, `cpu_load`, `total_memory`, `free_memory`, `uptime_seconds`, `sampled_at` imposé par la base), uniquement des valeurs déjà lues par la supervision S3A ; une collecte en échec est enregistrée sans valeurs (disponibilité). `(company_id, router_id)` référence `routers (company_id, id)`, suppression en cascade. Index `(router_id, sampled_at)` et `(sampled_at)` (purge).
+- `alerts` : `ROUTER_OFFLINE` (critique), `ROUTER_DEGRADED`, `CPU_HIGH`, `MEMORY_HIGH` (avertissements) ; `details` (valeurs relevées à l'ouverture), `opened_at`, `resolved_at`, `acknowledged_at`, `acknowledged_by` (→ `users`, `SET NULL`). Index unique partiel `alerts_open_key (router_id, type) WHERE resolved_at IS NULL` : au plus une alerte ouverte par routeur et par type.
+- `ecsi_app` : `SELECT` (RLS `tenant_select`) ; `UPDATE (acknowledged_at, acknowledged_by)` seulement, politique `tenant_acknowledge` : une alerte non encore acquittée, au nom de `app.current_user_id()`.
+- `ecsi_auth` : aucun accès.
+- `ecsi_worker` : `INSERT` colonne par colonne (ni `sampled_at`, ni `opened_at`, ni acquittement) pour les SEULS routeurs qu'il voit (politique appuyée sur sa RLS de `routers` : actifs, hors enrôlement) ; `UPDATE (resolved_at)` d'une alerte ouverte seulement (jamais de réouverture) ; `DELETE` limité par politique aux mesures de plus d'un jour et aux alertes résolues depuis plus de 7 jours.
+
 ### Données de démonstration
 
 `SEED_PASSWORD=… pnpm db:seed` (refusé en production) crée ENTREPRISE_A (`admin.a`, `gerant.a`, `vendeur.a`, `gerant.site-a` limité à SITE-A, `vendeur.site-b` limité à SITE-B), ENTREPRISE_B (`admin.b`, `gerant.b`) et le super administrateur `superadmin@ecsi.test`, adresses `@ecsi.test`. Sites : SITE-A « Cocody Riviera » et SITE-B « Yopougon Selmer » (groupe GROUPE-ABIDJAN) pour A, SITE-A « Plateau Centre (B) » pour B (même code, autre entreprise). Chaque exécution réinitialise mots de passe, 2FA, sessions, rôles et statut de ces comptes et entreprises.

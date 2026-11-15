@@ -136,6 +136,16 @@ export interface EnrollmentCreated {
   expiresAt: string;
 }
 
+/**
+ * Reprise d'un enrôlement dont le jeton a déjà été consommé.
+ * Aucun nouveau jeton n'est émis : le script reprend uniquement
+ * la finalisation du tunnel, REST HTTPS et l'activation.
+ */
+export interface EnrollmentResume {
+  router: Router;
+  script: string;
+}
+
 /** Console plateforme (Super Admin ECSI) : routeurs d'une entreprise, lecture seule, sans secret. */
 export interface PlatformRouter {
   id: string;
@@ -156,4 +166,24 @@ export interface PlatformRouter {
   enrolledAt: string | null;
   activatedAt: string | null;
   createdAt: string;
+}
+
+/**
+ * Compte d'écriture RouterOS « ecsi-cfg » (lot B, provisionnement Hotspot) :
+ * GET /routers/:id/config-access et POST /routers/:id/config-access. NONE : jamais activé ;
+ * PENDING : script émis, pas encore exécuté ; ACTIVE : compte activé (un nouveau script peut
+ * être en attente, expiresAt non nul). Le script (avec son jeton) n'apparaît qu'une fois.
+ */
+export const ROUTER_CONFIG_ACCESS_STATUSES = ['NONE', 'PENDING', 'ACTIVE'] as const;
+export type RouterConfigAccessStatus = (typeof ROUTER_CONFIG_ACCESS_STATUSES)[number];
+
+export interface RouterConfigAccess {
+  status: RouterConfigAccessStatus;
+  activatedAt: string | null;
+  expiresAt: string | null;
+}
+
+export interface RouterConfigAccessScript {
+  script: string;
+  expiresAt: string;
 }

@@ -44,7 +44,7 @@ import type { SecretBox } from './crypto/secret-box.js';
 import { generateOpaqueToken, hashToken } from './crypto/tokens.js';
 import { MfaChallengeStore } from './mfa-challenge.store.js';
 import { MfaService } from './mfa.service.js';
-import { RATE_LIMITS, RateLimiterService } from './rate-limiter.service.js';
+import { ipBucket, RATE_LIMITS, RateLimiterService } from './rate-limiter.service.js';
 import { SECRET_BOX } from './secret-box.provider.js';
 import { SessionService } from './session.service.js';
 
@@ -87,11 +87,8 @@ export class AuthService {
 
   async login(input: LoginRequest, meta: RequestMeta): Promise<LoginOutcome> {
     const emailKey = this.secretBox.fingerprint(input.email);
-    await this.rateLimiter.consume(`login:ip:${meta.ip}`, this.rateLimiter.loginPerIp);
-    await this.rateLimiter.assertNotLimited(
-      `login:fail:${emailKey}`,
-      RATE_LIMITS.loginFailuresPerEmail,
-    );
+    await this.rateLimiter.consume(`login:ip:${ipBucket(meta.ip)}`, this.rateLimiter.loginPerIp);
+    await this.rateLimiter.assertLoginAllowed('login', emailKey, meta.ip);
 
     const [account] = await this.db
       .select({ id: users.id, status: users.status, passwordHash: userCredentials.passwordHash })
@@ -105,7 +102,7 @@ export class AuthService {
       : await verifyAgainstDummy(input.password);
 
     if (!account || !valid || account.status !== 'ACTIVE') {
-      await this.rateLimiter.hit(`login:fail:${emailKey}`, RATE_LIMITS.loginFailuresPerEmail);
+      await this.rateLimiter.recordLoginFailure('login', emailKey, meta.ip);
       this.logger.warn({ event: 'auth.login_failed', emailKey, ip: meta.ip }, 'Échec de connexion');
       // Compte connu : l'échec lui est attribué ; sinon acteur anonyme, adresse pseudonymisée.
       await this.audit.writeDirect(
@@ -121,7 +118,7 @@ export class AuthService {
       throw new UnauthorizedException(INVALID_CREDENTIALS);
     }
 
-    await this.rateLimiter.reset(`login:fail:${emailKey}`);
+    await this.rateLimiter.clearLoginFailures('login', emailKey, meta.ip);
     await this.db.update(users).set({ lastLoginAt: new Date() }).where(eq(users.id, account.id));
     const companyId = await this.defaultCompany(account.id);
     this.logger.log(
@@ -172,10 +169,22 @@ export class AuthService {
     input: MfaVerifyRequest,
     meta: RequestMeta,
   ): Promise<IssuedTokens> {
-    await this.rateLimiter.consume(`mfa:ip:${meta.ip}`, RATE_LIMITS.mfaPerIp);
+    await this.rateLimiter.consume(`mfa:ip:${ipBucket(meta.ip)}`, RATE_LIMITS.mfaPerIp);
     const challenge = challengeId ? await this.challenges.get(challengeId) : null;
     if (!challengeId || !challenge || challenge.realm !== realm) {
       throw new UnauthorizedException('Vérification expirée : reconnectez-vous');
+    }
+    // Plafond par compte, tous défis confondus (un nouveau défi à chaque mot de passe valide).
+    const accountFailures = `mfa:fail:${realm}:${challenge.principalId}`;
+    try {
+      await this.rateLimiter.assertNotLimited(accountFailures, RATE_LIMITS.mfaFailuresPerAccount);
+    } catch (error) {
+      await this.challenges.delete(challengeId);
+      this.logger.warn(
+        { event: 'auth.mfa_locked', realm, principalId: challenge.principalId, ip: meta.ip },
+        'Vérification 2FA verrouillée (trop de codes invalides)',
+      );
+      throw error;
     }
     const attempts = await this.rateLimiter.hit(
       `mfa:challenge:${challengeId}`,
@@ -189,6 +198,7 @@ export class AuthService {
     const actor = await this.audit.principal(realm, challenge.principalId);
     const auditCompany = realm === 'user' ? challenge.companyId : null;
     if (!(await this.mfa.verify(realm, challenge.principalId, input))) {
+      await this.rateLimiter.hit(accountFailures, RATE_LIMITS.mfaFailuresPerAccount);
       this.logger.warn(
         { event: 'auth.mfa_failed', realm, principalId: challenge.principalId, ip: meta.ip },
         'Code 2FA invalide',
@@ -206,6 +216,7 @@ export class AuthService {
       throw new UnauthorizedException('Code de vérification invalide');
     }
     await this.challenges.delete(challengeId);
+    await this.rateLimiter.reset(accountFailures);
     const { sessionId, tokens } = await this.sessions.create({
       realm,
       principalId: challenge.principalId,
@@ -325,7 +336,7 @@ export class AuthService {
   /** Demande de réinitialisation : réponse identique que le compte existe ou non. */
   async forgotPassword(email: string, meta: RequestMeta): Promise<void> {
     const emailKey = this.secretBox.fingerprint(email);
-    await this.rateLimiter.consume(`forgot:ip:${meta.ip}`, RATE_LIMITS.forgotPerIp);
+    await this.rateLimiter.consume(`forgot:ip:${ipBucket(meta.ip)}`, RATE_LIMITS.forgotPerIp);
     await this.rateLimiter.consume(`forgot:email:${emailKey}`, RATE_LIMITS.forgotPerEmail);
 
     const [user] = await this.db
@@ -371,7 +382,21 @@ export class AuthService {
 
   /** Réinitialisation : jeton à usage unique, 30 minutes ; toutes les sessions sont révoquées. */
   async resetPassword(token: string, password: string, meta: RequestMeta): Promise<void> {
-    await this.rateLimiter.consume(`reset:ip:${meta.ip}`, RATE_LIMITS.resetPerIp);
+    await this.rateLimiter.consume(`reset:ip:${ipBucket(meta.ip)}`, RATE_LIMITS.resetPerIp);
+    // Jeton vérifié AVANT le calcul Argon2id (coûteux) : un jeton inconnu ou expiré ne coûte
+    // presque rien. Il est ensuite réclamé atomiquement dans la transaction.
+    const [usable] = await this.db
+      .select({ userId: passwordResetTokens.userId })
+      .from(passwordResetTokens)
+      .where(
+        and(
+          eq(passwordResetTokens.tokenHash, hashToken(token)),
+          isNull(passwordResetTokens.usedAt),
+          gt(passwordResetTokens.expiresAt, new Date()),
+        ),
+      )
+      .limit(1);
+    if (!usable) throw new BadRequestException(INVALID_LINK);
     const passwordHash = await hashPassword(password);
     const userId = await this.db.transaction(async (tx) => {
       const [claimed] = await tx
@@ -402,7 +427,9 @@ export class AuthService {
       .select({ email: users.email })
       .from(users)
       .where(eq(users.id, userId));
-    if (user) await this.rateLimiter.reset(`login:fail:${this.secretBox.fingerprint(user.email)}`);
+    if (user) {
+      await this.rateLimiter.clearAllLoginFailures('login', this.secretBox.fingerprint(user.email));
+    }
     this.logger.log(
       { event: 'auth.password_reset_completed', userId, revokedSessions: revoked },
       'Mot de passe réinitialisé',
@@ -420,7 +447,10 @@ export class AuthService {
   }
 
   async previewInvitation(token: string, meta: RequestMeta): Promise<InvitationPreview> {
-    await this.rateLimiter.consume(`invitation:ip:${meta.ip}`, RATE_LIMITS.invitationPerIp);
+    await this.rateLimiter.consume(
+      `invitation:ip:${ipBucket(meta.ip)}`,
+      RATE_LIMITS.invitationPerIp,
+    );
     const invitation = await this.findUsableInvitation(token);
     const [existing] = await this.db
       .select({ id: users.id })
@@ -440,7 +470,10 @@ export class AuthService {
    * normalement (avec 2FA si son rôle l'exige).
    */
   async acceptInvitation(input: AcceptInvitationRequest, meta: RequestMeta): Promise<void> {
-    await this.rateLimiter.consume(`invitation:ip:${meta.ip}`, RATE_LIMITS.invitationPerIp);
+    await this.rateLimiter.consume(
+      `invitation:ip:${ipBucket(meta.ip)}`,
+      RATE_LIMITS.invitationPerIp,
+    );
     const invitation = await this.findUsableInvitation(input.token);
 
     const [existing] = await this.db
@@ -451,12 +484,18 @@ export class AuthService {
 
     let newAccount: { fullName: string; passwordHash: string } | null = null;
     if (existing) {
+      // Même plafond que la connexion : l'invitation ne doit pas offrir un second point de
+      // force brute du mot de passe d'un compte existant.
+      const failures = `invitation:fail:${existing.id}`;
+      await this.rateLimiter.assertNotLimited(failures, RATE_LIMITS.invitationPasswordFailures);
       const valid = existing.passwordHash
         ? await verifyPassword(existing.passwordHash, input.password)
         : false;
       if (!valid || existing.status !== 'ACTIVE') {
+        await this.rateLimiter.hit(failures, RATE_LIMITS.invitationPasswordFailures);
         throw new UnauthorizedException('Mot de passe incorrect');
       }
+      await this.rateLimiter.reset(failures);
     } else {
       if (!input.fullName) throw new UnprocessableEntityException('Le nom complet est requis');
       const password = passwordSchema.safeParse(input.password);

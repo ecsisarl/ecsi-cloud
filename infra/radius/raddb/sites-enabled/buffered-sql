@@ -1,0 +1,17 @@
+# Rejeu du tampon d'accounting vers PostgreSQL. Si la base est indisponible, l'entrée reste
+# sur disque et est réessayée (retry_interval) : aucune perte de consommation.
+server buffered-sql {
+	listen {
+		type = detail
+		filename = "${radacctdir}/detail-*"
+		load_factor = 10
+		poll_interval = 1
+		retry_interval = 30
+	}
+	preacct {
+		ok
+	}
+	accounting {
+		sql
+	}
+}

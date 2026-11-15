@@ -1,6 +1,7 @@
+import { createHash } from 'node:crypto';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { SecretBox } from '../../auth/crypto/secret-box.js';
-import { encryptRouterPassword } from '../router-secret.js';
+import { encryptRouterConfigPassword, encryptRouterPassword } from '../router-secret.js';
 import { assertRouterTunnelIp, type TunnelNetwork } from '../tunnel-ip.js';
 
 /** Accès base de l'activation : fonctions SECURITY DEFINER de la migration 0006. */
@@ -15,6 +16,39 @@ export interface ActivationStore {
   }): Promise<boolean>;
   denied(tunnelIp: string, reason: ActivationDenial): Promise<void>;
 }
+
+/**
+ * Activation du compte d'écriture ecsi-cfg (lot B) : fonctions SECURITY DEFINER de la
+ * migration 0009. Le routeur est identifié par l'adresse source ET par le jeton.
+ */
+export interface ConfigActivationStore {
+  target(
+    tunnelIp: string,
+    tokenHash: Buffer,
+  ): Promise<{
+    outcome: 'OK' | 'UNKNOWN_SOURCE' | 'INVALID_TOKEN';
+    routerId: string | null;
+    companyId: string | null;
+  }>;
+  activate(input: {
+    routerId: string;
+    companyId: string;
+    tokenHash: Buffer;
+    username: string;
+    passwordEncrypted: string;
+  }): Promise<boolean>;
+  denied(tunnelIp: string, reason: ConfigActivationDenial): Promise<void>;
+}
+
+export type ConfigActivationDenial =
+  'INVALID_TOKEN' | 'INVALID_BODY' | 'UNKNOWN_SOURCE' | 'RATE_LIMITED';
+
+/** Seul compte accepté par /activate-config (créé par le script d'activation configuration). */
+export const CONFIG_USERNAME = 'ecsi-cfg';
+const CONFIG_TOKEN = /^[A-Za-z0-9_-]{43}$/;
+
+export const hashConfigToken = (token: string) =>
+  createHash('sha256').update(token, 'utf8').digest();
 
 export type ActivationDenial =
   'NOT_PROVISIONING' | 'INVALID_BODY' | 'UNKNOWN_SOURCE' | 'RATE_LIMITED';
@@ -51,6 +85,8 @@ export class ActivationServer {
     private readonly network: TunnelNetwork,
     private readonly logger: ActivationLogger,
     private readonly clock: () => number = Date.now,
+    /** Absent : /activate-config répond 404 (agent sans le lot B). */
+    private readonly configStore: ConfigActivationStore | null = null,
   ) {}
 
   listen(host: string, port: number): Promise<Server> {
@@ -95,7 +131,12 @@ export class ActivationServer {
       send(res, 403, 'Source refusée');
       return;
     }
-    if (req.method !== 'POST' || (req.url ?? '').split('?')[0] !== '/activate') {
+    const path = (req.url ?? '').split('?')[0];
+    if (req.method === 'POST' && path === '/activate-config' && this.configStore) {
+      await this.handleConfig(req, res, tunnelIp, this.configStore);
+      return;
+    }
+    if (req.method !== 'POST' || path !== '/activate') {
       req.resume();
       send(res, 404, 'Introuvable');
       return;
@@ -142,6 +183,62 @@ export class ActivationServer {
     send(res, 200, 'Activé');
   }
 
+  /**
+   * POST /activate-config {token, user, password} (script d'activation configuration, lot B) :
+   * jeton à usage unique émis pour le routeur qui porte l'adresse source ; mot de passe chiffré
+   * aussitôt (AAD …:config-password), jamais journalisé ; jeton consommé atomiquement.
+   */
+  private async handleConfig(
+    req: IncomingMessage,
+    res: ServerResponse,
+    tunnelIp: string,
+    store: ConfigActivationStore,
+  ): Promise<void> {
+    if (!this.allow(tunnelIp)) {
+      req.resume();
+      await store.denied(tunnelIp, 'RATE_LIMITED');
+      send(res, 429, 'Trop de tentatives');
+      return;
+    }
+    const body = await readJson(req);
+    const parsed = body ? parseConfigActivation(body) : null;
+    if (!parsed) {
+      await store.denied(tunnelIp, 'INVALID_BODY');
+      this.logger.warn(`Activation configuration refusée depuis ${tunnelIp} : requête invalide`);
+      send(res, 400, 'Requête invalide');
+      return;
+    }
+    const tokenHash = hashConfigToken(parsed.token);
+    const target = await store.target(tunnelIp, tokenHash);
+    if (target.outcome !== 'OK' || !target.routerId || !target.companyId) {
+      const reason = target.outcome === 'OK' ? 'UNKNOWN_SOURCE' : target.outcome;
+      await store.denied(tunnelIp, reason);
+      this.logger.warn(`Activation configuration refusée depuis ${tunnelIp} : ${reason}`);
+      send(res, 409, 'Jeton invalide, expiré ou déjà utilisé pour ce routeur');
+      return;
+    }
+    const activated = await store.activate({
+      routerId: target.routerId,
+      companyId: target.companyId,
+      tokenHash,
+      username: parsed.username,
+      passwordEncrypted: encryptRouterConfigPassword(
+        this.box,
+        { companyId: target.companyId, routerId: target.routerId },
+        parsed.password,
+      ),
+    });
+    if (!activated) {
+      await store.denied(tunnelIp, 'INVALID_TOKEN');
+      send(res, 409, 'Jeton invalide, expiré ou déjà utilisé pour ce routeur');
+      return;
+    }
+    this.logger.log(
+      `Routeur ${target.routerId} : compte de configuration activé depuis ${tunnelIp}`,
+    );
+    send(res, 200, 'Activé');
+  }
+
   private allow(ip: string): boolean {
     const now = this.clock();
     const entry = this.hits.get(ip);
@@ -170,6 +267,21 @@ export function parseActivation(
   const fingerprint = tlsFingerprint.toLowerCase().replace(/:/g, '');
   if (!FINGERPRINT.test(fingerprint)) return null;
   return { username: user, password, tlsFingerprint: fingerprint };
+}
+
+/** Corps strict : token (43 base64url), user = ecsi-cfg, password (20 à 256, sans contrôle). */
+export function parseConfigActivation(
+  body: unknown,
+): { token: string; username: string; password: string } | null {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return null;
+  const record = body as Record<string, unknown>;
+  if (Object.keys(record).sort().join(',') !== 'password,token,user') return null;
+  const { token, user, password } = record;
+  if (typeof token !== 'string' || !CONFIG_TOKEN.test(token)) return null;
+  if (user !== CONFIG_USERNAME) return null;
+  if (typeof password !== 'string' || password.length < 20 || password.length > 256) return null;
+  if (/\p{Cc}/u.test(password)) return null;
+  return { token, username: user, password };
 }
 
 function readJson(req: IncomingMessage): Promise<unknown> {

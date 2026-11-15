@@ -23,4 +23,25 @@ describe('script de retrait RouterOS (ré-enrôlement)', () => {
     const header = ROUTER_REMOVAL_SCRIPT.slice(0, -ROUTER_REMOVAL_SCRIPT_BODY.length);
     for (const line of header.split('\n').filter(Boolean)) expect(line.startsWith('#')).toBe(true);
   });
+
+  it('retire aussi le Hotspot (lot B) puis ecsi-cfg et ecsi-rw, avant ecsi-svc', () => {
+    const body = ROUTER_REMOVAL_SCRIPT_BODY;
+    const order = [
+      '/ip/hotspot/remove [find where name~"^ecsi-hs-"]',
+      '/ip/hotspot/profile/remove [find where name~"^ecsi-hs-"]',
+      '/ip/firewall/nat/remove [find where comment~"^ecsi-cloud:hs:"]',
+      '/radius/remove [find where comment~"^ecsi-cloud:hs:"]',
+      '/ip/dhcp-server/remove [find where comment~"^ecsi-cloud:hs:"]',
+      '/ip/dhcp-server/network/remove [find where comment~"^ecsi-cloud:hs:"]',
+      '/ip/pool/remove [find where comment~"^ecsi-cloud:hs:"]',
+      '/ip/address/remove [find where comment~"^ecsi-cloud:hs:"]',
+      '/user/remove [find where name="ecsi-cfg"]',
+      '/user/group/remove [find where name="ecsi-rw"]',
+      'ecsi-svc',
+    ].map((line) => body.indexOf(line));
+    expect(order.every((at) => at > 0)).toBe(true);
+    expect([...order].sort((a, b) => a - b)).toEqual(order);
+    // Règles de filtrage étiquetées « ecsi-cloud » : déjà couvertes par le motif général.
+    expect(body).toMatch(/\/ip\/firewall\/filter\/remove \[find where comment~"\^ecsi-cloud"\]/);
+  });
 });

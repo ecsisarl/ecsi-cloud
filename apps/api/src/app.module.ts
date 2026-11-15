@@ -20,6 +20,9 @@ import { CompaniesModule } from './companies/companies.module.js';
 import { SitesModule } from './sites/sites.module.js';
 import { PlatformModule } from './platform/platform.module.js';
 import { RoutersModule } from './routers/routers.module.js';
+import { MonitoringModule } from './monitoring/monitoring.module.js';
+import { HotspotModule } from './hotspot/hotspot.module.js';
+import { safeError } from './common/safe-error.js';
 
 export interface AppOptions {
   readonly mailTransport?: MailTransport;
@@ -51,7 +54,9 @@ export class AppModule {
                 censor: '[masqué]',
               },
               // L'URL complète peut contenir un jeton (?token=) : seule la route est journalisée.
+              // Erreurs sans paramètre SQL ni valeur PostgreSQL (common/safe-error.ts).
               serializers: {
+                err: safeError,
                 req: (req: { id: unknown; method: string; url: string }) => ({
                   id: req.id,
                   method: req.method,
@@ -76,6 +81,8 @@ export class AppModule {
         CompaniesModule,
         SitesModule,
         RoutersModule,
+        MonitoringModule,
+        HotspotModule,
         PlatformModule,
         HealthModule,
       ],

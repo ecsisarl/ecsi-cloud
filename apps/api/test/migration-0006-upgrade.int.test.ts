@@ -32,7 +32,7 @@ beforeAll(async () => {
   cpSync(MIGRATIONS_FOLDER, folder, { recursive: true });
   const journalPath = join(folder, 'meta', '_journal.json');
   const journal = JSON.parse(readFileSync(journalPath, 'utf8')) as { entries: { tag: string }[] };
-  journal.entries = journal.entries.filter((e) => !e.tag.startsWith('0006'));
+  journal.entries = journal.entries.filter((e) => e.tag < '0006');
   writeFileSync(journalPath, JSON.stringify(journal));
   migrator = new pg.Pool({ connectionString: infra.urls.migrator, max: 1 });
   const db = drizzle(migrator, { casing: 'snake_case' });
@@ -65,12 +65,12 @@ describe('migration 0006 sur une installation S3A existante', () => {
         ])
       ).rows[0] ?? {};
 
-    await runMigrations(infra.urls.migrator); // applique 0006 (et rien d'autre)
+    await runMigrations(infra.urls.migrator); // applique 0006 à 0009 (et rien d'autre)
 
     const migrations = await migrator.query(
       'select count(*)::int as n from drizzle.__drizzle_migrations',
     );
-    expect(migrations.rows[0]).toEqual({ n: 7 });
+    expect(migrations.rows[0]).toEqual({ n: 10 });
     const after =
       (
         await migrator.query<Record<string, unknown>>('select * from routers where id = $1', [

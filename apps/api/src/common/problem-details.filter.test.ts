@@ -1,4 +1,9 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  InternalServerErrorException,
+  NotFoundException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { toProblem } from './problem-details.filter.js';
@@ -22,6 +27,13 @@ describe('toProblem', () => {
       detail: 'Site introuvable',
     });
     expect(toProblem(new BadRequestException(['a', 'b'])).detail).toBe('a, b');
+  });
+
+  it('503 volontaire : message métier conservé ; autres 5xx muettes', () => {
+    expect(
+      toProblem(new ServiceUnavailableException('Clés de tickets non configurées')),
+    ).toMatchObject({ status: 503, detail: 'Clés de tickets non configurées' });
+    expect(toProblem(new InternalServerErrorException('détail interne')).detail).toBeUndefined();
   });
 
   it('transforme une erreur Zod en 422 avec les champs en erreur', () => {

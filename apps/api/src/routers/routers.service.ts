@@ -61,7 +61,12 @@ export interface RegisterRouterInput {
 /** Vue interne d'un routeur : jamais le chiffré du mot de passe. */
 export type RouterView = RouterViewRow;
 
-type RouterPermission = 'routers.read' | 'routers.create' | 'routers.update' | 'routers.delete';
+type RouterPermission =
+  | 'routers.read'
+  | 'routers.create'
+  | 'routers.update'
+  | 'routers.delete'
+  | 'routers.command.dangerous';
 
 export const ROUTER_NOT_FOUND = 'Routeur introuvable';
 const SITE_NOT_FOUND = 'Site introuvable';
