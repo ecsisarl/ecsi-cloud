@@ -51,6 +51,8 @@ Renseignée lors des tests, jamais supposée. Une ligne par couple modèle × ve
 | L009    | à relever              | à relever        | stable    |               |                                                                                                                                                                                                                          |
 | RB5009  | à relever              | à relever        | stable    |               |                                                                                                                                                                                                                          |
 
+Les scripts d'enrôlement et de reprise exigent RouterOS **7.15 ou plus** (propriété `name` des pairs WireGuard) et une version lisible : les préversions (par exemple `7.23rc1`) sont refusées avant toute modification.
+
 La **version minimale de RouterOS v7 supportée** par ECSI CLOUD sera fixée à partir de cette matrice, au Sprint 3.
 
 ## Procédure commune avant chaque test
@@ -81,6 +83,7 @@ Sprint 3A : le matériel se teste avec [GUIDE-TEST-MATERIEL.md](../lab/routeros/
 ### 2. Enrôlement automatique
 
 - [ ] La commande générée s'exécute telle quelle dans le terminal RouterOS (copier-coller depuis le dashboard). (CHR : validé ; hAP ax3 : script dashboard réellement collé, enrôlement accepté mais interruption après étape 6/9 due à un ancien peer WireGuard côté VPS ; reprise manuelle nécessaire)
+- [ ] Reprise d'un enrôlement interrompu après consommation du jeton (`POST /routers/:id/enrollment/resume`, étapes 7 à 9, même identité WireGuard, aucun jeton) : interruption aux étapes 7 et 9, handshake ancien, compte `ecsi-svc` résiduel, pare-feu incomplet, script d'un autre routeur, réponse d'activation perdue. (CHR 7.24.5 : validé le 2026-11-15, [fiche](../lab/routeros/resultats/2026-11-15-S3B-reprise-enrolement.md) ; hAP ax3 : à faire)
 - [ ] Le jeton est à usage unique : une seconde exécution est refusée et journalisée. (CHR + serveur de labo : validé, y compris 8 requêtes simultanées)
 - [ ] Un jeton expiré est refusé. (serveur de labo : validé)
 - [ ] Rejouer le script sur un routeur déjà enrôlé ne crée pas de doublons. (CHR : validé)
