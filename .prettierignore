@@ -9,3 +9,4 @@ playwright-report
 test-results
 # Preuves de validation S3A fournies par le client : conservées à l'identique (jamais reformatées).
 lab/routeros/resultats/2026-10-03-S3A-chr-resilience.md
+lab/routeros/resultats/2026-11-15-S3H-hap-ax3.md
