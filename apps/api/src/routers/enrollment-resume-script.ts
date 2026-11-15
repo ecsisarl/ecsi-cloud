@@ -97,12 +97,18 @@ ${VERSION_GUARD}
   :error "ECSI: allowed-address de la passerelle inattendue ; reprise annulee"
 }
 
-# Pare-feu pose par l'enrolement (etape 4) : les cinq regles doivent etre presentes et actives,
+# Pare-feu pose par l'enrolement (etape 4) : les cinq regles doivent etre presentes et actives
+# ("!disabled" : "disabled=no" ne trouve rien dans /ip/firewall/filter, mesure sur CHR 7.24.5),
 # sinon l'API REST du routeur ne serait pas protegee comme prevu.
 :foreach c in={"ecsi-cloud: retours du tunnel";"ecsi-cloud: API REST depuis la passerelle";"ecsi-cloud: ping depuis la passerelle";"ecsi-cloud: tout le reste du tunnel";"ecsi-cloud: API REST refusee ailleurs"} do={
-  :if ([:len [/ip/firewall/filter/find where comment=$c disabled=no]] != 1) do={
+  :if ([:len [/ip/firewall/filter/find where comment=$c !disabled]] != 1) do={
     :error "ECSI: regle de pare-feu ECSI CLOUD absente, desactivee ou en double ($c) : reprise annulee ; appliquer le script de retrait ecsi-retrait.rsc puis un nouvel enrolement"
   }
+}
+
+# Ne jamais remplacer automatiquement un compte existant (controle AVANT toute modification).
+:if ([:len [/user/find where name="ecsi-svc"]] > 0) do={
+  :error "ECSI: ecsi-svc existe deja ; reprise automatique refusee pour proteger le compte existant. Si ECSI CLOUD affiche toujours ce routeur en cours d'enrolement, retirer ce compte (/user/remove [find where name=\"ecsi-svc\"]) puis recoller ce script ; sinon ne rien faire"
 }
 
 # 7. Handshake WireGuard RECENT : RouterOS garde la date du dernier handshake quand le tunnel
@@ -110,7 +116,7 @@ ${VERSION_GUARD}
 :local up false
 :for i from=1 to=30 do={
   :if (!$up) do={
-    :if ([:len [/interface/wireguard/peers/find where interface=$wgName public-key=$gwPublicKey last-handshake<3m]] > 0) do={
+    :if ([:len [/interface/wireguard/peers/find where interface=$wgName public-key=$gwPublicKey last-handshake last-handshake<3m]] > 0) do={
       :set up true
     } else={
       :delay 2s
@@ -148,10 +154,6 @@ $restrict
   /user/group/add name="ecsi-ro" policy=read,api,rest-api comment="ecsi-cloud"
 }
 
-# Ne jamais remplacer automatiquement un compte existant.
-:if ([:len [/user/find where name="ecsi-svc"]] > 0) do={
-  :error "ECSI: ecsi-svc existe deja ; reprise automatique refusee pour proteger le compte existant. Si ECSI CLOUD affiche toujours ce routeur en cours d'enrolement, retirer ce compte (/user/remove [find where name=\"ecsi-svc\"]) puis recoller ce script ; sinon ne rien faire"
-}
 
 :local pw [:rndstr length=32]
 /user/add name="ecsi-svc" group="ecsi-ro" address="$gwTunnelIp/32" password=$pw comment="ecsi-cloud"

@@ -96,7 +96,12 @@ describe('script de reprise d’enrôlement', () => {
   it('vérifie la version, l’identité et le pare-feu AVANT toute modification', () => {
     const script = buildEnrollmentResumeScript(input);
     const step7 = script.indexOf('# 7. Handshake');
-    const checks = script.slice(0, step7);
+    // Les messages d'erreur (consignes à l'opérateur) ne sont pas des commandes exécutées.
+    const checks = script
+      .slice(0, step7)
+      .split('\n')
+      .filter((line) => !line.trim().startsWith(':error "'))
+      .join('\n');
     expect(checks).toContain('# 1a. Version minimale 7.15');
     expect(checks).toContain('($ecsiMinor < 15)');
     for (const comment of [
@@ -121,7 +126,7 @@ describe('script de reprise d’enrôlement', () => {
 
   it('exige un handshake récent (moins de 3 minutes), pas seulement passé', () => {
     const script = buildEnrollmentResumeScript(input);
-    expect(script).toContain('public-key=$gwPublicKey last-handshake<3m]]');
+    expect(script).toContain('public-key=$gwPublicKey last-handshake last-handshake<3m]]');
   });
 
   it('activation non confirmée : compte conservé sauf refus certain', () => {
@@ -134,5 +139,21 @@ describe('script de reprise d’enrôlement', () => {
     expect(onError.slice(0, removal)).toContain('"timeout connecting"');
     expect(onError).toContain('compte de service conserve');
     expect(onError.split('/user/remove').length).toBe(2);
+  });
+
+  it('pare-feu : règles actives filtrées par !disabled (disabled=no ne trouve rien sur RouterOS)', () => {
+    const script = buildEnrollmentResumeScript(input);
+    expect(script).toContain('find where comment=$c !disabled]]');
+    expect(script).not.toContain('disabled=no]]');
+  });
+
+  it('compte ecsi-svc existant : refus AVANT toute modification (étapes 8 et 9)', () => {
+    const script = buildEnrollmentResumeScript(input);
+    const refusal = script.indexOf('ecsi-svc existe deja');
+    expect(refusal).toBeGreaterThan(0);
+    expect(refusal).toBeLessThan(script.indexOf('# 7. Handshake'));
+    expect(script.slice(0, script.lastIndexOf('\n', refusal))).not.toMatch(
+      /\/(add|set|remove|import|sign)\b|\/tool\/fetch/,
+    );
   });
 });
