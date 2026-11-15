@@ -7,6 +7,7 @@ import {
   EnrollmentScriptError,
   REENROLL_GUARD,
   type EnrollmentScriptInput,
+  VERSION_GUARD,
 } from './enrollment-script.js';
 
 const LAB_TEMPLATE = fileURLToPath(
@@ -33,7 +34,7 @@ describe('script d’enrôlement RouterOS', () => {
     const ca = { url: 'https://203.0.113.30:8443/ca.pem', fingerprint: 'ab'.repeat(32) };
     const script = buildEnrollmentScript({ ...base, ca });
     const step1 = ':put "ECSI 1/9: RouterOS $ver"\n';
-    const expected = ENROLLMENT_SCRIPT_BODY.replace(step1, step1 + REENROLL_GUARD)
+    const expected = ENROLLMENT_SCRIPT_BODY.replace(step1, step1 + VERSION_GUARD + REENROLL_GUARD)
       .replaceAll('__TOKEN__', base.token)
       .replaceAll('__ENROLL_URL__', base.enrollUrl)
       .replaceAll('__ACTIVATE_URL__', 'http://10.200.0.1:8081/activate')
@@ -72,6 +73,20 @@ describe('script d’enrôlement RouterOS', () => {
     expect(before).toContain('ecsi-retrait.rsc');
     // Une seule insertion : le reste du modèle est inchangé (voir le premier test).
     expect(script.split('# 1b.').length).toBe(2);
+  });
+
+  it('version : 7.15 minimum et version lisible, vérifiées AVANT toute modification', () => {
+    const script = buildEnrollmentScript(base);
+    const guard = script.indexOf('# 1a. Version minimale 7.15');
+    expect(guard).toBeGreaterThan(script.indexOf('ECSI 1/9'));
+    expect(guard).toBeLessThan(script.indexOf('# 1b.'));
+    const block = script.slice(guard, script.indexOf('# 1b.'));
+    expect(block).not.toMatch(/\/(add|set|remove|import)\b|\/tool\/fetch/);
+    expect(block).toContain('($ecsiMinor < 15)');
+    expect(block).toContain('[:typeof $ecsiMinor] != "num"');
+    // Noms distincts de ceux de l'étape 8 (verNum, minorStr, minor) : aucune redéclaration.
+    expect(block).not.toMatch(/:local (verNum|minorStr|minor) /);
+    expect(script.split('# 1a.').length).toBe(2);
   });
 
   it('ne contient ni mot de passe, ni clé privée, ni empreinte de jeton', () => {

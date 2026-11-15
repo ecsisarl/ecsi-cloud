@@ -12,7 +12,7 @@ const input = {
   gatewayPort: 51820,
   tunnelIp: '10.200.0.2',
   tunnelPrefix: 24,
-  routerPublicKey: 'devonlyWireGuardPublicKeyForTests000000000A=',
+  routerPublicKey: 'devonlyWireGuardPublicKeyForTests000000000E=',
 };
 
 describe('script de reprise d’enrôlement', () => {
@@ -85,5 +85,37 @@ describe('script de reprise d’enrôlement', () => {
         routerPublicKey: 'invalide',
       }),
     ).toThrow(EnrollmentResumeScriptError);
+  });
+
+  it('place chaque clé dans sa variable : routeur et passerelle ne peuvent pas être inversés', () => {
+    const script = buildEnrollmentResumeScript(input);
+    expect(script).toContain(`:local expectedRouterPublicKey "${input.routerPublicKey}"`);
+    expect(script).toContain(`:local gwPublicKey "${input.gatewayPublicKey}"`);
+  });
+
+  it('vérifie la version, l’identité et le pare-feu AVANT toute modification', () => {
+    const script = buildEnrollmentResumeScript(input);
+    const step7 = script.indexOf('# 7. Handshake');
+    const checks = script.slice(0, step7);
+    expect(checks).toContain('# 1a. Version minimale 7.15');
+    expect(checks).toContain('($ecsiMinor < 15)');
+    for (const comment of [
+      'ecsi-cloud: retours du tunnel',
+      'ecsi-cloud: API REST depuis la passerelle',
+      'ecsi-cloud: ping depuis la passerelle',
+      'ecsi-cloud: tout le reste du tunnel',
+      'ecsi-cloud: API REST refusee ailleurs',
+    ]) {
+      expect(checks).toContain(`"${comment}"`);
+    }
+    // Aucune commande de modification avant l'étape 7.
+    expect(checks).not.toMatch(/\/(add|set|remove|import|sign)\b|\/tool\/fetch/);
+  });
+
+  it('compte ecsi-svc déjà présent : consigne explicite, aucune suppression automatique', () => {
+    const script = buildEnrollmentResumeScript(input);
+    const refusal = script.slice(script.indexOf('ecsi-svc existe deja'));
+    expect(refusal).toContain("en cours d'enrolement");
+    expect(refusal.slice(0, refusal.indexOf('\n'))).toContain('recoller ce script');
   });
 });

@@ -1,4 +1,5 @@
 import { WIREGUARD_PUBLIC_KEY } from '@ecsi/shared';
+import { VERSION_GUARD } from './enrollment-script.js';
 import { formatIpv4, parseIpv4 } from './tunnel-ip.js';
 
 export interface EnrollmentResumeScriptInput {
@@ -69,7 +70,7 @@ export function buildEnrollmentResumeScript(input: EnrollmentResumeScriptInput):
 :if ([:pick $ver 0 1] != "7") do={
   :error "ECSI: RouterOS v7 requis"
 }
-
+${VERSION_GUARD}
 # Le script de reprise ne cree ni interface, ni adresse, ni pair WireGuard.
 :if ([:len [/interface/wireguard/find where name=$wgName]] != 1) do={
   :error "ECSI: interface ecsi-wg absente ou ambigue ; reprise annulee"
@@ -92,6 +93,14 @@ export function buildEnrollmentResumeScript(input: EnrollmentResumeScriptInput):
 :local gatewayPeer [:pick $gatewayPeers 0]
 :if ([/interface/wireguard/peers/get $gatewayPeer allowed-address] != "$gwTunnelIp/32") do={
   :error "ECSI: allowed-address de la passerelle inattendue ; reprise annulee"
+}
+
+# Pare-feu pose par l'enrolement (etape 4) : les cinq regles doivent etre presentes et actives,
+# sinon l'API REST du routeur ne serait pas protegee comme prevu.
+:foreach c in={"ecsi-cloud: retours du tunnel";"ecsi-cloud: API REST depuis la passerelle";"ecsi-cloud: ping depuis la passerelle";"ecsi-cloud: tout le reste du tunnel";"ecsi-cloud: API REST refusee ailleurs"} do={
+  :if ([:len [/ip/firewall/filter/find where comment=$c disabled=no]] != 1) do={
+    :error "ECSI: regle de pare-feu ECSI CLOUD absente, desactivee ou en double ($c) : reprise annulee ; appliquer le script de retrait ecsi-retrait.rsc puis un nouvel enrolement"
+  }
 }
 
 # 7. Handshake WireGuard
@@ -138,7 +147,7 @@ $restrict
 
 # Ne jamais remplacer automatiquement un compte existant.
 :if ([:len [/user/find where name="ecsi-svc"]] > 0) do={
-  :error "ECSI: ecsi-svc existe deja ; reprise automatique refusee pour proteger le compte existant"
+  :error "ECSI: ecsi-svc existe deja ; reprise automatique refusee pour proteger le compte existant. Si ECSI CLOUD affiche toujours ce routeur en cours d'enrolement, retirer ce compte (/user/remove [find where name=\"ecsi-svc\"]) puis recoller ce script ; sinon ne rien faire"
 }
 
 :local pw [:rndstr length=32]
