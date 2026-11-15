@@ -227,6 +227,7 @@ describe('isolation entre entreprises', () => {
     ).toBe(404);
     expect((await adminB.delete(`/routers/${chrLab.id}`)).statusCode).toBe(404);
     expect((await adminB.post(`/routers/${chrLab.id}/enrollment`, {})).statusCode).toBe(404);
+    expect((await adminB.post(`/routers/${chrLab.id}/enrollment/resume`, {})).statusCode).toBe(404);
     const row = await routerRow(chrLab.id);
     expect(row).toMatchObject({
       name: 'CHR-LAB',
@@ -430,6 +431,18 @@ describe('enrôlement', () => {
     expect(after?.wg_public_key).toBe(publicKey);
 
     expect(await auditCount('routers.enrollment.resume', 'SUCCESS', pending.router.id)).toBe(1);
+
+    // Autre entreprise : le routeur est introuvable. Sans le droit routers.create sur aucun
+    // site : refus du garde avant toute recherche du routeur.
+    expect(
+      (await adminB.post(`/routers/${pending.router.id}/enrollment/resume`, {})).statusCode,
+    ).toBe(404);
+    expect(
+      (await vendeurSiteB.post(`/routers/${pending.router.id}/enrollment/resume`, {})).statusCode,
+    ).toBe(403);
+    // Routeur hors enrôlement (enregistré et supervisé) : aucune reprise possible.
+    expect((await routerRow(chrLab.id))?.status).not.toBe('PROVISIONING');
+    expect((await adminA.post(`/routers/${chrLab.id}/enrollment/resume`, {})).statusCode).toBe(409);
   });
 
   it('jeton expiré : refusé', async () => {

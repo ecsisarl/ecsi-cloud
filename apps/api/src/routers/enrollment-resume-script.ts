@@ -91,6 +91,8 @@ ${VERSION_GUARD}
 }
 
 :local gatewayPeer [:pick $gatewayPeers 0]
+# allowed-address est une liste : comparee a "$gwTunnelIp/32", elle n'est egale que si elle
+# contient exactement cette seule adresse (mesure sur CHR 7.24.5, 2026-11-15).
 :if ([/interface/wireguard/peers/get $gatewayPeer allowed-address] != "$gwTunnelIp/32") do={
   :error "ECSI: allowed-address de la passerelle inattendue ; reprise annulee"
 }
@@ -103,11 +105,12 @@ ${VERSION_GUARD}
   }
 }
 
-# 7. Handshake WireGuard
+# 7. Handshake WireGuard RECENT : RouterOS garde la date du dernier handshake quand le tunnel
+# tombe (mesure sur CHR 7.24.5) ; seul un handshake de moins de 3 minutes prouve le tunnel.
 :local up false
 :for i from=1 to=30 do={
   :if (!$up) do={
-    :if ([:len [/interface/wireguard/peers/find where interface=$wgName public-key=$gwPublicKey last-handshake]] > 0) do={
+    :if ([:len [/interface/wireguard/peers/find where interface=$wgName public-key=$gwPublicKey last-handshake<3m]] > 0) do={
       :set up true
     } else={
       :delay 2s
@@ -163,8 +166,15 @@ $restrict
 :onerror e in={
   /tool/fetch url=$ecsiActivateUrl http-method=post http-header-field="Content-Type:application/json" http-data=$act output=none
 } do={
-  /user/remove [find where name="ecsi-svc"]
-  :error "ECSI: activation refusee ($e) ; compte de service retire"
+  # Refus certain (reponse HTTP 4xx) ou requete jamais arrivee : le compte est retire et la
+  # reprise peut etre recollee. Sinon (delai depasse en attente de la reponse), le serveur a pu
+  # enregistrer l'activation : le compte est conserve pour ne pas casser un routeur active.
+  # Textes d'erreur de /tool/fetch mesures sur CHR 7.24.5 (2026-11-15).
+  :if (([:typeof [:find $e "Status 4"]] = "num") || ([:typeof [:find $e "Connection refused"]] = "num") || ([:typeof [:find $e "unreachable"]] = "num") || ([:typeof [:find $e "timeout connecting"]] = "num")) do={
+    /user/remove [find where name="ecsi-svc"]
+    :error "ECSI: activation refusee ($e) ; compte de service retire, ce script peut etre recolle"
+  }
+  :error "ECSI: activation non confirmee ($e) ; compte de service conserve. Si ECSI CLOUD affiche ce routeur En ligne dans les 2 minutes, l'enrolement est termine ; s'il reste en cours d'enrolement, retirer ecsi-svc puis recoller ce script"
 }
 
 :put "ECSI 9/9: activation envoyee avec succes"

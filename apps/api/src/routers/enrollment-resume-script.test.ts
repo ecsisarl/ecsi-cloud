@@ -118,4 +118,21 @@ describe('script de reprise d’enrôlement', () => {
     expect(refusal).toContain("en cours d'enrolement");
     expect(refusal.slice(0, refusal.indexOf('\n'))).toContain('recoller ce script');
   });
+
+  it('exige un handshake récent (moins de 3 minutes), pas seulement passé', () => {
+    const script = buildEnrollmentResumeScript(input);
+    expect(script).toContain('public-key=$gwPublicKey last-handshake<3m]]');
+  });
+
+  it('activation non confirmée : compte conservé sauf refus certain', () => {
+    const script = buildEnrollmentResumeScript(input);
+    const onError = script.slice(script.indexOf(':onerror e in='));
+    const removal = onError.indexOf('/user/remove [find where name="ecsi-svc"]');
+    // Le retrait n'a lieu que dans la branche des refus certains.
+    expect(onError.slice(0, removal)).toContain('"Status 4"');
+    expect(onError.slice(0, removal)).toContain('"Connection refused"');
+    expect(onError.slice(0, removal)).toContain('"timeout connecting"');
+    expect(onError).toContain('compte de service conserve');
+    expect(onError.split('/user/remove').length).toBe(2);
+  });
 });
