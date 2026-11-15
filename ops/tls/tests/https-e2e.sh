@@ -240,7 +240,7 @@ header() { grep -i "^$1:" "$T/headers" | sed 's/^[^:]*: *//' | tr -d '\r'; }
 upstream() { sed -n "s/.*\"$1\":\"\\([^\"]*\\)\".*/\\1/p" "$T/body"; }
 api_hits() { $C logs --no-log-prefix api 2>/dev/null | grep -c '"stub":"api"' || true; }
 security_headers() { # security_headers <contexte> [enroll]
-  [ "$(header Strict-Transport-Security)" = 'max-age=86400' ] || fail "$1 : HSTS absent, dupliqué ou incorrect"
+  [ "$(header Strict-Transport-Security)" = 'max-age=31536000' ] || fail "$1 : HSTS absent, dupliqué ou incorrect"
   [ "$(header X-Content-Type-Options)" = nosniff ] || fail "$1 : X-Content-Type-Options"
   [ "$(header X-Frame-Options)" = DENY ] || fail "$1 : X-Frame-Options absent ou dupliqué"
   [ "$(header Referrer-Policy)" = strict-origin-when-cross-origin ] || fail "$1 : Referrer-Policy"
