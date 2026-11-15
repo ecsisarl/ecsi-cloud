@@ -43,9 +43,7 @@ describe('script de reprise d’enrôlement', () => {
   it('vérifie l’identité du routeur avant les étapes 7 à 9', () => {
     const script = buildEnrollmentResumeScript(input);
 
-    const identityCheck = script.indexOf(
-      'if ($localPublicKey != $expectedRouterPublicKey)',
-    );
+    const identityCheck = script.indexOf('if ($localPublicKey != $expectedRouterPublicKey)');
     const step7 = script.indexOf('ECSI 7/9');
 
     expect(identityCheck).toBeGreaterThan(0);
@@ -55,18 +53,14 @@ describe('script de reprise d’enrôlement', () => {
   it('ne remplace jamais automatiquement un compte ecsi-svc existant', () => {
     const script = buildEnrollmentResumeScript(input);
 
-    expect(script).toContain(
-      'ecsi-svc existe deja ; reprise automatique refusee',
-    );
+    expect(script).toContain('ecsi-svc existe deja ; reprise automatique refusee');
     expect(script).not.toContain('/user/remove [find where name="ecsi-svc"]\n  :local pw');
   });
 
   it('retire seulement le compte nouvellement créé si l’activation échoue', () => {
     const script = buildEnrollmentResumeScript(input);
 
-    expect(script).toContain(
-      '/user/remove [find where name="ecsi-svc"]',
-    );
+    expect(script).toContain('/user/remove [find where name="ecsi-svc"]');
     expect(script).toContain('activation refusee');
   });
 

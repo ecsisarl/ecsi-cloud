@@ -400,7 +400,9 @@ describe('enrôlement', () => {
     expect(before?.wg_public_key).toBe(publicKey);
 
     // Un nouveau jeton reste interdit : la reprise ne doit jamais réenrôler le routeur.
-    expect((await adminA.post(`/routers/${pending.router.id}/enrollment`, {})).statusCode).toBe(409);
+    expect((await adminA.post(`/routers/${pending.router.id}/enrollment`, {})).statusCode).toBe(
+      409,
+    );
 
     const resumed = await adminA.post(`/routers/${pending.router.id}/enrollment/resume`, {});
     expect(resumed.statusCode, resumed.body).toBe(200);
@@ -427,9 +429,7 @@ describe('enrôlement', () => {
     expect(after?.status).toBe('PROVISIONING');
     expect(after?.wg_public_key).toBe(publicKey);
 
-    expect(
-      await auditCount('routers.enrollment.resume', 'SUCCESS', pending.router.id),
-    ).toBe(1);
+    expect(await auditCount('routers.enrollment.resume', 'SUCCESS', pending.router.id)).toBe(1);
   });
 
   it('jeton expiré : refusé', async () => {

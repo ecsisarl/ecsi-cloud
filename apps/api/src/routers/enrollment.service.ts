@@ -183,13 +183,7 @@ export class EnrollmentService {
     const gateway = this.gatewayConfig();
 
     return this.tenantDb.run(ctx, async (tx) => {
-      const row = await this.routersService.inScope(
-        tx,
-        ctx,
-        grants,
-        routerId,
-        'routers.create',
-      );
+      const row = await this.routersService.inScope(tx, ctx, grants, routerId, 'routers.create');
 
       if (row.status !== 'PROVISIONING') {
         throw new ConflictException(
@@ -198,9 +192,7 @@ export class EnrollmentService {
       }
 
       if (row.wgPublicKey === null) {
-        throw new ConflictException(
-          "Le routeur n'a pas encore consommé son jeton d'enrôlement",
-        );
+        throw new ConflictException("Le routeur n'a pas encore consommé son jeton d'enrôlement");
       }
 
       const tunnelIp = hostOf(row.tunnelIp);

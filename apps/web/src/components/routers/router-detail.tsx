@@ -35,11 +35,7 @@ import { usePermissions } from '@/components/me-context';
 import { RouterHistory } from '@/components/monitoring/router-history';
 import { PageHeader } from '@/components/page-header';
 import { api } from '@/lib/client-api';
-import {
-  EnrollmentScript,
-  RemovalScript,
-  ResumeEnrollmentScript,
-} from './enrollment-panel';
+import { EnrollmentScript, RemovalScript, ResumeEnrollmentScript } from './enrollment-panel';
 import { formatBytes, formatMemory, formatUptime, ROUTER_STATUS_TONE } from './format';
 
 function Row({ label, value }: { label: string; value: string | null | undefined }) {

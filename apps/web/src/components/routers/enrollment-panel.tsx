@@ -245,9 +245,7 @@ export function ResumeEnrollmentScript({
         <CardTitle>{t('resumeTitle', { name: enrollment.router.name })}</CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
-        <FormMessage tone="success">
-          {t('resumeIntro')}
-        </FormMessage>
+        <FormMessage tone="success">{t('resumeIntro')}</FormMessage>
 
         <ol className="list-decimal space-y-1 pl-5 text-sm text-foreground">
           <li>{t('resumeStep1')}</li>

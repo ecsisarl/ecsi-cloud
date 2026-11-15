@@ -46,16 +46,8 @@ export function buildEnrollmentResumeScript(input: EnrollmentResumeScriptInput):
   const tunnelPrefix = integer('tunnelPrefix', input.tunnelPrefix, 16, 30);
   const activationPort = integer('activationPort', input.activationPort, 1, 65535);
   const gatewayPort = integer('gatewayPort', input.gatewayPort, 1, 65535);
-  const gatewayPublicKey = check(
-    'gatewayPublicKey',
-    input.gatewayPublicKey,
-    WIREGUARD_PUBLIC_KEY,
-  );
-  const routerPublicKey = check(
-    'routerPublicKey',
-    input.routerPublicKey,
-    WIREGUARD_PUBLIC_KEY,
-  );
+  const gatewayPublicKey = check('gatewayPublicKey', input.gatewayPublicKey, WIREGUARD_PUBLIC_KEY);
+  const routerPublicKey = check('routerPublicKey', input.routerPublicKey, WIREGUARD_PUBLIC_KEY);
   const gatewayEndpoint = check('gatewayEndpoint', input.gatewayEndpoint, HOST);
 
   return String.raw`# ECSI CLOUD - reprise d'un enrolement interrompu
