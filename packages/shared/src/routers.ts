@@ -136,6 +136,16 @@ export interface EnrollmentCreated {
   expiresAt: string;
 }
 
+/**
+ * Reprise d'un enrôlement dont le jeton a déjà été consommé.
+ * Aucun nouveau jeton n'est émis : le script reprend uniquement
+ * la finalisation du tunnel, REST HTTPS et l'activation.
+ */
+export interface EnrollmentResume {
+  router: Router;
+  script: string;
+}
+
 /** Console plateforme (Super Admin ECSI) : routeurs d'une entreprise, lecture seule, sans secret. */
 export interface PlatformRouter {
   id: string;

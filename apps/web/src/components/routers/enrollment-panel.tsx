@@ -217,3 +217,65 @@ export function EnrollmentForm({
     </Card>
   );
 }
+
+/**
+ * Script de reprise après consommation du jeton d'enrôlement.
+ * Contrairement au script initial, il ne contient aucun jeton d'enrôlement
+ * et ne recrée ni l'interface ni l'identité WireGuard.
+ * Il reste uniquement dans l'état React et n'est jamais persisté localement.
+ */
+export function ResumeEnrollmentScript({
+  enrollment,
+  onDone,
+}: {
+  enrollment: import('@ecsi/shared').EnrollmentResume;
+  onDone: () => void;
+}) {
+  const t = useTranslations('routers.enroll');
+  const [copied, setCopied] = useState(false);
+
+  async function copy() {
+    await navigator.clipboard.writeText(enrollment.script);
+    setCopied(true);
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>{t('resumeTitle', { name: enrollment.router.name })}</CardTitle>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-4">
+        <FormMessage tone="success">
+          {t('resumeIntro')}
+        </FormMessage>
+
+        <ol className="list-decimal space-y-1 pl-5 text-sm text-foreground">
+          <li>{t('resumeStep1')}</li>
+          <li>{t('resumeStep2')}</li>
+          <li>{t('resumeStep3')}</li>
+          <li>{t('resumeStep4')}</li>
+        </ol>
+
+        <pre
+          data-testid="enrollment-resume-script"
+          className="max-h-80 overflow-auto rounded-md border border-border bg-surface-muted p-3 font-mono text-xs"
+        >
+          {enrollment.script}
+        </pre>
+
+        <div className="flex flex-wrap gap-2">
+          <Button variant="secondary" onClick={() => void copy()}>
+            {copied ? (
+              <Check className="size-4" aria-hidden />
+            ) : (
+              <Copy className="size-4" aria-hidden />
+            )}
+            {copied ? t('copied') : t('copy')}
+          </Button>
+
+          <Button onClick={onDone}>{t('done')}</Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}

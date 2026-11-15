@@ -132,6 +132,22 @@ export class RoutersController {
   }
 
   /**
+   * Reprend les étapes 7 à 9 après consommation réussie du jeton,
+   * sans créer de nouveau jeton ni modifier l'identité WireGuard.
+   */
+  @RequireSitePermission('routers.create')
+  @Audited({ action: 'routers.enrollment.resume', resourceType: 'router' })
+  @Post(':id/enrollment/resume')
+  @HttpCode(HttpStatus.OK)
+  resumeEnrollment(
+    @CurrentAuth() auth: AuthContext,
+    @Req() request: FastifyRequest,
+    @Param('id', new ParseUUIDPipe()) id: string,
+  ) {
+    return this.enrollment.resume(tenantContextOf(auth), grantsOf(request), id);
+  }
+
+  /**
    * Appelé par le ROUTEUR (étape 6 du script), sans session : jeton à usage unique et clé
    * publique WireGuard, rien d'autre (schéma strict). Limité par adresse IP ; tout refus
    * répond 410 sans préciser le motif.

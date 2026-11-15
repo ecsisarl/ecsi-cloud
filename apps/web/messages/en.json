@@ -309,7 +309,14 @@
       "copy": "Copy script",
       "copied": "Copied",
       "done": "Done",
-      "renew": "New script"
+      "renew": "New script",
+      "resume": "Resume enrollment",
+      "resumeTitle": "Resume enrollment for “{name}”",
+      "resumeIntro": "The router has already consumed its token. This script resumes only steps 7 to 9 to complete the secure tunnel and activation.",
+      "resumeStep1": "Connect to the RouterOS terminal of the affected router.",
+      "resumeStep2": "Enable Safe Mode before running the script.",
+      "resumeStep3": "Copy and run the script below.",
+      "resumeStep4": "Then verify that the router becomes ONLINE in ECSI Cloud."
     },
     "credentials": {
       "change": "RouterOS credentials",

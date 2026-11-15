@@ -47,7 +47,7 @@ Renseignée lors des tests, jamais supposée. Une ligne par couple modèle × ve
 | Modèle  | Architecture (relevée) | Version RouterOS | Canal  | Date          | Fiche de résultats                                                                                                                                                                                                       |
 | ------- | ---------------------- | ---------------- | ------ | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | CHR     | x86_64                 | 7.24.5           | stable | 2026-10-03/04 | [sécurité](../lab/routeros/resultats/2026-10-03-S3A-chr-securite.md), [résilience](../lab/routeros/resultats/2026-10-03-S3A-chr-resilience.md), [enrôlement](../lab/routeros/resultats/2026-10-04-S3A-chr-enrolement.md) |
-| hAP ax3 | à relever              | à relever        | stable |               |                                                                                                                                                                                                                          |
+| hAP ax3 | ARM64                  | 7.24.6           | long-term | 2026-11-15    | [S3H matériel](../lab/routeros/resultats/2026-11-15-S3H-hap-ax3.md) |                                                                                                                                                                                                                          |
 | L009    | à relever              | à relever        | stable |               |                                                                                                                                                                                                                          |
 | RB5009  | à relever              | à relever        | stable |               |                                                                                                                                                                                                                          |
 
@@ -70,17 +70,17 @@ Sprint 3A : le matériel se teste avec [GUIDE-TEST-MATERIEL.md](../lab/routeros/
 ### 1. WireGuard
 
 - [ ] Le routeur établit le tunnel sans IP publique (derrière NAT, puis derrière CGNAT 4G). (CHR 7.24.5 : validé derrière box + CGNAT simulés)
-- [ ] Le handshake est visible côté passerelle ; le routeur passe ONLINE dans ECSI CLOUD.
-- [ ] La clé privée est générée sur le routeur ; seule la clé publique parvient au cloud (vérifié en base et dans les journaux). (CHR : validé avec le serveur d'enrôlement de labo)
-- [ ] Coupure du lien montant : le routeur passe OFFLINE dans le délai attendu, puis ONLINE automatiquement au retour. (CHR : validé, OFFLINE à 180 s, retour en 3,3 s)
-- [ ] Redémarrage du routeur : reconnexion automatique sans intervention. (CHR : validé, 34 s en émulation)
+- [x] Le handshake est visible côté passerelle ; le routeur passe ONLINE dans ECSI CLOUD. (CHR : validé ; hAP ax3 physique 7.24.6 : validé le 2026-11-15)
+- [x] La clé privée est générée sur le routeur ; seule la clé publique parvient au cloud (vérifié en base et dans les journaux). (CHR : validé avec le serveur d'enrôlement de labo ; hAP ax3 physique 7.24.6 : clé publique présente en base, aucune colonne de clé privée et aucune trace de clé privée dans les logs gateway/api/worker contrôlés le 2026-11-15)
+- [x] Coupure du lien montant : le routeur passe OFFLINE dans le délai attendu, puis ONLINE automatiquement au retour. (CHR : validé, OFFLINE à 180 s, retour en 3,3 s ; hAP ax3 physique 7.24.6 : perte WAN détectée DEGRADED/UNREACHABLE, puis retour automatique ONLINE après rétablissement, 0 échec)
+- [x] Redémarrage du routeur : reconnexion automatique sans intervention. (CHR : validé, 34 s en émulation ; hAP ax3 physique 7.24.6 : validé le 2026-11-15, WireGuard reconnecté automatiquement et retour ONLINE, 0 échec)
 - [ ] Révocation : le peer est retiré, le routeur ne joint plus ni l'API ni RADIUS. (CHR : API validée ; RADIUS hors périmètre S3A)
 - [ ] Renouvellement de clé sans coupure de service des clients WiFi. (non testé)
-- [ ] Le routeur ne peut joindre que l'adresse de sa passerelle (pas les autres routeurs). (CHR : validé, y compris passerelle volontairement ouverte)
+- [x] Le routeur ne peut joindre que l'adresse de sa passerelle (pas les autres routeurs). (CHR : validé ; hAP ax3 physique 7.24.6 : passerelle 10.200.0.1 joignable à 100 %, routeurs 10.200.0.4 et 10.200.0.5 injoignables à 100 %, validé le 2026-11-15)
 
 ### 2. Enrôlement automatique
 
-- [ ] La commande générée s'exécute telle quelle dans le terminal RouterOS (copier-coller depuis le dashboard). (CHR : validé par collage du script de labo ; dashboard au Sprint 3B)
+- [ ] La commande générée s'exécute telle quelle dans le terminal RouterOS (copier-coller depuis le dashboard). (CHR : validé ; hAP ax3 : script dashboard réellement collé, enrôlement accepté mais interruption après étape 6/9 due à un ancien peer WireGuard côté VPS ; reprise manuelle nécessaire)
 - [ ] Le jeton est à usage unique : une seconde exécution est refusée et journalisée. (CHR + serveur de labo : validé, y compris 8 requêtes simultanées)
 - [ ] Un jeton expiré est refusé. (serveur de labo : validé)
 - [ ] Rejouer le script sur un routeur déjà enrôlé ne crée pas de doublons. (CHR : validé)
@@ -89,9 +89,9 @@ Sprint 3A : le matériel se teste avec [GUIDE-TEST-MATERIEL.md](../lab/routeros/
 
 ### 3. RouterOS REST API
 
-- [ ] Accessible uniquement par l'adresse tunnel de la passerelle ; **inaccessible depuis le WAN et le LAN** (testé depuis l'extérieur et depuis un client WiFi). (CHR : validé, preuve par compteur de la règle de refus)
-- [ ] Le compte ECSI n'a que les permissions nécessaires : une action hors périmètre est refusée par le routeur. (CHR : validé avec read,api,rest-api)
-- [ ] Lecture des ressources système, interfaces, compteurs : valeurs cohérentes avec WinBox/terminal. (CHR : lu par REST ; comparaison WinBox à faire sur matériel)
+- [x] Accessible uniquement par l'adresse tunnel de la passerelle ; **inaccessible depuis le WAN et le LAN** (testé depuis l'extérieur et depuis un client WiFi). (CHR : validé ; hAP ax3 physique 7.24.6 : REST HTTPS accessible depuis la passerelle WireGuard, refusé depuis le LAN 192.168.88.0/24 et le WAN 192.168.1.0/24 ; compteur firewall de refus passé de 40 à 95 paquets lors des essais du 2026-11-15)
+- [x] Le compte ECSI n'a que les permissions nécessaires : une action hors périmètre est refusée par le routeur. (CHR : validé avec read,api,rest-api ; hAP ax3 physique 7.24.6 : groupe ecsi-ro et compte ecsi-svc restreint à 10.200.0.1/32 validés le 2026-11-15)
+- [x] Lecture des ressources système, interfaces, compteurs : valeurs cohérentes avec WinBox/terminal. (CHR : lu par REST ; hAP ax3 physique 7.24.6 : collecte REST comparée au terminal le 2026-11-15 — version, modèle, architecture, CPU, nombre de CPU, charge et mémoire cohérents)
 - [ ] Temps de réponse et comportement en cas de lien lent mesurés. (CHR : 12 à 44 ms par appel en labo ; lien lent non testé)
 - [ ] Chaque commande sensible apparaît dans l'audit ECSI CLOUD (qui, quoi, quand, résultat).
 

@@ -309,7 +309,14 @@
       "copy": "Copier le script",
       "copied": "Copié",
       "done": "Terminé",
-      "renew": "Nouveau script"
+      "renew": "Nouveau script",
+      "resume": "Reprendre l’enrôlement",
+      "resumeTitle": "Reprendre l’enrôlement de « {name} »",
+      "resumeIntro": "Le routeur a déjà consommé son jeton. Ce script reprend uniquement les étapes 7 à 9 afin de finaliser le tunnel sécurisé et l’activation.",
+      "resumeStep1": "Connectez-vous au terminal RouterOS du routeur concerné.",
+      "resumeStep2": "Activez le Safe Mode avant d’exécuter le script.",
+      "resumeStep3": "Copiez et exécutez le script ci-dessous.",
+      "resumeStep4": "Vérifiez ensuite que le routeur passe ONLINE dans ECSI Cloud."
     },
     "credentials": {
       "change": "Identifiants RouterOS",
