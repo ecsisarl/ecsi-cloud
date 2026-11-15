@@ -83,6 +83,14 @@ Après les migrations, `pnpm db:migrate` synchronise le catalogue des permission
 | `router_activation_denied(inet, text)`   | `ecsi_worker` | Audit d'une activation refusée                                                |
 | `platform_company_routers(uuid)`         | `ecsi_auth`   | Console plateforme : colonnes non sensibles des routeurs d'une entreprise     |
 
+### Migration 0007 : forfaits et tickets (générée par Drizzle, complétée à la main, additive)
+
+- `plans` : prix et quota en `bigint` (unités mineures, octets), limites facultatives (`null` = illimité) contrôlées par contrainte, `default_scope` (`LOCAL` seul utilisé au MVP technique), nom unique parmi les forfaits non supprimés ; `ecsi_app` sans `DELETE` (suppression logique).
+- `voucher_batches` : numéro séquentiel par entreprise (verrou transactionnel), forfait et site par clés composites `(company_id, …)`, format des codes, **prix unitaire figé** ; ajout seul pour `ecsi_app`.
+- `vouchers` : code unique par entreprise (identifiant RADIUS), mot de passe en mode `USER_PASS`, six états (`AVAILABLE`, `ASSIGNED`, `SOLD`, `ACTIVE`, `EXPIRED`, `DISABLED`) ; code, mot de passe, lot, forfait et site immuables (`GRANT UPDATE` limité aux colonnes du cycle de vie) ; déclencheur `app.vouchers_guard_state` : un ticket `DISABLED` ou `EXPIRED` ne change plus d'état, même par une requête directe.
+- `voucher_events` : historique complet du cycle de vie, ajout seul.
+- RLS `tenant_isolation` sur les quatre tables. Les colonnes `ecsi_radius` (lecture des codes par le RADIUS) seront ajoutées au Sprint 5.
+
 ### Données de démonstration
 
 `SEED_PASSWORD=… pnpm db:seed` (refusé en production) crée ENTREPRISE_A (`admin.a`, `gerant.a`, `vendeur.a`, `gerant.site-a` limité à SITE-A, `vendeur.site-b` limité à SITE-B), ENTREPRISE_B (`admin.b`, `gerant.b`) et le super administrateur `superadmin@ecsi.test`, adresses `@ecsi.test`. Sites : SITE-A « Cocody Riviera » et SITE-B « Yopougon Selmer » (groupe GROUPE-ABIDJAN) pour A, SITE-A « Plateau Centre (B) » pour B (même code, autre entreprise). Chaque exécution réinitialise mots de passe, 2FA, sessions, rôles et statut de ces comptes et entreprises.

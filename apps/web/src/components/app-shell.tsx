@@ -60,9 +60,9 @@ export function AppShell({ me, children }: { me: MeResponse; children: ReactNode
   const [open, setOpen] = useState(false);
 
   return (
-    <div className="min-h-dvh lg:pl-64">
+    <div className="min-h-dvh lg:pl-64 print:pl-0">
       {/* Barre latérale fixe sur grand écran */}
-      <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 flex-col bg-sidebar text-sidebar-foreground lg:flex">
+      <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 flex-col bg-sidebar text-sidebar-foreground lg:flex print:hidden">
         <div className="flex h-16 items-center px-6">
           <Logo className="text-white" />
         </div>
@@ -106,7 +106,7 @@ export function AppShell({ me, children }: { me: MeResponse; children: ReactNode
         </div>
       ) : null}
 
-      <header className="sticky top-0 z-20 flex h-16 items-center gap-3 border-b border-border bg-surface/90 px-4 backdrop-blur lg:hidden">
+      <header className="sticky top-0 z-20 flex h-16 print:hidden items-center gap-3 border-b border-border bg-surface/90 px-4 backdrop-blur lg:hidden">
         <button
           type="button"
           aria-label={t('openMenu')}
@@ -120,7 +120,7 @@ export function AppShell({ me, children }: { me: MeResponse; children: ReactNode
         <Logo />
       </header>
 
-      <main className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+      <main className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8 lg:py-8 print:max-w-none print:p-0">
         <MeProvider me={me}>{children}</MeProvider>
       </main>
     </div>

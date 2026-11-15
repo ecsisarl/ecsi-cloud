@@ -139,6 +139,33 @@ Domaine plateforme uniquement, 2FA vérifiée ([ADR 0013](adr/0013-console-plate
 
 Codes : 401 non authentifié, 403 permission ou CSRF manquants (ou 2FA à activer), 404 ressource absente ou d'une autre entreprise, 415 corps non JSON, 422 validation, 429 limite de débit (`Retry-After`).
 
+## Endpoints Sprint 6 (forfaits et tickets, sans RADIUS)
+
+Les limites des forfaits ne sont pas encore appliquées au WiFi : le RADIUS central arrive au Sprint 5. Correspondance avec Mikhmon : [TICKETS.md](TICKETS.md).
+
+### Forfaits (`/api/v1/plans`)
+
+| Méthode | Chemin              | Permission                  | Description                                                                  |
+| ------- | ------------------- | --------------------------- | ---------------------------------------------------------------------------- |
+| GET     | `/api/v1/plans`     | `plans.read` (un site)      | Forfaits non supprimés, triés par ordre puis prix                            |
+| GET     | `/api/v1/plans/:id` | `plans.read` (un site)      | Détail                                                                       |
+| POST    | `/api/v1/plans`     | `plans.manage` (entreprise) | Prix en unités mineures (entier), nom unique dans l'entreprise (409 sinon)   |
+| PATCH   | `/api/v1/plans/:id` | `plans.manage` (entreprise) | Mise à jour partielle (les lots existants gardent leur prix figé)            |
+| DELETE  | `/api/v1/plans/:id` | `plans.manage` (entreprise) | Suppression logique : plus proposé à la génération, tickets existants gardés |
+
+### Lots et tickets
+
+| Méthode | Chemin                                | Permission                 | Description                                                                                                    |
+| ------- | ------------------------------------- | -------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| GET     | `/api/v1/voucher-batches`             | `vouchers.read` (par site) | `?siteId=&planId=` ; lots de la portée, avec compteurs par état                                                |
+| GET     | `/api/v1/voucher-batches/:id`         | `vouchers.read` (par site) | Détail d'un lot                                                                                                |
+| POST    | `/api/v1/voucher-batches`             | `vouchers.generate` (site) | `{ planId, siteId, quantity (≤ 1000), authMode, charset, length, prefix, label, expiresAt }` ; 24 bits minimum |
+| POST    | `/api/v1/voucher-batches/:id/print`   | `vouchers.export` (site)   | **Seule réponse avec les codes en clair** (tickets utilisables), auditée                                       |
+| POST    | `/api/v1/voucher-batches/:id/disable` | `vouchers.disable` (site)  | `{ reason }` : désactive tous les tickets encore utilisables du lot                                            |
+| GET     | `/api/v1/vouchers`                    | `vouchers.read` (par site) | `?batchId=&state=&code=&limit=` ; codes **masqués** ; `code` = recherche exacte uniquement                     |
+| GET     | `/api/v1/vouchers/:id`                | `vouchers.read` (par site) | Détail et historique du cycle de vie                                                                           |
+| POST    | `/api/v1/vouchers/:id/disable`        | `vouchers.disable` (site)  | `{ reason }` : désactivation définitive d'un ticket                                                            |
+
 ## Ressources prévues
 
-routers, hotspots, plans, vouchers, sessions, vendors, sales, payments, reports, notifications (voir [ROADMAP.md](ROADMAP.md)).
+hotspots, sessions, vendors, sales, payments, reports, notifications (voir [ROADMAP.md](ROADMAP.md)).

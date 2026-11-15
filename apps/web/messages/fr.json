@@ -619,5 +619,163 @@
       "confirm": "Réinitialiser",
       "done": "2FA réinitialisée pour {email}."
     }
+  },
+  "plans": {
+    "title": "Forfaits",
+    "subtitle": "Ce que vos clients achètent : prix, durée, débit, quota et appareils. Les limites seront appliquées par le RADIUS central (sprint 5).",
+    "add": "Nouveau forfait",
+    "emptyTitle": "Aucun forfait",
+    "emptyDescription": "Créez un premier forfait (ex. « 1 heure – 200 FCFA ») pour générer des tickets.",
+    "edit": "Modifier le forfait",
+    "delete": "Supprimer",
+    "deleteConfirm": "Supprimer ce forfait ? Les tickets déjà générés restent valables.",
+    "unlimited": "Illimité",
+    "readOnly": "Consultation seule : la gestion des forfaits est réservée aux administrateurs et gérants.",
+    "form": {
+      "name": "Nom",
+      "namePlaceholder": "1 heure",
+      "description": "Description",
+      "price": "Prix",
+      "currency": "Devise",
+      "sessionTime": "Temps de connexion",
+      "sessionTimeHint": "Temps cumulé (le client peut se déconnecter et reprendre). Vide : illimité.",
+      "validity": "Validité après la 1re connexion",
+      "validityHint": "Le ticket expire ce délai après sa première utilisation. Vide : illimitée.",
+      "rateDown": "Débit descendant (Mbit/s)",
+      "rateUp": "Débit montant (Mbit/s)",
+      "rateHint": "Vide : sans limite.",
+      "quota": "Quota de données",
+      "quotaHint": "Vide : illimité.",
+      "maxDevices": "Appareils simultanés",
+      "macBinding": "Lier le ticket au premier appareil (adresse MAC)",
+      "macBindingHint": "Au mieux : les téléphones récents changent parfois d'adresse MAC.",
+      "sortOrder": "Ordre d'affichage",
+      "status": "Statut",
+      "statuses": {
+        "ACTIVE": "Actif",
+        "INACTIVE": "Inactif"
+      },
+      "units": {
+        "minutes": "minutes",
+        "hours": "heures",
+        "days": "jours",
+        "mb": "Mo",
+        "gb": "Go"
+      }
+    },
+    "columns": {
+      "name": "Forfait",
+      "price": "Prix",
+      "time": "Temps",
+      "validity": "Validité",
+      "rate": "Débit ↓/↑",
+      "quota": "Quota",
+      "devices": "Appareils",
+      "status": "Statut"
+    }
+  },
+  "tickets": {
+    "title": "Tickets",
+    "subtitle": "Génération en masse, impression avec QR code et suivi des lots.",
+    "generate": "Générer des tickets",
+    "generateTitle": "Nouveau lot de tickets",
+    "generating": "Génération…",
+    "emptyTitle": "Aucun lot de tickets",
+    "emptyDescription": "Générez un premier lot à partir d'un forfait.",
+    "noPlan": "Créez d'abord un forfait actif.",
+    "search": "Rechercher un ticket",
+    "searchPlaceholder": "Code exact",
+    "searchNone": "Aucun ticket ne porte ce code dans votre périmètre.",
+    "form": {
+      "plan": "Forfait",
+      "site": "Site d'émission",
+      "siteHint": "Portée LOCAL : le ticket ne fonctionnera que sur ce site.",
+      "quantity": "Quantité",
+      "quantityHint": "1 000 tickets au plus par lot.",
+      "authMode": "Mode de connexion",
+      "authModes": {
+        "CODE": "Code unique (identifiant = mot de passe)",
+        "USER_PASS": "Identifiant + mot de passe"
+      },
+      "charset": "Caractères",
+      "charsets": {
+        "DIGITS": "Chiffres (48273916)",
+        "UPPER": "Majuscules (KQWZRT)",
+        "LOWER": "Minuscules (kqwzrt)",
+        "UPPER_DIGITS": "Majuscules + chiffres (K4QW7Z)",
+        "MIXED": "Mixte (kQ4wZ7)"
+      },
+      "length": "Longueur",
+      "lengthHint": "Au moins {min} caractères avec ce jeu (sécurité contre la devinette).",
+      "prefix": "Préfixe",
+      "prefixHint": "Facultatif, 6 caractères au plus, ex. « WZ ».",
+      "label": "Commentaire du lot",
+      "labelPlaceholder": "Marché du lundi",
+      "expiresAt": "Date limite de vente",
+      "expiresAtHint": "Facultative : stock non vendu après cette date.",
+      "preview": "Exemple : {example}"
+    },
+    "columns": {
+      "number": "Lot",
+      "label": "Commentaire",
+      "plan": "Forfait",
+      "site": "Site",
+      "quantity": "Quantité",
+      "available": "Disponibles",
+      "disabled": "Désactivés",
+      "value": "Valeur",
+      "createdAt": "Créé le",
+      "createdBy": "Par"
+    },
+    "states": {
+      "AVAILABLE": "Disponible",
+      "ASSIGNED": "Attribué",
+      "SOLD": "Vendu",
+      "ACTIVE": "Actif",
+      "EXPIRED": "Expiré",
+      "DISABLED": "Désactivé"
+    },
+    "batch": {
+      "title": "Lot n° {number}",
+      "back": "Retour aux tickets",
+      "print": "Imprimer les tickets",
+      "disableAll": "Désactiver tout le lot",
+      "disableAllConfirm": "Désactiver tous les tickets encore utilisables de ce lot ? Cette action est définitive.",
+      "reason": "Motif",
+      "reasonPlaceholder": "Carnet perdu, erreur de génération…",
+      "disable": "Désactiver",
+      "disableConfirm": "Désactiver ce ticket ? Cette action est définitive.",
+      "summary": "Résumé",
+      "unitPrice": "Prix unitaire",
+      "value": "Valeur des tickets disponibles",
+      "format": "Format",
+      "serial": "N°",
+      "code": "Code",
+      "state": "État",
+      "history": "Historique",
+      "showMore": "Afficher plus",
+      "notYet": "Vente aux vendeurs (sprint 8) et activation par le RADIUS (sprint 5) : à venir."
+    },
+    "print": {
+      "title": "Impression — lot n° {number}",
+      "template": "Modèle",
+      "templates": {
+        "standard": "Standard (avec QR)",
+        "compact": "Compact (sans QR)",
+        "thermal": "Ticket thermique 58 mm"
+      },
+      "loginUrl": "Adresse de connexion du hotspot",
+      "loginUrlHint": "Facultative, ex. http://wifi.local/login : le QR code ouvre alors la page de connexion avec les identifiants (méthode HTTP PAP du hotspot, à valider sur vos routeurs). Sinon il contient le code.",
+      "print": "Imprimer",
+      "back": "Retour au lot",
+      "loading": "Préparation des tickets…",
+      "empty": "Aucun ticket imprimable dans ce lot.",
+      "username": "Identifiant",
+      "password": "Mot de passe",
+      "code": "Code",
+      "validity": "Validité",
+      "duration": "Durée",
+      "notice": "Les codes affichés sont des titres au porteur : cette impression est enregistrée dans le journal d'audit."
+    }
   }
 }

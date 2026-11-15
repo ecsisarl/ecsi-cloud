@@ -26,7 +26,8 @@ describe('navigation', () => {
     expect(isActive('/', '/')).toBe(true);
     expect(isActive('/ventes', '/')).toBe(false);
     expect(isActive('/reseau/routeurs/abc', '/reseau/routeurs')).toBe(true);
-    expect(findNavItem('/tickets')?.plannedSprint).toBe('S6');
+    expect(findNavItem('/tickets')?.permission).toBe('vouchers.read');
+    expect(findNavItem('/ventes')?.plannedSprint).toBe('S8');
   });
 });
 

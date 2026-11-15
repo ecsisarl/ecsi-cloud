@@ -619,5 +619,163 @@
       "confirm": "Reset",
       "done": "2FA reset for {email}."
     }
+  },
+  "plans": {
+    "title": "Plans",
+    "subtitle": "What your customers buy: price, duration, speed, quota and devices. Limits will be enforced by the central RADIUS (sprint 5).",
+    "add": "New plan",
+    "emptyTitle": "No plans",
+    "emptyDescription": "Create a first plan (e.g. “1 hour – 200 FCFA”) to generate vouchers.",
+    "edit": "Edit plan",
+    "delete": "Delete",
+    "deleteConfirm": "Delete this plan? Vouchers already generated stay valid.",
+    "unlimited": "Unlimited",
+    "readOnly": "Read only: plan management is reserved for administrators and managers.",
+    "form": {
+      "name": "Name",
+      "namePlaceholder": "1 hour",
+      "description": "Description",
+      "price": "Price",
+      "currency": "Currency",
+      "sessionTime": "Connection time",
+      "sessionTimeHint": "Cumulative time (the customer can disconnect and resume). Empty: unlimited.",
+      "validity": "Validity after first login",
+      "validityHint": "The voucher expires this long after its first use. Empty: unlimited.",
+      "rateDown": "Download speed (Mbit/s)",
+      "rateUp": "Upload speed (Mbit/s)",
+      "rateHint": "Empty: no limit.",
+      "quota": "Data quota",
+      "quotaHint": "Empty: unlimited.",
+      "maxDevices": "Simultaneous devices",
+      "macBinding": "Bind the voucher to the first device (MAC address)",
+      "macBindingHint": "Best effort: recent phones sometimes change MAC address.",
+      "sortOrder": "Display order",
+      "status": "Status",
+      "statuses": {
+        "ACTIVE": "Active",
+        "INACTIVE": "Inactive"
+      },
+      "units": {
+        "minutes": "minutes",
+        "hours": "hours",
+        "days": "days",
+        "mb": "MB",
+        "gb": "GB"
+      }
+    },
+    "columns": {
+      "name": "Plan",
+      "price": "Price",
+      "time": "Time",
+      "validity": "Validity",
+      "rate": "Speed ↓/↑",
+      "quota": "Quota",
+      "devices": "Devices",
+      "status": "Status"
+    }
+  },
+  "tickets": {
+    "title": "Vouchers",
+    "subtitle": "Bulk generation, QR code printing and batch tracking.",
+    "generate": "Generate vouchers",
+    "generateTitle": "New voucher batch",
+    "generating": "Generating…",
+    "emptyTitle": "No voucher batches",
+    "emptyDescription": "Generate a first batch from a plan.",
+    "noPlan": "Create an active plan first.",
+    "search": "Find a voucher",
+    "searchPlaceholder": "Exact code",
+    "searchNone": "No voucher has this code in your scope.",
+    "form": {
+      "plan": "Plan",
+      "site": "Issuing site",
+      "siteHint": "LOCAL scope: the voucher will only work on this site.",
+      "quantity": "Quantity",
+      "quantityHint": "At most 1,000 vouchers per batch.",
+      "authMode": "Login mode",
+      "authModes": {
+        "CODE": "Single code (username = password)",
+        "USER_PASS": "Username + password"
+      },
+      "charset": "Characters",
+      "charsets": {
+        "DIGITS": "Digits (48273916)",
+        "UPPER": "Uppercase (KQWZRT)",
+        "LOWER": "Lowercase (kqwzrt)",
+        "UPPER_DIGITS": "Uppercase + digits (K4QW7Z)",
+        "MIXED": "Mixed (kQ4wZ7)"
+      },
+      "length": "Length",
+      "lengthHint": "At least {min} characters with this set (guessing protection).",
+      "prefix": "Prefix",
+      "prefixHint": "Optional, at most 6 characters, e.g. “WZ”.",
+      "label": "Batch comment",
+      "labelPlaceholder": "Monday market",
+      "expiresAt": "Sell-by date",
+      "expiresAtHint": "Optional: unsold stock after this date.",
+      "preview": "Example: {example}"
+    },
+    "columns": {
+      "number": "Batch",
+      "label": "Comment",
+      "plan": "Plan",
+      "site": "Site",
+      "quantity": "Quantity",
+      "available": "Available",
+      "disabled": "Disabled",
+      "value": "Value",
+      "createdAt": "Created",
+      "createdBy": "By"
+    },
+    "states": {
+      "AVAILABLE": "Available",
+      "ASSIGNED": "Assigned",
+      "SOLD": "Sold",
+      "ACTIVE": "Active",
+      "EXPIRED": "Expired",
+      "DISABLED": "Disabled"
+    },
+    "batch": {
+      "title": "Batch #{number}",
+      "back": "Back to vouchers",
+      "print": "Print vouchers",
+      "disableAll": "Disable the whole batch",
+      "disableAllConfirm": "Disable every still usable voucher of this batch? This cannot be undone.",
+      "reason": "Reason",
+      "reasonPlaceholder": "Lost booklet, generation error…",
+      "disable": "Disable",
+      "disableConfirm": "Disable this voucher? This cannot be undone.",
+      "summary": "Summary",
+      "unitPrice": "Unit price",
+      "value": "Value of available vouchers",
+      "format": "Format",
+      "serial": "#",
+      "code": "Code",
+      "state": "State",
+      "history": "History",
+      "showMore": "Show more",
+      "notYet": "Sales to resellers (sprint 8) and activation by RADIUS (sprint 5): coming next."
+    },
+    "print": {
+      "title": "Print — batch #{number}",
+      "template": "Template",
+      "templates": {
+        "standard": "Standard (with QR)",
+        "compact": "Compact (no QR)",
+        "thermal": "58 mm thermal receipt"
+      },
+      "loginUrl": "Hotspot login address",
+      "loginUrlHint": "Optional, e.g. http://wifi.local/login: the QR code then opens the login page with the credentials (hotspot HTTP PAP method, to be validated on your routers). Otherwise it holds the code.",
+      "print": "Print",
+      "back": "Back to batch",
+      "loading": "Preparing vouchers…",
+      "empty": "No printable voucher in this batch.",
+      "username": "Username",
+      "password": "Password",
+      "code": "Code",
+      "validity": "Validity",
+      "duration": "Duration",
+      "notice": "The codes shown are bearer titles: this print is recorded in the audit log."
+    }
   }
 }
