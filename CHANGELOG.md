@@ -2,6 +2,23 @@
 
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Versions par sprint.
 
+## [S6-commercial] — 2026-11-15 — Forfaits et tickets (sans RADIUS)
+
+Reprise des fonctions tickets de Mikhmon ([docs/TICKETS.md](docs/TICKETS.md)), avancée avant les Sprints 4 et 5 à la demande d'ECSI SARL.
+
+### Ajouté
+
+- Forfaits (`/api/v1/plans`) : prix en unités mineures, temps de connexion, validité, débits, quota, appareils, liaison MAC, statut ; suppression logique ; audit.
+- Lots de tickets (`/api/v1/voucher-batches`) : génération jusqu'à 1 000 tickets par transaction, codes cryptographiques uniques par entreprise (24 bits minimum, sans caractères ambigus), mode code unique ou identifiant + mot de passe, préfixe, commentaire, date limite de vente, prix figé ; impression auditée (seule sortie des codes en clair) ; désactivation d'un lot.
+- Tickets (`/api/v1/vouchers`) : liste à codes masqués, recherche exacte, historique du cycle de vie, désactivation définitive.
+- Migration 0007 (additive) : `plans`, `voucher_batches`, `vouchers`, `voucher_events`, RLS, privilèges par colonne, déclencheur d'état final.
+- Dashboard : pages Forfaits, Tickets, fiche de lot et impression (modèles standard avec QR, compact, thermique 58 mm).
+- Tests : unitaires (schémas, codes) et intégration sur PostgreSQL réel (1 000 tickets, portée par site, isolation entre entreprises, privilèges, déclencheur, audit).
+
+### Non couvert
+
+- Application des limites par le RADIUS (S5), vendeurs et ventes (S8), portées GROUPE/GLOBAL (S11), PDF côté serveur.
+
 ## [S3B-RC2] — 2026-10-05 — Corrections de la validation indépendante S3B
 
 ### Corrigé
