@@ -104,7 +104,7 @@ L'agent (`node dist/gateway.js`) tourne **sur l'hôte WireGuard**, avec `DATABAS
 Deux installations, au choix :
 
 1. **Conteneur** (recommandé quand l'hôte de la passerelle fait aussi tourner le Compose, cas du VPS de validation) : `docker compose --profile gateway up -d gateway`. Image `infra/docker/api.Dockerfile`, cible `gateway` : utilisateur non root, `wg` (wireguard-tools) avec la seule capacité de fichier `cap_net_admin` ; le service tourne dans le réseau de l'hôte (`network_mode: host`), `cap_drop: ALL` + `cap_add: NET_ADMIN`, système de fichiers en lecture seule, et joint PostgreSQL par son port publié sur `127.0.0.1`. La CI démarre ce conteneur sur une vraie interface WireGuard du noyau et vérifie qu'il devient sain, non root, à l'écoute sur l'adresse tunnel seulement.
-2. **systemd** (hôte de passerelle dédié, sans Docker) : `infra/systemd/ecsi-gateway.service` et `infra/systemd/gateway.env.example` (procédure en tête du fichier) : utilisateur système dédié, `AmbientCapabilities=CAP_NET_ADMIN`, `CapabilityBoundingSet=CAP_NET_ADMIN`, `NoNewPrivileges`, `ProtectSystem=strict`. Ce mode n'a pas encore été testé sur un hôte réel.
+2. **systemd** (hôte de passerelle dédié, sans Docker) : `infra/systemd/ecsi-gateway.service` et `infra/systemd/gateway.env.example` (procédure en tête du fichier) : utilisateur système dédié, `AmbientCapabilities=CAP_NET_ADMIN`, `CapabilityBoundingSet=CAP_NET_ADMIN`, `NoNewPrivileges`, `ProtectSystem=strict`. Ce mode a été validé sur le VPS réel : démarrage de l'agent, écoute sur 10.200.0.1:8081, synchronisation des pairs et healthcheck conformes. Après validation, le service systemd a été désactivé et le mode Docker recommandé a été restauré.
 
 #### Healthchecks des processus sans HTTP
 
@@ -210,7 +210,7 @@ Code 0 : conforme ; 1 : refus listés par nom de variable, à corriger dans `.en
 
 ## HTTPS public (Sprint S3H, étape H4)
 
-**État : code livré, rien n'est déployé.** Chaque étape ci-dessous se fait sur le VPS après la validation indépendante et un GO explicite.
+**État : déployé et validé sur le VPS.** Le preflight, le Nginx HTTPS de production, le certificat public, les contrôles externes et l'essai automatisé H4 ont été validés. La procédure ci-dessous reste la procédure de référence pour un nouveau déploiement ou une reprise.
 
 | Adresse                                | Service                                                                   |
 | -------------------------------------- | ------------------------------------------------------------------------- |
@@ -251,11 +251,11 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --no-build
 ops/tls/preflight.sh                       # mode https : nginx -t avec le vrai certificat
 ```
 
-`staging` et `production` vérifient d'abord, en local, que Nginx sert bien un fichier témoin du webroot pour les deux noms ; sans cela, rien n'est demandé à Let's Encrypt (pas de consommation des limites de débit). Contrôles depuis l'extérieur ensuite : `curl -I http://app.mytikcentral.com` (301), `curl -I https://app.mytikcentral.com` (200, en-têtes de sécurité), `curl -i https://enroll.mytikcentral.com/api/v1/routers/enroll` (405), puis un enrôlement réel depuis CHR-LAB (`check-certificate=yes` avec le certificat public).
+`staging` et `production` vérifient d'abord, en local, que Nginx sert bien un fichier témoin du webroot pour les deux noms ; sans cela, rien n'est demandé à Let's Encrypt (pas de consommation des limites de débit). Contrôles depuis l'extérieur ensuite : `curl -I http://app.mytikcentral.com` (301), `curl -I https://app.mytikcentral.com` (200, en-têtes de sécurité), `curl -i https://enroll.mytikcentral.com/api/v1/routers/enroll` (405), puis un contrôle réel depuis un CHR officiel RouterOS 7.24.5 avec `/tool/fetch` et `check-certificate=yes`. Ce contrôle a été validé contre `https://app.mytikcentral.com/` (HTTP 200), sans ré-enrôler ni modifier CHR-LAB.
 
 **Renouvellement** : `ops/tls/certificat.sh renouveler` (certbot ne renouvelle qu'à moins de 30 jours de l'échéance, `nginx -t` puis rechargement sans coupure), par le timer `ecsi-tls-renew.timer`.
 
-**HSTS** : `max-age=86400` (un jour, sans `includeSubDomains` ni `preload`) pendant la validation, pour garder un retour arrière possible ; à porter à `31536000` dans `snippets/security-headers.conf` après validation de H4 (modification de code séparée).
+**HSTS** : `max-age=31536000` (un an, sans `includeSubDomains` ni `preload`), promu après validation de H4. La modification est portée par `snippets/security-headers.conf` et couverte par l'essai HTTPS automatisé.
 
 **Ne jamais** lancer `docker compose … down -v` en production : il supprimerait aussi les certificats (et les données).
 
@@ -264,7 +264,7 @@ ops/tls/preflight.sh                       # mode https : nginx -t avec le vrai 
 - **Avant `activer`** : seul Nginx a changé (mode acme-bootstrap). `docker compose -f docker-compose.yml -f docker-compose.prod.yml rm -sf nginx`, puis relancer l'exposition précédente (Nginx de base, proxy temporaire) comme avant H4.
 - **Après `activer`** : même commande pour retirer le Nginx de production, puis exposition précédente ; ou retour complet au commit `4662e6e` (`git checkout 4662e6e`, puis `docker compose … up -d --no-build`). Les volumes `letsencrypt` et `acme-webroot` restent en place (sans effet) ; le certificat reste valide pour un nouvel essai.
 - **Après la relance complète** (`up -d` avec la surcouche) : retour à la pile précédente par `docker compose up -d --no-build` sans la surcouche, comme avant H4 (Nginx de base recréé, mêmes volumes et données).
-- Avec HSTS à un jour, un navigateur déjà venu en HTTPS exige HTTPS au plus 24 h après sa dernière visite.
+- Avec HSTS à un an, un navigateur ayant reçu cet en-tête continuera d'exiger HTTPS jusqu'à l'expiration de la politique ; un retour arrière vers HTTP n'est donc plus transparent pour ces clients.
 - Le DNS, le pare-feu, WireGuard, les données et les clés de chiffrement ne sont modifiés par aucune commande H4.
 
 ### Essai automatisé
